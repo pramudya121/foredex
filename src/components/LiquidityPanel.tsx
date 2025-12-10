@@ -10,6 +10,13 @@ import { ROUTER_ABI, ERC20_ABI, FACTORY_ABI, PAIR_ABI } from '@/config/abis';
 import { Plus, Minus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { 
+  getReserves, 
+  quote, 
+  calculatePoolShare, 
+  calculateRemoveLiquidity,
+  calculateLiquidityMinted 
+} from '@/lib/uniswapV2Library';
 
 export function LiquidityPanel() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -24,6 +31,10 @@ export function LiquidityPanel() {
   const [lpToRemove, setLpToRemove] = useState('');
   const [loading, setLoading] = useState(false);
   const [pairAddress, setPairAddress] = useState<string | null>(null);
+  const [poolShare, setPoolShare] = useState(0);
+  const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
+  const [totalSupply, setTotalSupply] = useState(BigInt(0));
+  const [removeAmounts, setRemoveAmounts] = useState<{ amountA: string; amountB: string }>({ amountA: '0', amountB: '0' });
 
   const isNativeToken = (token: TokenInfo | null) =>
     token?.address === '0x0000000000000000000000000000000000000000';
@@ -55,23 +66,79 @@ export function LiquidityPanel() {
         setBalanceB(ethers.formatUnits(bal, tokenB.decimals));
       }
 
-      // Check if pair exists
-      const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
-      const pair = await factory.getPair(getTokenAddress(tokenA), getTokenAddress(tokenB));
+      // Check if pair exists and get reserves using library
+      const tokenAAddr = getTokenAddress(tokenA);
+      const tokenBAddr = getTokenAddress(tokenB);
       
-      if (pair !== '0x0000000000000000000000000000000000000000') {
+      const { reserveA, reserveB, pairAddress: pair } = await getReserves(provider, tokenAAddr, tokenBAddr);
+      
+      if (pair !== ethers.ZeroAddress) {
         setPairAddress(pair);
+        setReserves({ reserveA, reserveB });
+        
         const pairContract = new ethers.Contract(pair, PAIR_ABI, provider);
-        const lpBal = await pairContract.balanceOf(address);
+        const [lpBal, supply] = await Promise.all([
+          pairContract.balanceOf(address),
+          pairContract.totalSupply()
+        ]);
+        
         setLpBalance(ethers.formatEther(lpBal));
+        setTotalSupply(BigInt(supply));
+        
+        // Calculate pool share using library
+        const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
+        setPoolShare(share);
       } else {
         setPairAddress(null);
         setLpBalance('0');
+        setPoolShare(0);
+        setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
+        setTotalSupply(BigInt(0));
       }
     } catch (error) {
       console.error('Error fetching data:', error);
     }
   }, [provider, address, tokenA, tokenB]);
+
+  // Auto-calculate amountB when amountA changes (using library quote)
+  useEffect(() => {
+    if (!amountA || reserves.reserveA === BigInt(0) || reserves.reserveB === BigInt(0) || !tokenA) {
+      return;
+    }
+    
+    try {
+      const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
+      const amountBWei = quote(amountAWei, reserves.reserveA, reserves.reserveB);
+      setAmountB(ethers.formatUnits(amountBWei, tokenB?.decimals || 18));
+    } catch {
+      // New pool - no quote needed
+    }
+  }, [amountA, reserves, tokenA, tokenB]);
+
+  // Calculate expected amounts when removing liquidity
+  useEffect(() => {
+    if (!lpToRemove || !tokenA || !tokenB || totalSupply === BigInt(0)) {
+      setRemoveAmounts({ amountA: '0', amountB: '0' });
+      return;
+    }
+    
+    try {
+      const lpWei = ethers.parseUnits(lpToRemove, 18);
+      const { amountA: outA, amountB: outB } = calculateRemoveLiquidity(
+        lpWei, 
+        reserves.reserveA, 
+        reserves.reserveB, 
+        totalSupply
+      );
+      
+      setRemoveAmounts({
+        amountA: ethers.formatUnits(outA, tokenA.decimals),
+        amountB: ethers.formatUnits(outB, tokenB.decimals)
+      });
+    } catch {
+      setRemoveAmounts({ amountA: '0', amountB: '0' });
+    }
+  }, [lpToRemove, reserves, totalSupply, tokenA, tokenB]);
 
   useEffect(() => {
     fetchData();

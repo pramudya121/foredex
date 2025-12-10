@@ -50,7 +50,18 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
         >
           {selected ? (
             <>
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">
+              {selected.logoURI ? (
+                <img 
+                  src={selected.logoURI} 
+                  alt={selected.symbol} 
+                  className="w-6 h-6 rounded-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div className={`w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold ${selected.logoURI ? 'hidden' : ''}`}>
                 {selected.symbol[0]}
               </div>
               <span className="font-semibold">{selected.symbol}</span>
@@ -86,7 +97,18 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
                   selected?.address === token.address && 'bg-primary/10'
                 )}
               >
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">
+                {token.logoURI ? (
+                  <img 
+                    src={token.logoURI} 
+                    alt={token.symbol} 
+                    className="w-8 h-8 rounded-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold ${token.logoURI ? 'hidden' : ''}`}>
                   {token.symbol[0]}
                 </div>
                 <div className="flex-1">
