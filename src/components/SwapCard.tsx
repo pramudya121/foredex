@@ -9,6 +9,15 @@ import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 import { ArrowDown, Settings, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { 
+  getAmountOut as calcAmountOut, 
+  calculatePriceImpact, 
+  getReserves,
+  isNativeToken as checkNative,
+  getWrappedToken,
+  calculateMinAmount,
+  getDeadline
+} from '@/lib/uniswapV2Library';
 
 export function SwapCard() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -21,6 +30,8 @@ export function SwapCard() {
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
   const [slippage, setSlippage] = useState(0.5);
+  const [priceImpact, setPriceImpact] = useState(0);
+  const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
 
   const isNativeToken = (token: TokenInfo | null) => 
     token?.address === '0x0000000000000000000000000000000000000000';
@@ -63,25 +74,55 @@ export function SwapCard() {
     fetchBalances();
   }, [fetchBalances]);
 
-  // Get quote
+  // Get quote using UniswapV2Library
   const getQuote = useCallback(async (inputAmount: string) => {
     if (!provider || !tokenIn || !tokenOut || !inputAmount || parseFloat(inputAmount) === 0) {
       setAmountOut('');
+      setPriceImpact(0);
       return;
     }
 
     setQuoting(true);
     try {
-      const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, provider);
-      const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
-      const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
+      const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
+      const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
       
-      const amounts = await router.getAmountsOut(amountInWei, path);
-      const outAmount = ethers.formatUnits(amounts[1], tokenOut.decimals);
+      // Get reserves using UniswapV2Library
+      const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
+      setReserves({ reserveA, reserveB });
+      
+      if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+        setAmountOut('');
+        setPriceImpact(0);
+        return;
+      }
+
+      const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
+      
+      // Calculate output using local library function
+      const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
+      const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
       setAmountOut(parseFloat(outAmount).toFixed(6));
+      
+      // Calculate price impact using library
+      const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
+      setPriceImpact(impact);
     } catch (error) {
       console.error('Quote error:', error);
-      setAmountOut('');
+      // Fallback to router call
+      try {
+        const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, provider);
+        const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
+        const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
+        
+        const amounts = await router.getAmountsOut(amountInWei, path);
+        const outAmount = ethers.formatUnits(amounts[1], tokenOut.decimals);
+        setAmountOut(parseFloat(outAmount).toFixed(6));
+        setPriceImpact(0);
+      } catch {
+        setAmountOut('');
+        setPriceImpact(0);
+      }
     } finally {
       setQuoting(false);
     }
@@ -285,16 +326,30 @@ export function SwapCard() {
 
       {/* Price Info */}
       {amountIn && amountOut && tokenIn && tokenOut && (
-        <div className="mt-4 p-3 rounded-lg bg-muted/30 text-sm">
+        <div className="mt-4 p-3 rounded-lg bg-muted/30 text-sm space-y-1">
           <div className="flex justify-between text-muted-foreground">
             <span>Rate</span>
             <span>
               1 {tokenIn.symbol} = {(parseFloat(amountOut) / parseFloat(amountIn)).toFixed(6)} {tokenOut.symbol}
             </span>
           </div>
-          <div className="flex justify-between text-muted-foreground mt-1">
-            <span>Slippage</span>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Price Impact</span>
+            <span className={cn(
+              priceImpact > 5 ? 'text-destructive' : priceImpact > 2 ? 'text-yellow-500' : 'text-green-500'
+            )}>
+              {priceImpact.toFixed(2)}%
+            </span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Slippage Tolerance</span>
             <span>{slippage}%</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Minimum Received</span>
+            <span>
+              {(parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)} {tokenOut.symbol}
+            </span>
           </div>
         </div>
       )}
