@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { ExternalLink, Droplets, TrendingUp } from 'lucide-react';
+import { ExternalLink, Droplets } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TokenLogo } from './TokenLogo';
 
 interface Pool {
   address: string;
-  token0: { address: string; symbol: string; name: string };
-  token1: { address: string; symbol: string; name: string };
+  token0: { address: string; symbol: string; name: string; logoURI?: string };
+  token1: { address: string; symbol: string; name: string; logoURI?: string };
   reserve0: string;
   reserve1: string;
   totalSupply: string;
@@ -44,14 +45,14 @@ export function PoolsList() {
                 // Get token info
                 const getTokenInfo = async (addr: string) => {
                   const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                  if (known) return { address: addr, symbol: known.symbol, name: known.name };
+                  if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
                   
                   try {
                     const token = new ethers.Contract(addr, ERC20_ABI, provider);
                     const [symbol, name] = await Promise.all([token.symbol(), token.name()]);
-                    return { address: addr, symbol, name };
+                    return { address: addr, symbol, name, logoURI: undefined };
                   } catch {
-                    return { address: addr, symbol: 'UNKNOWN', name: 'Unknown Token' };
+                    return { address: addr, symbol: 'UNKNOWN', name: 'Unknown Token', logoURI: undefined };
                   }
                 };
 
@@ -132,12 +133,18 @@ export function PoolsList() {
               <div className="flex items-center gap-4">
                 {/* Token Pair Icons */}
                 <div className="flex -space-x-2">
-                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold border-2 border-background z-10">
-                    {pool.token0.symbol[0]}
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-sm font-bold border-2 border-background">
-                    {pool.token1.symbol[0]}
-                  </div>
+                  <TokenLogo 
+                    symbol={pool.token0.symbol} 
+                    logoURI={pool.token0.logoURI} 
+                    size="lg"
+                    className="border-2 border-background z-10" 
+                  />
+                  <TokenLogo 
+                    symbol={pool.token1.symbol} 
+                    logoURI={pool.token1.logoURI} 
+                    size="lg"
+                    className="border-2 border-background" 
+                  />
                 </div>
 
                 {/* Pair Name */}

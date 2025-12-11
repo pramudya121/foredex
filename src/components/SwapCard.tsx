@@ -2,22 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { TokenSelect } from './TokenSelect';
+import { SlippageSettings } from './SlippageSettings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, Settings, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
   getAmountOut as calcAmountOut, 
   calculatePriceImpact, 
   getReserves,
-  isNativeToken as checkNative,
-  getWrappedToken,
-  calculateMinAmount,
-  getDeadline
 } from '@/lib/uniswapV2Library';
+import { addTransaction, updateTransactionStatus } from './TransactionHistory';
 
 export function SwapCard() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -30,6 +28,7 @@ export function SwapCard() {
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
   const [slippage, setSlippage] = useState(0.5);
+  const [deadline, setDeadline] = useState(20);
   const [priceImpact, setPriceImpact] = useState(0);
   const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
 
@@ -155,7 +154,7 @@ export function SwapCard() {
         (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(tokenOut.decimals),
         tokenOut.decimals
       );
-      const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 mins
+      const txDeadline = Math.floor(Date.now() / 1000) + 60 * deadline;
       const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
 
       let tx;
@@ -166,7 +165,7 @@ export function SwapCard() {
           amountOutMin,
           path,
           address,
-          deadline,
+          txDeadline,
           { value: amountInWei }
         );
       } else if (isNativeToken(tokenOut)) {
@@ -185,7 +184,7 @@ export function SwapCard() {
           amountOutMin,
           path,
           address,
-          deadline
+          txDeadline
         );
       } else {
         // Token -> Token
@@ -202,12 +201,22 @@ export function SwapCard() {
           amountOutMin,
           path,
           address,
-          deadline
+          txDeadline
         );
       }
 
+      // Add transaction to history
+      addTransaction(address, {
+        hash: tx.hash,
+        type: 'swap',
+        description: `Swap ${amountIn} ${tokenIn.symbol} → ${tokenOut.symbol}`,
+        timestamp: Date.now(),
+        status: 'pending',
+      });
+
       toast.info('Transaction submitted...');
       const receipt = await tx.wait();
+      updateTransactionStatus(address, tx.hash, 'confirmed');
       toast.success(`Swap successful! TX: ${receipt.hash.slice(0, 10)}...`);
       
       setAmountIn('');
@@ -226,9 +235,12 @@ export function SwapCard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold">Swap</h2>
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-          <Settings className="w-5 h-5" />
-        </Button>
+        <SlippageSettings
+          slippage={slippage}
+          onSlippageChange={setSlippage}
+          deadline={deadline}
+          onDeadlineChange={setDeadline}
+        />
       </div>
 
       {/* Token In */}
