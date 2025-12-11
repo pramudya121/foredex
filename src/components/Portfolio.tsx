@@ -4,19 +4,23 @@ import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
 import { Wallet, Droplets, History, ExternalLink } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { TokenLogo } from './TokenLogo';
+import { TransactionHistory } from './TransactionHistory';
 
 interface TokenBalance {
   symbol: string;
   name: string;
   balance: string;
   address: string;
+  logoURI?: string;
 }
 
 interface LPPosition {
   pairAddress: string;
   token0Symbol: string;
   token1Symbol: string;
+  token0Logo?: string;
+  token1Logo?: string;
   lpBalance: string;
   share: string;
 }
@@ -36,7 +40,7 @@ export function Portfolio() {
 
       try {
         // Fetch token balances
-        const balancePromises = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000').map(async (token) => {
+        const balancePromises = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000').map(async (token): Promise<TokenBalance | null> => {
           try {
             const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
             const bal = await contract.balanceOf(address);
@@ -45,13 +49,15 @@ export function Portfolio() {
               name: token.name,
               balance: ethers.formatUnits(bal, token.decimals),
               address: token.address,
+              logoURI: token.logoURI,
             };
           } catch {
             return null;
           }
         });
 
-        const balances = (await Promise.all(balancePromises)).filter((b): b is TokenBalance => b !== null && parseFloat(b.balance) > 0);
+        const balanceResults = await Promise.all(balancePromises);
+        const balances = balanceResults.filter((b): b is TokenBalance => b !== null && parseFloat(b.balance) > 0);
         setTokenBalances(balances);
 
         // Fetch LP positions
@@ -76,16 +82,16 @@ export function Portfolio() {
 
                   const getSymbol = async (addr: string) => {
                     const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                    if (known) return known.symbol;
+                    if (known) return { symbol: known.symbol, logoURI: known.logoURI };
                     try {
                       const token = new ethers.Contract(addr, ERC20_ABI, provider);
-                      return await token.symbol();
+                      return { symbol: await token.symbol(), logoURI: undefined };
                     } catch {
-                      return 'UNKNOWN';
+                      return { symbol: 'UNKNOWN', logoURI: undefined };
                     }
                   };
 
-                  const [token0Symbol, token1Symbol] = await Promise.all([
+                  const [token0Info, token1Info] = await Promise.all([
                     getSymbol(token0Addr),
                     getSymbol(token1Addr),
                   ]);
@@ -94,8 +100,10 @@ export function Portfolio() {
 
                   return {
                     pairAddress,
-                    token0Symbol,
-                    token1Symbol,
+                    token0Symbol: token0Info.symbol,
+                    token1Symbol: token1Info.symbol,
+                    token0Logo: token0Info.logoURI,
+                    token1Logo: token1Info.logoURI,
                     lpBalance: ethers.formatEther(lpBalance),
                     share: share.toFixed(2),
                   };
@@ -153,9 +161,7 @@ export function Portfolio() {
       {/* Native Balance */}
       <div className="glass-card p-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-lg font-bold">N</span>
-          </div>
+          <TokenLogo symbol="NEX" logoURI="/tokens/nex.jpg" size="lg" />
           <div>
             <p className="text-sm text-muted-foreground">NEX Balance</p>
             <p className="text-2xl font-bold">{parseFloat(balance).toFixed(4)} NEX</p>
@@ -180,9 +186,7 @@ export function Portfolio() {
                 className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">
-                    {token.symbol[0]}
-                  </div>
+                  <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="md" />
                   <div>
                     <p className="font-medium">{token.symbol}</p>
                     <p className="text-xs text-muted-foreground">{token.name}</p>
@@ -213,12 +217,18 @@ export function Portfolio() {
               >
                 <div className="flex items-center gap-3">
                   <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold border-2 border-background z-10">
-                      {position.token0Symbol[0]}
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-xs font-bold border-2 border-background">
-                      {position.token1Symbol[0]}
-                    </div>
+                    <TokenLogo 
+                      symbol={position.token0Symbol} 
+                      logoURI={position.token0Logo} 
+                      size="md"
+                      className="border-2 border-background z-10" 
+                    />
+                    <TokenLogo 
+                      symbol={position.token1Symbol} 
+                      logoURI={position.token1Logo} 
+                      size="md"
+                      className="border-2 border-background" 
+                    />
                   </div>
                   <div>
                     <p className="font-medium">{position.token0Symbol}/{position.token1Symbol}</p>
@@ -245,15 +255,13 @@ export function Portfolio() {
         )}
       </div>
 
-      {/* Recent Activity Placeholder */}
+      {/* Recent Activity */}
       <div className="glass-card p-6">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <History className="w-5 h-5 text-primary" />
           Recent Activity
         </h3>
-        <p className="text-center text-muted-foreground py-8">
-          Transaction history will appear here after you make swaps or add liquidity
-        </p>
+        <TransactionHistory />
       </div>
     </div>
   );
