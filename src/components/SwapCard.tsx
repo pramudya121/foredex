@@ -5,6 +5,7 @@ import { TokenSelect } from './TokenSelect';
 import { SlippageSettings } from './SlippageSettings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 import { ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
@@ -27,6 +28,7 @@ export function SwapCard() {
   const [balanceOut, setBalanceOut] = useState('0');
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
+  const [loadingBalances, setLoadingBalances] = useState(true);
   const [slippage, setSlippage] = useState(0.5);
   const [deadline, setDeadline] = useState(20);
   const [priceImpact, setPriceImpact] = useState(0);
@@ -40,8 +42,12 @@ export function SwapCard() {
 
   // Fetch balances
   const fetchBalances = useCallback(async () => {
-    if (!provider || !address) return;
+    if (!provider || !address) {
+      setLoadingBalances(false);
+      return;
+    }
 
+    setLoadingBalances(true);
     try {
       if (tokenIn) {
         if (isNativeToken(tokenIn)) {
@@ -66,6 +72,8 @@ export function SwapCard() {
       }
     } catch (error) {
       console.error('Error fetching balances:', error);
+    } finally {
+      setLoadingBalances(false);
     }
   }, [provider, address, tokenIn, tokenOut]);
 
@@ -250,14 +258,20 @@ export function SwapCard() {
       <div className="token-input mb-2">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground">You pay</span>
-          <span className="text-sm text-muted-foreground">
-            Balance: {parseFloat(balanceIn).toFixed(4)}
-            <button
-              onClick={() => setAmountIn(balanceIn)}
-              className="ml-2 text-primary hover:underline"
-            >
-              MAX
-            </button>
+          <span className="text-sm text-muted-foreground flex items-center gap-1">
+            Balance: {loadingBalances ? (
+              <Skeleton className="h-4 w-16 inline-block" />
+            ) : (
+              <>
+                {parseFloat(balanceIn).toFixed(4)}
+                <button
+                  onClick={() => setAmountIn(balanceIn)}
+                  className="ml-1 text-primary hover:underline"
+                >
+                  MAX
+                </button>
+              </>
+            )}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -289,7 +303,11 @@ export function SwapCard() {
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground">You receive</span>
           <span className="text-sm text-muted-foreground">
-            Balance: {parseFloat(balanceOut).toFixed(4)}
+            Balance: {loadingBalances ? (
+              <Skeleton className="h-4 w-16 inline-block" />
+            ) : (
+              parseFloat(balanceOut).toFixed(4)
+            )}
           </span>
         </div>
         <div className="flex items-center gap-3">
