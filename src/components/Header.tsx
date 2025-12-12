@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { path: '/pools', label: 'Pools' },
   { path: '/analytics', label: 'Analytics' },
   { path: '/portfolio', label: 'Portfolio' },
+  { path: '/docs', label: 'Docs' },
 ];
 
 const WALLETS = [
