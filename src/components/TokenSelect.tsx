@@ -1,14 +1,9 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { TOKEN_LIST, TokenInfo } from '@/config/contracts';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TokenSelectProps {
@@ -38,45 +33,50 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
   };
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen(true)}
-        className={cn(
-          'gap-2 h-auto py-2 px-3 border-border/50 hover:border-primary/50 transition-all relative z-10',
-          className
-        )}
-      >
-        {selected ? (
-          <>
-            {selected.logoURI ? (
-              <img 
-                src={selected.logoURI} 
-                alt={selected.symbol} 
-                className="w-6 h-6 rounded-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-            ) : null}
-            <div className={`w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold ${selected.logoURI ? 'hidden' : ''}`}>
-              {selected.symbol[0]}
-            </div>
-            <span className="font-semibold">{selected.symbol}</span>
-          </>
-        ) : (
-          <span className="text-muted-foreground">Select token</span>
-        )}
-        <ChevronDown className="w-4 h-4 text-muted-foreground" />
-      </Button>
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Trigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            'gap-2 h-auto py-2 px-3 border-border/50 hover:border-primary/50 transition-all relative z-10',
+            className
+          )}
+        >
+          {selected ? (
+            <>
+              {selected.logoURI ? (
+                <img 
+                  src={selected.logoURI} 
+                  alt={selected.symbol} 
+                  className="w-6 h-6 rounded-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div className={`w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold ${selected.logoURI ? 'hidden' : ''}`}>
+                {selected.symbol[0]}
+              </div>
+              <span className="font-semibold">{selected.symbol}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Select token</span>
+          )}
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        </Button>
+      </DialogPrimitive.Trigger>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-card border-border/50 z-[100]">
-          <DialogHeader>
-            <DialogTitle>Select a token</DialogTitle>
-          </DialogHeader>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border border-border/50 bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg">
+          <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+            <DialogPrimitive.Title className="text-lg font-semibold leading-none tracking-tight">
+              Select a token
+            </DialogPrimitive.Title>
+          </div>
+          
           <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -121,8 +121,13 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
               ))}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
