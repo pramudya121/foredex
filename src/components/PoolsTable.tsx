@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { ExternalLink, TrendingUp, Droplets, Percent, ChevronRight } from 'lucide-react';
+import { ExternalLink, TrendingUp, Droplets, Percent, ChevronRight, ChevronDown, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { PoolChart } from './PoolChart';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface Pool {
   address: string;
@@ -165,123 +171,144 @@ export function PoolsTable() {
       {!loading && pools.length > 0 && (
         <div className="space-y-3">
           {pools.map((pool) => (
-            <div
-              key={pool.address}
-              className={cn(
-                'glass-card p-4 hover:border-primary/40 transition-all cursor-pointer group',
-                'hover:shadow-lg hover:shadow-primary/5'
-              )}
-            >
-              {/* Desktop View */}
-              <div className="hidden md:grid grid-cols-12 gap-4 items-center">
-                {/* Pool Info */}
-                <div className="col-span-4 flex items-center gap-4">
-                  <div className="flex -space-x-3">
-                    <TokenLogo 
-                      symbol={pool.token0.symbol} 
-                      logoURI={pool.token0.logoURI} 
-                      size="lg"
-                      className="border-2 border-background z-10 ring-2 ring-background" 
-                    />
-                    <TokenLogo 
-                      symbol={pool.token1.symbol} 
-                      logoURI={pool.token1.logoURI} 
-                      size="lg"
-                      className="border-2 border-background ring-2 ring-background" 
-                    />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
-                      {pool.token0.symbol}/{pool.token1.symbol}
-                    </h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
-                        <Percent className="w-3 h-3" />
-                        0.3% fee
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* TVL */}
-                <div className="col-span-2 text-right">
-                  <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
-                  <p className="text-xs text-muted-foreground">Total Value</p>
-                </div>
-
-                {/* APR */}
-                <div className="col-span-2 text-right">
-                  <p className="font-semibold text-green-500 flex items-center justify-end gap-1">
-                    <TrendingUp className="w-4 h-4" />
-                    --
-                  </p>
-                  <p className="text-xs text-muted-foreground">Est. APR</p>
-                </div>
-
-                {/* Reserves */}
-                <div className="col-span-3 text-right">
-                  <p className="font-medium text-sm">
-                    {parseFloat(pool.reserve0).toFixed(4)} {pool.token0.symbol}
-                  </p>
-                  <p className="font-medium text-sm text-muted-foreground">
-                    {parseFloat(pool.reserve1).toFixed(4)} {pool.token1.symbol}
-                  </p>
-                </div>
-
-                {/* Action */}
-                <div className="col-span-1 flex justify-end">
-                  <a
-                    href={`${NEXUS_TESTNET.blockExplorer}/address/${pool.address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-2 rounded-lg hover:bg-primary/10 transition-colors group/link"
-                  >
-                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover/link:text-primary" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Mobile View */}
-              <div className="md:hidden space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex -space-x-2">
+            <Collapsible key={pool.address}>
+              <div
+                className={cn(
+                  'glass-card p-4 hover:border-primary/40 transition-all group',
+                  'hover:shadow-lg hover:shadow-primary/5'
+                )}
+              >
+                {/* Desktop View */}
+                <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                  {/* Pool Info */}
+                  <div className="col-span-4 flex items-center gap-4">
+                    <div className="flex -space-x-3">
                       <TokenLogo 
                         symbol={pool.token0.symbol} 
                         logoURI={pool.token0.logoURI} 
-                        size="md"
-                        className="border-2 border-background z-10" 
+                        size="lg"
+                        className="border-2 border-background z-10 ring-2 ring-background" 
                       />
                       <TokenLogo 
                         symbol={pool.token1.symbol} 
                         logoURI={pool.token1.logoURI} 
-                        size="md"
-                        className="border-2 border-background" 
+                        size="lg"
+                        className="border-2 border-background ring-2 ring-background" 
                       />
                     </div>
                     <div>
-                      <h3 className="font-semibold">
+                      <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
                         {pool.token0.symbol}/{pool.token1.symbol}
                       </h3>
-                      <span className="text-xs text-primary">0.3% fee</span>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                          <Percent className="w-3 h-3" />
+                          0.3% fee
+                        </span>
+                      </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+
+                  {/* TVL */}
+                  <div className="col-span-2 text-right">
+                    <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
+                    <p className="text-xs text-muted-foreground">Total Value</p>
+                  </div>
+
+                  {/* APR */}
+                  <div className="col-span-2 text-right">
+                    <p className="font-semibold text-green-500 flex items-center justify-end gap-1">
+                      <TrendingUp className="w-4 h-4" />
+                      --
+                    </p>
+                    <p className="text-xs text-muted-foreground">Est. APR</p>
+                  </div>
+
+                  {/* Reserves */}
+                  <div className="col-span-3 text-right">
+                    <p className="font-medium text-sm">
+                      {parseFloat(pool.reserve0).toFixed(4)} {pool.token0.symbol}
+                    </p>
+                    <p className="font-medium text-sm text-muted-foreground">
+                      {parseFloat(pool.reserve1).toFixed(4)} {pool.token1.symbol}
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-1 flex justify-end gap-1">
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <BarChart3 className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <a
+                      href={`${NEXUS_TESTNET.blockExplorer}/address/${pool.address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-2 rounded-lg hover:bg-primary/10 transition-colors group/link"
+                    >
+                      <ExternalLink className="w-4 h-4 text-muted-foreground group-hover/link:text-primary" />
+                    </a>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">TVL</p>
-                    <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
+                {/* Mobile View */}
+                <div className="md:hidden space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex -space-x-2">
+                        <TokenLogo 
+                          symbol={pool.token0.symbol} 
+                          logoURI={pool.token0.logoURI} 
+                          size="md"
+                          className="border-2 border-background z-10" 
+                        />
+                        <TokenLogo 
+                          symbol={pool.token1.symbol} 
+                          logoURI={pool.token1.logoURI} 
+                          size="md"
+                          className="border-2 border-background" 
+                        />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">
+                          {pool.token0.symbol}/{pool.token1.symbol}
+                        </h3>
+                        <span className="text-xs text-primary">0.3% fee</span>
+                      </div>
+                    </div>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      </Button>
+                    </CollapsibleTrigger>
                   </div>
-                  <div className="text-right">
-                    <p className="text-muted-foreground text-xs">LP Supply</p>
-                    <p className="font-semibold">{parseFloat(pool.totalSupply).toFixed(4)}</p>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">TVL</p>
+                      <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-muted-foreground text-xs">LP Supply</p>
+                      <p className="font-semibold">{parseFloat(pool.totalSupply).toFixed(4)}</p>
+                    </div>
                   </div>
                 </div>
+
+                {/* Expandable Chart Section */}
+                <CollapsibleContent className="mt-4 pt-4 border-t border-border/50">
+                  <PoolChart
+                    poolAddress={pool.address}
+                    token0Symbol={pool.token0.symbol}
+                    token1Symbol={pool.token1.symbol}
+                    reserve0={pool.reserve0}
+                    reserve1={pool.reserve1}
+                  />
+                </CollapsibleContent>
               </div>
-            </div>
+            </Collapsible>
           ))}
         </div>
       )}
