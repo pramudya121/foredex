@@ -6,6 +6,7 @@ import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
 import { Wallet, Droplets, History, ExternalLink } from 'lucide-react';
 import { TokenLogo } from './TokenLogo';
 import { TransactionHistory } from './TransactionHistory';
+import { PortfolioValueChart } from './PortfolioValueChart';
 
 interface TokenBalance {
   symbol: string;
@@ -157,6 +158,9 @@ export function Portfolio() {
           {address?.slice(0, 6)}...{address?.slice(-4)}
         </div>
       </div>
+
+      {/* Portfolio Value Charts */}
+      <PortfolioValueChart />
 
       {/* Native Balance */}
       <div className="glass-card p-6">
