@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, Search } from 'lucide-react';
@@ -39,87 +38,91 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn(
-            'gap-2 h-auto py-2 px-3 border-border/50 hover:border-primary/50 transition-all',
-            className
-          )}
-        >
-          {selected ? (
-            <>
-              {selected.logoURI ? (
-                <img 
-                  src={selected.logoURI} 
-                  alt={selected.symbol} 
-                  className="w-6 h-6 rounded-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-              ) : null}
-              <div className={`w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold ${selected.logoURI ? 'hidden' : ''}`}>
-                {selected.symbol[0]}
-              </div>
-              <span className="font-semibold">{selected.symbol}</span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">Select token</span>
-          )}
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="glass-card border-border/50">
-        <DialogHeader>
-          <DialogTitle>Select a token</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or address"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 bg-muted/50 border-border/50"
-            />
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setOpen(true)}
+        className={cn(
+          'gap-2 h-auto py-2 px-3 border-border/50 hover:border-primary/50 transition-all relative z-10',
+          className
+        )}
+      >
+        {selected ? (
+          <>
+            {selected.logoURI ? (
+              <img 
+                src={selected.logoURI} 
+                alt={selected.symbol} 
+                className="w-6 h-6 rounded-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <div className={`w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold ${selected.logoURI ? 'hidden' : ''}`}>
+              {selected.symbol[0]}
+            </div>
+            <span className="font-semibold">{selected.symbol}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">Select token</span>
+        )}
+        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-card border-border/50 z-[100]">
+          <DialogHeader>
+            <DialogTitle>Select a token</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or address"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 bg-muted/50 border-border/50"
+              />
+            </div>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto">
+              {filteredTokens.map((token) => (
+                <button
+                  key={token.address}
+                  type="button"
+                  onClick={() => handleSelect(token)}
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 rounded-lg transition-all',
+                    'hover:bg-primary/10 text-left',
+                    selected?.address === token.address && 'bg-primary/10'
+                  )}
+                >
+                  {token.logoURI ? (
+                    <img 
+                      src={token.logoURI} 
+                      alt={token.symbol} 
+                      className="w-8 h-8 rounded-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold ${token.logoURI ? 'hidden' : ''}`}>
+                    {token.symbol[0]}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">{token.symbol}</div>
+                    <div className="text-xs text-muted-foreground">{token.name}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1 max-h-[300px] overflow-y-auto">
-            {filteredTokens.map((token) => (
-              <button
-                key={token.address}
-                onClick={() => handleSelect(token)}
-                className={cn(
-                  'w-full flex items-center gap-3 p-3 rounded-lg transition-all',
-                  'hover:bg-primary/10 text-left',
-                  selected?.address === token.address && 'bg-primary/10'
-                )}
-              >
-                {token.logoURI ? (
-                  <img 
-                    src={token.logoURI} 
-                    alt={token.symbol} 
-                    className="w-8 h-8 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                ) : null}
-                <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold ${token.logoURI ? 'hidden' : ''}`}>
-                  {token.symbol[0]}
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium">{token.symbol}</div>
-                  <div className="text-xs text-muted-foreground">{token.name}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
