@@ -144,7 +144,7 @@ export function SwapCard() {
   };
 
   const handleSwap = async () => {
-    if (!signer || !tokenIn || !tokenOut || !amountIn) return;
+    if (!signer || !tokenIn || !tokenOut || !amountIn || !provider) return;
 
     setLoading(true);
     try {
@@ -154,7 +154,10 @@ export function SwapCard() {
         (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(tokenOut.decimals),
         tokenOut.decimals
       );
-      const txDeadline = Math.floor(Date.now() / 1000) + 60 * deadline;
+      
+      // Use block timestamp to avoid clock sync issues
+      const block = await provider.getBlock('latest');
+      const txDeadline = (block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline;
       const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
 
       let tx;
