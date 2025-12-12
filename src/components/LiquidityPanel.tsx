@@ -162,14 +162,17 @@ export function LiquidityPanel() {
   }, [fetchData]);
 
   const handleAddLiquidity = async () => {
-    if (!signer || !tokenA || !tokenB || !amountA || !amountB) return;
+    if (!signer || !tokenA || !tokenB || !amountA || !amountB || !provider) return;
 
     setLoading(true);
     try {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
       const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
       const amountBWei = ethers.parseUnits(amountB, tokenB.decimals);
-      const txDeadline = Math.floor(Date.now() / 1000) + 60 * deadline;
+      
+      // Use block timestamp to avoid clock sync issues
+      const block = await provider.getBlock('latest');
+      const txDeadline = (block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline;
       
       // Calculate minimum amounts with slippage
       const amountAMin = amountAWei * BigInt(Math.floor((100 - slippage) * 100)) / BigInt(10000);
@@ -256,13 +259,16 @@ export function LiquidityPanel() {
   };
 
   const handleRemoveLiquidity = async () => {
-    if (!signer || !tokenA || !tokenB || !lpToRemove || !pairAddress) return;
+    if (!signer || !tokenA || !tokenB || !lpToRemove || !pairAddress || !provider) return;
 
     setLoading(true);
     try {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
       const lpWei = ethers.parseUnits(lpToRemove, 18);
-      const txDeadline = Math.floor(Date.now() / 1000) + 60 * deadline;
+      
+      // Use block timestamp to avoid clock sync issues
+      const block = await provider.getBlock('latest');
+      const txDeadline = (block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline;
 
       // Approve LP tokens
       const pairContract = new ethers.Contract(pairAddress, ERC20_ABI, signer);
