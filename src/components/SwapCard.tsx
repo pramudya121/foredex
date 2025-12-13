@@ -3,12 +3,14 @@ import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { TokenSelect } from './TokenSelect';
 import { SlippageSettings } from './SlippageSettings';
+import { PriceImpactWarning, PriceImpactBadge, SlippageProtection, getPriceImpactSeverity } from './PriceImpactWarning';
+import { RouteDisplay, CompactRoute } from './RouteDisplay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowDown, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
@@ -16,6 +18,7 @@ import {
   calculatePriceImpact, 
   getReserves,
 } from '@/lib/uniswapV2Library';
+import { findBestRoute, SwapRoute } from '@/lib/multiHopRouter';
 import { addTransaction, updateTransactionStatus } from './TransactionHistory';
 
 export function SwapCard() {
@@ -32,6 +35,8 @@ export function SwapCard() {
   const [slippage, setSlippage] = useState(0.5);
   const [deadline, setDeadline] = useState(20);
   const [priceImpact, setPriceImpact] = useState(0);
+  const [bestRoute, setBestRoute] = useState<SwapRoute | null>(null);
+  const [allRoutes, setAllRoutes] = useState<SwapRoute[]>([]);
   const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
 
   const isNativeToken = (token: TokenInfo | null) => 
@@ -81,39 +86,67 @@ export function SwapCard() {
     fetchBalances();
   }, [fetchBalances]);
 
-  // Get quote using UniswapV2Library
+  // Get quote using multi-hop router
   const getQuote = useCallback(async (inputAmount: string) => {
     if (!provider || !tokenIn || !tokenOut || !inputAmount || parseFloat(inputAmount) === 0) {
       setAmountOut('');
       setPriceImpact(0);
+      setBestRoute(null);
+      setAllRoutes([]);
       return;
     }
 
     setQuoting(true);
     try {
-      const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
-      const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
+      const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
       
-      // Get reserves using UniswapV2Library
-      const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
-      setReserves({ reserveA, reserveB });
+      // Find all possible routes including multi-hop
+      const routes = await findBestRoute(provider, tokenIn, tokenOut, amountInWei);
+      setAllRoutes(routes);
       
-      if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
-        setAmountOut('');
-        setPriceImpact(0);
+      if (routes.length === 0) {
+        // No routes found, try direct calculation
+        const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
+        const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
+        
+        const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
+        setReserves({ reserveA, reserveB });
+        
+        if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+          setAmountOut('');
+          setPriceImpact(0);
+          setBestRoute(null);
+          return;
+        }
+
+        const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
+        const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
+        setAmountOut(parseFloat(outAmount).toFixed(6));
+        
+        const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
+        setPriceImpact(impact);
+        setBestRoute(null);
         return;
       }
 
-      const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
+      // Use the best route
+      const best = routes[0];
+      setBestRoute(best);
       
-      // Calculate output using local library function
-      const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
-      const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
+      const outAmount = ethers.formatUnits(best.amountOut, tokenOut.decimals);
       setAmountOut(parseFloat(outAmount).toFixed(6));
+      setPriceImpact(best.priceImpact);
       
-      // Calculate price impact using library
-      const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
-      setPriceImpact(impact);
+      // Show toast for multi-hop if better
+      if (best.path.length > 2 && routes.length > 1) {
+        const directRoute = routes.find(r => r.path.length === 2);
+        if (directRoute && best.amountOut > directRoute.amountOut) {
+          const improvement = ((Number(best.amountOut - directRoute.amountOut) / Number(directRoute.amountOut)) * 100);
+          if (improvement > 0.1) {
+            toast.info(`Multi-hop route via ${best.path[1].symbol} gives ${improvement.toFixed(2)}% better rate!`);
+          }
+        }
+      }
     } catch (error) {
       console.error('Quote error:', error);
       // Fallback to router call
@@ -126,9 +159,11 @@ export function SwapCard() {
         const outAmount = ethers.formatUnits(amounts[1], tokenOut.decimals);
         setAmountOut(parseFloat(outAmount).toFixed(6));
         setPriceImpact(0);
+        setBestRoute(null);
       } catch {
         setAmountOut('');
         setPriceImpact(0);
+        setBestRoute(null);
       }
     } finally {
       setQuoting(false);
@@ -154,6 +189,17 @@ export function SwapCard() {
   const handleSwap = async () => {
     if (!signer || !tokenIn || !tokenOut || !amountIn || !provider) return;
 
+    // Check price impact and show warning
+    const severity = getPriceImpactSeverity(priceImpact);
+    if (severity === 'critical') {
+      toast.error('Price impact is too high! Please reduce your trade size.');
+      return;
+    }
+    
+    if (severity === 'danger') {
+      toast.warning(`High price impact: ${priceImpact.toFixed(2)}%. Proceed with caution.`);
+    }
+
     setLoading(true);
     try {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
@@ -166,12 +212,16 @@ export function SwapCard() {
       // Use block timestamp to avoid clock sync issues
       const block = await provider.getBlock('latest');
       const txDeadline = (block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline;
-      const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
+      
+      // Use multi-hop path if available, otherwise direct path
+      const path = bestRoute && bestRoute.path.length > 2 
+        ? bestRoute.pathAddresses 
+        : [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
 
       let tx;
 
       if (isNativeToken(tokenIn)) {
-        // ETH -> Token
+        // ETH -> Token (can be multi-hop)
         tx = await router.swapExactETHForTokens(
           amountOutMin,
           path,
@@ -181,7 +231,6 @@ export function SwapCard() {
         );
       } else if (isNativeToken(tokenOut)) {
         // Token -> ETH
-        // Approve first
         const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
         if (allowance < amountInWei) {
@@ -198,7 +247,7 @@ export function SwapCard() {
           txDeadline
         );
       } else {
-        // Token -> Token
+        // Token -> Token (can be multi-hop)
         const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
         if (allowance < amountInWei) {
@@ -328,20 +377,38 @@ export function SwapCard() {
         </div>
       </div>
 
+      {/* Price Impact Warning */}
+      {priceImpact > 1 && (
+        <PriceImpactWarning priceImpact={priceImpact} className="mb-4" />
+      )}
+
+      {/* Route Display */}
+      {bestRoute && amountIn && (
+        <RouteDisplay route={bestRoute} isLoading={quoting} className="mb-4" />
+      )}
+
       {/* Swap Button */}
       {isConnected ? (
         <Button
           onClick={handleSwap}
-          disabled={loading || !amountIn || !amountOut || parseFloat(amountIn) === 0}
+          disabled={loading || !amountIn || !amountOut || parseFloat(amountIn) === 0 || getPriceImpactSeverity(priceImpact) === 'critical'}
           className={cn(
             'w-full h-14 text-lg font-semibold btn-glow',
-            'bg-gradient-wolf hover:opacity-90 transition-all'
+            getPriceImpactSeverity(priceImpact) === 'critical' 
+              ? 'bg-destructive hover:bg-destructive/90' 
+              : 'bg-gradient-wolf hover:opacity-90',
+            'transition-all'
           )}
         >
           {loading ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
               Swapping...
+            </>
+          ) : getPriceImpactSeverity(priceImpact) === 'critical' ? (
+            <>
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Price Impact Too High
             </>
           ) : (
             'Swap'
@@ -359,7 +426,7 @@ export function SwapCard() {
 
       {/* Price Info */}
       {amountIn && amountOut && tokenIn && tokenOut && (
-        <div className="mt-4 p-3 rounded-lg bg-muted/30 text-sm space-y-1">
+        <div className="mt-4 p-3 rounded-lg bg-muted/30 text-sm space-y-2">
           <div className="flex justify-between text-muted-foreground">
             <span>Rate</span>
             <span>
@@ -368,11 +435,7 @@ export function SwapCard() {
           </div>
           <div className="flex justify-between text-muted-foreground">
             <span>Price Impact</span>
-            <span className={cn(
-              priceImpact > 5 ? 'text-destructive' : priceImpact > 2 ? 'text-yellow-500' : 'text-green-500'
-            )}>
-              {priceImpact.toFixed(2)}%
-            </span>
+            <PriceImpactBadge priceImpact={priceImpact} />
           </div>
           <div className="flex justify-between text-muted-foreground">
             <span>Slippage Tolerance</span>
@@ -383,6 +446,18 @@ export function SwapCard() {
             <span>
               {(parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)} {tokenOut.symbol}
             </span>
+          </div>
+          
+          {/* Route info */}
+          {bestRoute && (
+            <div className="pt-2 border-t border-border/50">
+              <CompactRoute route={bestRoute} />
+            </div>
+          )}
+          
+          {/* Slippage protection status */}
+          <div className="pt-2 border-t border-border/50">
+            <SlippageProtection slippage={slippage} priceImpact={priceImpact} />
           </div>
         </div>
       )}
