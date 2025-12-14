@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowDown, RefreshCw, Loader2, AlertTriangle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
@@ -20,9 +20,17 @@ import {
 } from '@/lib/uniswapV2Library';
 import { findBestRoute, SwapRoute } from '@/lib/multiHopRouter';
 import { addTransaction, updateTransactionStatus } from './TransactionHistory';
+import { calculateAutoSlippage, getSlippageSeverityColor } from '@/lib/autoSlippage';
+import { useSettingsStore } from '@/stores/settingsStore';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 export function SwapCard() {
   const { provider, signer, address, isConnected } = useWeb3();
+  const { settings } = useSettingsStore();
   const [tokenIn, setTokenIn] = useState<TokenInfo | null>(TOKEN_LIST[0]); // NEX
   const [tokenOut, setTokenOut] = useState<TokenInfo | null>(TOKEN_LIST[4]); // FRDX
   const [amountIn, setAmountIn] = useState('');
@@ -32,12 +40,20 @@ export function SwapCard() {
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
   const [loadingBalances, setLoadingBalances] = useState(true);
-  const [slippage, setSlippage] = useState(0.5);
-  const [deadline, setDeadline] = useState(20);
+  const [slippage, setSlippage] = useState(settings.defaultSlippage);
+  const [deadline, setDeadline] = useState(settings.transactionDeadline);
   const [priceImpact, setPriceImpact] = useState(0);
   const [bestRoute, setBestRoute] = useState<SwapRoute | null>(null);
   const [allRoutes, setAllRoutes] = useState<SwapRoute[]>([]);
   const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
+  
+  // Auto-slippage state
+  const [autoSlippageResult, setAutoSlippageResult] = useState<{
+    recommendedSlippage: number;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    reason: string;
+  } | null>(null);
+  const [isAutoSlippage, setIsAutoSlippage] = useState(settings.autoSlippage);
 
   const isNativeToken = (token: TokenInfo | null) => 
     token?.address === '0x0000000000000000000000000000000000000000';
@@ -93,6 +109,7 @@ export function SwapCard() {
       setPriceImpact(0);
       setBestRoute(null);
       setAllRoutes([]);
+      setAutoSlippageResult(null);
       return;
     }
 
@@ -116,6 +133,7 @@ export function SwapCard() {
           setAmountOut('');
           setPriceImpact(0);
           setBestRoute(null);
+          setAutoSlippageResult(null);
           return;
         }
 
@@ -126,6 +144,16 @@ export function SwapCard() {
         const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
         setPriceImpact(impact);
         setBestRoute(null);
+        
+        // Calculate auto slippage
+        const autoSlip = calculateAutoSlippage(amountInWei, reserveA, reserveB, slippage);
+        setAutoSlippageResult(autoSlip);
+        
+        // Apply auto slippage if enabled
+        if (isAutoSlippage && autoSlip.recommendedSlippage !== slippage) {
+          setSlippage(autoSlip.recommendedSlippage);
+        }
+        
         return;
       }
 
@@ -136,6 +164,20 @@ export function SwapCard() {
       const outAmount = ethers.formatUnits(best.amountOut, tokenOut.decimals);
       setAmountOut(parseFloat(outAmount).toFixed(6));
       setPriceImpact(best.priceImpact);
+      
+      // Calculate auto slippage based on price impact
+      const autoSlip = calculateAutoSlippage(
+        amountInWei, 
+        reserves.reserveA > 0n ? reserves.reserveA : BigInt(1000000000000000000),
+        reserves.reserveB > 0n ? reserves.reserveB : BigInt(1000000000000000000),
+        slippage
+      );
+      setAutoSlippageResult(autoSlip);
+      
+      // Apply auto slippage if enabled
+      if (isAutoSlippage && autoSlip.recommendedSlippage !== slippage) {
+        setSlippage(autoSlip.recommendedSlippage);
+      }
       
       // Show toast for multi-hop if better
       if (best.path.length > 2 && routes.length > 1) {
@@ -156,19 +198,21 @@ export function SwapCard() {
         const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
         
         const amounts = await router.getAmountsOut(amountInWei, path);
-        const outAmount = ethers.formatUnits(amounts[1], tokenOut.decimals);
-        setAmountOut(parseFloat(outAmount).toFixed(6));
+        const outAmountFallback = ethers.formatUnits(amounts[1], tokenOut.decimals);
+        setAmountOut(parseFloat(outAmountFallback).toFixed(6));
         setPriceImpact(0);
         setBestRoute(null);
+        setAutoSlippageResult(null);
       } catch {
         setAmountOut('');
         setPriceImpact(0);
         setBestRoute(null);
+        setAutoSlippageResult(null);
       }
     } finally {
       setQuoting(false);
     }
-  }, [provider, tokenIn, tokenOut]);
+  }, [provider, tokenIn, tokenOut, slippage, isAutoSlippage, reserves]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -295,13 +339,70 @@ export function SwapCard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold">Swap</h2>
-        <SlippageSettings
-          slippage={slippage}
-          onSlippageChange={setSlippage}
-          deadline={deadline}
-          onDeadlineChange={setDeadline}
-        />
+        <div className="flex items-center gap-2">
+          {/* Auto Slippage Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => {
+                  setIsAutoSlippage(!isAutoSlippage);
+                  if (!isAutoSlippage && autoSlippageResult) {
+                    setSlippage(autoSlippageResult.recommendedSlippage);
+                  }
+                }}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors',
+                  isAutoSlippage 
+                    ? 'bg-primary/20 text-primary' 
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                )}
+              >
+                <Zap className="w-3 h-3" />
+                Auto
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-xs text-xs">
+                {isAutoSlippage 
+                  ? 'Auto-slippage enabled: Automatically adjusts based on trade size and pool conditions'
+                  : 'Click to enable auto-slippage detection'}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+          
+          <SlippageSettings
+            slippage={slippage}
+            onSlippageChange={(val) => {
+              setSlippage(val);
+              setIsAutoSlippage(false);
+            }}
+            deadline={deadline}
+            onDeadlineChange={setDeadline}
+          />
+        </div>
       </div>
+
+      {/* Auto Slippage Indicator */}
+      {isAutoSlippage && autoSlippageResult && amountIn && (
+        <div className={cn(
+          'mb-4 p-3 rounded-lg border text-sm',
+          autoSlippageResult.severity === 'low' && 'bg-green-500/10 border-green-500/30',
+          autoSlippageResult.severity === 'medium' && 'bg-yellow-500/10 border-yellow-500/30',
+          autoSlippageResult.severity === 'high' && 'bg-orange-500/10 border-orange-500/30',
+          autoSlippageResult.severity === 'critical' && 'bg-red-500/10 border-red-500/30'
+        )}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className={cn('w-4 h-4', getSlippageSeverityColor(autoSlippageResult.severity))} />
+              <span className="font-medium">Auto Slippage: {autoSlippageResult.recommendedSlippage}%</span>
+            </div>
+            <span className={cn('text-xs', getSlippageSeverityColor(autoSlippageResult.severity))}>
+              {autoSlippageResult.severity.toUpperCase()}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{autoSlippageResult.reason}</p>
+        </div>
+      )}
 
       {/* Token In */}
       <div className="token-input mb-2">
