@@ -172,9 +172,11 @@ export function WrapUnwrap() {
                 MAX
               </Button>
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary-foreground">N</span>
-                </div>
+                <img 
+                  src="/tokens/nex.jpg" 
+                  alt="NEX" 
+                  className="w-6 h-6 rounded-full object-cover"
+                />
                 <span className="font-medium">NEX</span>
               </div>
             </div>
@@ -198,9 +200,11 @@ export function WrapUnwrap() {
                 {amount || '0.0'}
               </span>
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary-foreground">W</span>
-                </div>
+                <img 
+                  src="/tokens/nex.jpg" 
+                  alt="WNEX" 
+                  className="w-6 h-6 rounded-full object-cover"
+                />
                 <span className="font-medium">WNEX</span>
               </div>
             </div>
@@ -232,9 +236,11 @@ export function WrapUnwrap() {
                 MAX
               </Button>
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary-foreground">W</span>
-                </div>
+                <img 
+                  src="/tokens/nex.jpg" 
+                  alt="WNEX" 
+                  className="w-6 h-6 rounded-full object-cover"
+                />
                 <span className="font-medium">WNEX</span>
               </div>
             </div>
@@ -258,9 +264,11 @@ export function WrapUnwrap() {
                 {amount || '0.0'}
               </span>
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary-foreground">N</span>
-                </div>
+                <img 
+                  src="/tokens/nex.jpg" 
+                  alt="NEX" 
+                  className="w-6 h-6 rounded-full object-cover"
+                />
                 <span className="font-medium">NEX</span>
               </div>
             </div>

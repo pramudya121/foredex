@@ -1,5 +1,6 @@
 import { usePoolData } from '@/hooks/usePoolData';
 import { PoolPerformanceMetrics } from './PoolPerformanceMetrics';
+import { ExportAnalytics } from './ExportAnalytics';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
 import { TrendingUp, BarChart3, Droplets, Activity, RefreshCw, Clock } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,11 +39,37 @@ export function Analytics() {
     },
   ];
 
+  // Prepare data for export
+  const poolsForExport = pools.map(pool => ({
+    name: `${pool.token0.symbol}/${pool.token1.symbol}`,
+    tvl: pool.tvl,
+    volume24h: pool.volume24h,
+    fees24h: pool.volume24h * 0.003, // 0.3% fee
+    apr: pool.apr,
+  }));
+
+  const volumeDataForExport = historicalData.map(d => ({
+    date: d.date,
+    volume: d.volume,
+  }));
+
+  const tvlDataForExport = historicalData.map(d => ({
+    date: d.date,
+    tvl: d.tvl,
+  }));
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Analytics</h2>
         <div className="flex items-center gap-3">
+          {/* Export Button */}
+          <ExportAnalytics 
+            pools={poolsForExport}
+            volumeData={volumeDataForExport}
+            tvlData={tvlDataForExport}
+          />
+          
           {lastUpdate && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="w-3 h-3" />

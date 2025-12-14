@@ -66,6 +66,60 @@
     --sidebar-border: 0 0% 15%;
     --sidebar-ring: 0 84% 50%;
   }
+
+  /* Light theme */
+  .light {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 0 84% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 72% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 85%;
+    --input: 0 0% 90%;
+    --ring: 0 84% 45%;
+
+    --wolf-red: 0 84% 45%;
+    --wolf-red-glow: 0 84% 55%;
+    --wolf-dark: 0 0% 96%;
+    --wolf-card: 0 0% 100%;
+    --wolf-border: 0 0% 88%;
+
+    --gradient-wolf: linear-gradient(135deg, hsl(0, 84%, 45%) 0%, hsl(0, 70%, 30%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(0, 0%, 96%) 100%);
+    --gradient-glow: radial-gradient(ellipse at center, hsl(0, 84%, 45%, 0.1) 0%, transparent 70%);
+    
+    --shadow-wolf: 0 0 40px hsl(0, 84%, 45%, 0.2);
+    --shadow-card: 0 8px 32px hsl(0, 0%, 0%, 0.08);
+    --shadow-glow: 0 0 60px hsl(0, 84%, 45%, 0.15);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 8%;
+    --sidebar-primary: 0 84% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 20%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 0 84% 45%;
+  }
 }
 
 @layer base {
@@ -80,9 +134,15 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image: 
-      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(0, 84%, 20%, 0.3), transparent),
-      radial-gradient(ellipse 60% 40% at 80% 100%, hsl(0, 84%, 15%, 0.2), transparent);
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.15), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 100%, hsl(var(--primary) / 0.1), transparent);
     min-height: 100vh;
+  }
+
+  .light body {
+    background-image: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 100%, hsl(var(--primary) / 0.05), transparent);
   }
 }
 
@@ -117,7 +177,7 @@
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(ellipse at center, hsl(0, 84%, 30%, 0.1) 0%, transparent 50%);
+    background: radial-gradient(ellipse at center, hsl(var(--primary) / 0.1) 0%, transparent 50%);
     animation: wave-pulse 8s ease-in-out infinite;
   }
 
@@ -137,7 +197,7 @@
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, hsl(0, 84%, 50%, 0.5), transparent, hsl(0, 84%, 50%, 0.3));
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.5), transparent, hsl(var(--primary) / 0.3));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
@@ -152,7 +212,7 @@
   }
 
   .btn-glow:hover {
-    box-shadow: 0 0 30px hsl(0, 84%, 50%, 0.4);
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.4);
   }
 
   /* Token input */
@@ -162,7 +222,7 @@
 
   .token-input:focus-within {
     @apply border-primary/50;
-    box-shadow: 0 0 20px hsl(0, 84%, 50%, 0.2);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
   }
 
   /* Scrollbar */
@@ -181,6 +241,16 @@
 
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-primary/50;
+  }
+
+  /* Marquee animation for price ticker */
+  .animate-marquee {
+    animation: marquee 30s linear infinite;
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
   }
 }
 
