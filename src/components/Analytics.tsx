@@ -46,7 +46,7 @@ export function Analytics() {
           {lastUpdate && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="w-3 h-3" />
-              <span>Updated {lastUpdate.toLocaleTimeString()}</span>
+              <span>Updated {new Date(lastUpdate).toLocaleTimeString()}</span>
             </div>
           )}
           <button

@@ -70,9 +70,11 @@ export function usePoolData(refreshInterval: number = 15000) {
   });
   const [historicalData, setHistoricalData] = useState<HistoricalDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
 
-  const fetchPoolData = useCallback(async () => {
+  const fetchPoolData = useCallback(async (isManual: boolean = false) => {
+    if (isManual) setIsRefreshing(true);
     try {
       const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
       const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
@@ -157,11 +159,12 @@ export function usePoolData(refreshInterval: number = 15000) {
         volumeChange,
       });
 
-      setLastUpdate(new Date());
+      setLastUpdate(Date.now());
     } catch (error) {
       console.error('Error fetching pool data:', error);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -177,7 +180,9 @@ export function usePoolData(refreshInterval: number = 15000) {
     analytics,
     historicalData,
     loading,
+    isRefreshing,
     lastUpdate,
-    refetch: fetchPoolData,
+    refetch: () => fetchPoolData(true),
+    refreshInterval,
   };
 }
