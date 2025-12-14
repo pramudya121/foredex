@@ -13,6 +13,9 @@ import { cn } from '@/lib/utils';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
 import wolfLogo from '@/assets/wolf-logo.png';
+import { NetworkStatus } from './NetworkStatus';
+import { PendingTransactions } from './PendingTransactions';
+import { MobileNav } from './MobileNav';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
@@ -55,6 +58,9 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between px-4">
+        {/* Mobile Menu */}
+        <MobileNav />
+
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
           <div className="relative">
@@ -88,13 +94,13 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Wallet */}
-        <div className="flex items-center gap-3">
-          {/* Network Badge */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-medium text-muted-foreground">Nexus Testnet</span>
-          </div>
+        {/* Wallet & Status */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Network Status */}
+          <NetworkStatus />
+
+          {/* Pending Transactions */}
+          {isConnected && <PendingTransactions />}
 
           {isConnected ? (
             <DropdownMenu>
