@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Web3Provider } from "@/contexts/Web3Context";
 import { Header } from "@/components/Header";
 import { WaveBackground } from "@/components/WaveBackground";
+import { PriceTicker } from "@/components/PriceTicker";
 import Index from "./pages/Index";
 import Liquidity from "./pages/Liquidity";
 import Pools from "./pages/Pools";
@@ -26,6 +27,7 @@ const App = () => (
           <WaveBackground />
           <div className="min-h-screen flex flex-col">
             <Header />
+            <PriceTicker />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/liquidity" element={<Liquidity />} />

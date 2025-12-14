@@ -16,6 +16,7 @@ import wolfLogo from '@/assets/wolf-logo.png';
 import { NetworkStatus } from './NetworkStatus';
 import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
@@ -96,6 +97,9 @@ export function Header() {
 
         {/* Wallet & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
           {/* Network Status */}
           <NetworkStatus />
 
