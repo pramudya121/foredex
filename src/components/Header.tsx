@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { path: '/analytics', label: 'Analytics' },
   { path: '/portfolio', label: 'Portfolio' },
   { path: '/docs', label: 'Docs' },
+  { path: '/settings', label: 'Settings' },
 ];
 
 const WALLETS = [

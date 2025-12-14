@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ArrowLeftRight, Droplets, LayoutGrid, BarChart3, Wallet, FileText } from 'lucide-react';
+import { Menu, ArrowLeftRight, Droplets, LayoutGrid, BarChart3, Wallet, FileText, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/portfolio', label: 'Portfolio', icon: Wallet },
   { path: '/docs', label: 'Docs', icon: FileText },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function MobileNav() {
