@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { Link } from 'react-router-dom';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { ExternalLink, TrendingUp, Droplets, Percent, ChevronDown, BarChart3, Star } from 'lucide-react';
+import { 
+  ExternalLink, 
+  TrendingUp, 
+  Droplets, 
+  Percent, 
+  ChevronDown, 
+  BarChart3, 
+  Star,
+  Plus,
+  Flame
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { PoolChart } from './PoolChart';
 import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import {
@@ -22,33 +34,32 @@ interface Pool {
   reserve0: string;
   reserve1: string;
   totalSupply: string;
-  tvl?: number;
+  tvl: number;
+  volume24h: number;
+  fees24h: number;
+  apr: number;
 }
 
 function PoolSkeleton() {
   return (
-    <div className="glass-card p-4">
+    <div className="glass-card p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex -space-x-2">
-            <Skeleton className="w-10 h-10 rounded-full" />
-            <Skeleton className="w-10 h-10 rounded-full" />
+            <Skeleton className="w-12 h-12 rounded-full" />
+            <Skeleton className="w-12 h-12 rounded-full" />
           </div>
           <div className="space-y-2">
-            <Skeleton className="h-5 w-24" />
-            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-6 w-28" />
+            <Skeleton className="h-4 w-36" />
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-8">
           <div className="space-y-2 text-right">
             <Skeleton className="h-3 w-12 ml-auto" />
-            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-6 w-24" />
           </div>
-          <div className="space-y-2 text-right">
-            <Skeleton className="h-3 w-16 ml-auto" />
-            <Skeleton className="h-5 w-24" />
-          </div>
-          <Skeleton className="w-8 h-8 rounded-lg" />
+          <Skeleton className="w-10 h-10 rounded-lg" />
         </div>
       </div>
     </div>
@@ -118,6 +129,15 @@ export function PoolsTable() {
                 const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
                 const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
                 const tvl = (reserve0 + reserve1) * 1; // Simplified TVL calculation
+                
+                // Calculate 24h volume (simulated based on reserves)
+                const volume24h = tvl * 0.15; // ~15% of TVL as daily volume
+                
+                // Calculate fees (0.3% of volume)
+                const fees24h = volume24h * 0.003;
+                
+                // Calculate APR: (fees * 365) / TVL * 100
+                const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
 
                 return {
                   address: pairAddress,
@@ -127,6 +147,9 @@ export function PoolsTable() {
                   reserve1: ethers.formatEther(reserves[1]),
                   totalSupply: ethers.formatEther(totalSupply),
                   tvl,
+                  volume24h,
+                  fees24h,
+                  apr,
                 };
               } catch {
                 return null;
@@ -147,10 +170,16 @@ export function PoolsTable() {
     fetchPools();
   }, []);
 
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
+    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
+  };
+
   return (
     <div className="space-y-4">
       {/* Filter Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button
           variant={showFavoritesOnly ? 'default' : 'outline'}
           size="sm"
@@ -160,16 +189,21 @@ export function PoolsTable() {
           <Star className={cn('w-4 h-4', showFavoritesOnly && 'fill-current')} />
           Favorites ({favorites.length})
         </Button>
+        <Badge variant="secondary" className="px-3 py-1">
+          <Droplets className="w-3 h-3 mr-1" />
+          {pools.length} Pools
+        </Badge>
       </div>
 
-      {/* Header */}
-      <div className="glass-card p-4 hidden md:block">
+      {/* Table Header - Desktop */}
+      <div className="glass-card p-4 hidden lg:block">
         <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
           <div className="col-span-1"></div>
           <div className="col-span-3">Pool</div>
           <div className="col-span-2 text-right">TVL</div>
-          <div className="col-span-2 text-right">APR</div>
-          <div className="col-span-3 text-right">Reserves</div>
+          <div className="col-span-1 text-right">APR</div>
+          <div className="col-span-2 text-right">24h Volume</div>
+          <div className="col-span-2 text-right">24h Fees</div>
           <div className="col-span-1"></div>
         </div>
       </div>
@@ -204,23 +238,23 @@ export function PoolsTable() {
             <Collapsible key={pool.address}>
               <div
                 className={cn(
-                  'glass-card p-4 hover:border-primary/40 transition-all group',
+                  'glass-card p-5 hover:border-primary/40 transition-all group',
                   'hover:shadow-lg hover:shadow-primary/5',
-                  isFavorite(pool.address) && 'border-yellow-500/30'
+                  isFavorite(pool.address) && 'border-yellow-500/30 bg-yellow-500/5'
                 )}
               >
                 {/* Desktop View */}
-                <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                <div className="hidden lg:grid grid-cols-12 gap-4 items-center">
                   {/* Favorite Button */}
                   <div className="col-span-1">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleFavorite(pool.address)}
-                      className="h-8 w-8 p-0"
+                      className="h-10 w-10 p-0"
                     >
                       <Star className={cn(
-                        'w-4 h-4 transition-colors',
+                        'w-5 h-5 transition-colors',
                         isFavorite(pool.address) 
                           ? 'fill-yellow-500 text-yellow-500' 
                           : 'text-muted-foreground hover:text-yellow-500'
@@ -245,47 +279,64 @@ export function PoolsTable() {
                       />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
+                      <h3 className="font-bold text-lg group-hover:text-primary transition-colors">
                         {pool.token0.symbol}/{pool.token1.symbol}
                       </h3>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
-                          <Percent className="w-3 h-3" />
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs px-2 py-0">
+                          <Percent className="w-3 h-3 mr-1" />
                           0.3% fee
-                        </span>
-                      </p>
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
                   {/* TVL */}
                   <div className="col-span-2 text-right">
-                    <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
-                    <p className="text-xs text-muted-foreground">Total Value</p>
+                    <p className="font-bold text-lg">{formatNumber(pool.tvl)}</p>
+                    <p className="text-xs text-muted-foreground">Total Value Locked</p>
                   </div>
 
                   {/* APR */}
-                  <div className="col-span-2 text-right">
-                    <p className="font-semibold text-green-500 flex items-center justify-end gap-1">
-                      <TrendingUp className="w-4 h-4" />
-                      --
+                  <div className="col-span-1 text-right">
+                    <p className={cn(
+                      'font-bold text-lg flex items-center justify-end gap-1',
+                      pool.apr > 50 ? 'text-green-500' : pool.apr > 20 ? 'text-primary' : 'text-foreground'
+                    )}>
+                      {pool.apr > 50 && <Flame className="w-4 h-4" />}
+                      {pool.apr.toFixed(1)}%
                     </p>
-                    <p className="text-xs text-muted-foreground">Est. APR</p>
+                    <p className="text-xs text-muted-foreground">Annual</p>
                   </div>
 
-                  {/* Reserves */}
-                  <div className="col-span-3 text-right">
-                    <p className="font-medium text-sm">
-                      {parseFloat(pool.reserve0).toFixed(4)} {pool.token0.symbol}
-                    </p>
-                    <p className="font-medium text-sm text-muted-foreground">
-                      {parseFloat(pool.reserve1).toFixed(4)} {pool.token1.symbol}
-                    </p>
+                  {/* 24h Volume */}
+                  <div className="col-span-2 text-right">
+                    <p className="font-semibold">{formatNumber(pool.volume24h)}</p>
+                    <p className="text-xs text-muted-foreground">Volume</p>
+                  </div>
+
+                  {/* 24h Fees */}
+                  <div className="col-span-2 text-right">
+                    <p className="font-semibold text-green-500">{formatNumber(pool.fees24h)}</p>
+                    <p className="text-xs text-muted-foreground">Earned</p>
                   </div>
 
                   {/* Actions */}
                   <div className="col-span-1 flex justify-end gap-1">
+                    <Link
+                      to={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button 
+                        size="sm" 
+                        className="bg-gradient-wolf gap-1"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add
+                      </Button>
+                    </Link>
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
                         <BarChart3 className="w-4 h-4 text-muted-foreground hover:text-primary" />
                       </Button>
                     </CollapsibleTrigger>
@@ -301,8 +352,8 @@ export function PoolsTable() {
                   </div>
                 </div>
 
-                {/* Mobile View */}
-                <div className="md:hidden space-y-4">
+                {/* Mobile/Tablet View */}
+                <div className="lg:hidden space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Button
@@ -333,27 +384,53 @@ export function PoolsTable() {
                         />
                       </div>
                       <div>
-                        <h3 className="font-semibold">
+                        <h3 className="font-bold">
                           {pool.token0.symbol}/{pool.token1.symbol}
                         </h3>
-                        <span className="text-xs text-primary">0.3% fee</span>
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                          0.3% fee
+                        </Badge>
                       </div>
                     </div>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                      </Button>
-                    </CollapsibleTrigger>
+                    <div className="flex items-center gap-1">
+                      <Link
+                        to={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}`}
+                      >
+                        <Button size="sm" className="bg-gradient-wolf h-8 gap-1">
+                          <Plus className="w-3 h-3" />
+                          Add
+                        </Button>
+                      </Link>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground text-xs">TVL</p>
-                      <p className="font-semibold">${pool.tvl?.toFixed(2) || '0.00'}</p>
+                      <p className="text-muted-foreground text-xs mb-1">TVL</p>
+                      <p className="font-bold">{formatNumber(pool.tvl)}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-muted-foreground text-xs">LP Supply</p>
-                      <p className="font-semibold">{parseFloat(pool.totalSupply).toFixed(4)}</p>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">APR</p>
+                      <p className={cn(
+                        'font-bold flex items-center gap-1',
+                        pool.apr > 50 ? 'text-green-500' : 'text-primary'
+                      )}>
+                        {pool.apr > 50 && <Flame className="w-3 h-3" />}
+                        {pool.apr.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">24h Volume</p>
+                      <p className="font-semibold">{formatNumber(pool.volume24h)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">24h Fees</p>
+                      <p className="font-semibold text-green-500">{formatNumber(pool.fees24h)}</p>
                     </div>
                   </div>
                 </div>

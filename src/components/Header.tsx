@@ -22,10 +22,10 @@ const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
   { path: '/liquidity', label: 'Liquidity' },
   { path: '/pools', label: 'Pools' },
+  { path: '/tokens', label: 'Tokens' },
   { path: '/analytics', label: 'Analytics' },
   { path: '/portfolio', label: 'Portfolio' },
   { path: '/docs', label: 'Docs' },
-  { path: '/settings', label: 'Settings' },
 ];
 
 const WALLETS = [
