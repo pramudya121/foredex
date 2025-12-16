@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import { NetworkStatus } from './NetworkStatus';
 import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
+
+const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 
 const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
@@ -98,6 +100,11 @@ export function Header() {
 
         {/* Wallet & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Price Alerts */}
+          <Suspense fallback={null}>
+            <PriceAlertManager />
+          </Suspense>
+
           {/* Theme Toggle */}
           <ThemeToggle />
 

@@ -87,19 +87,39 @@ const FEATURES_LIST = [
 
 const TODAYS_UPDATES = [
   {
-    title: 'Token Market Page',
-    description: 'New CoinMarketCap-style token listing page with prices, 24h changes, volume, TVL, and mini charts.',
+    title: 'Real-time Price Updates',
+    description: 'Live price data with WebSocket-style updates every 5 seconds. Visual indicators show price movements in real-time.',
     type: 'new',
   },
   {
-    title: 'Remove Wrap/Unwrap Feature',
-    description: 'Simplified the Liquidity page by removing the Wrap/Unwrap tab.',
-    type: 'removed',
+    title: 'Price Alerts System',
+    description: 'Set custom price alerts for any token. Get notified via toast and browser notifications when prices hit your targets.',
+    type: 'new',
   },
   {
-    title: 'Add Liquidity Button on Pools',
-    description: 'Each pool now has a direct "Add Liquidity" button for quick access.',
-    type: 'improved',
+    title: 'Token Detail Page',
+    description: 'Comprehensive token analytics page with historical price/volume charts, multiple timeframes (24H to 1Y), and detailed metrics.',
+    type: 'new',
+  },
+  {
+    title: 'Watchlist Widget',
+    description: 'Quick access to your favorite tokens with live price updates on the main trading page.',
+    type: 'new',
+  },
+  {
+    title: 'Recent Trades Feed',
+    description: 'Live feed showing recent trades across all pools with real-time updates.',
+    type: 'new',
+  },
+  {
+    title: 'Live Connection Status',
+    description: 'Visual indicator showing real-time data connection status throughout the app.',
+    type: 'new',
+  },
+  {
+    title: 'Token Market Page',
+    description: 'CoinMarketCap-style token listing page with prices, 24h changes, volume, TVL, and mini charts.',
+    type: 'new',
   },
   {
     title: 'On-chain APR Calculation',
@@ -107,8 +127,8 @@ const TODAYS_UPDATES = [
     type: 'improved',
   },
   {
-    title: 'Professional Pools Page Redesign',
-    description: 'Enhanced pools page with better stats cards, APR display, and improved mobile view.',
+    title: 'Professional Pools Page',
+    description: 'Enhanced pools page with better stats cards, APR display, and Add Liquidity buttons.',
     type: 'improved',
   },
   {
@@ -117,24 +137,14 @@ const TODAYS_UPDATES = [
     type: 'new',
   },
   {
-    title: 'Limit Order Price Notifications',
-    description: 'Real-time notifications when limit order target prices are reached.',
-    type: 'new',
+    title: 'Performance Optimization',
+    description: 'Added React.memo, lazy loading, and optimized data fetching for faster performance.',
+    type: 'improved',
   },
   {
-    title: 'Favorite Pools',
-    description: 'Save your favorite pools for quick access with persistent storage.',
-    type: 'new',
-  },
-  {
-    title: 'Swap Confirmation Modal',
-    description: 'Review complete transaction details including gas estimate before executing swaps.',
-    type: 'new',
-  },
-  {
-    title: 'Documentation Download',
-    description: 'Download complete documentation in JSON or Markdown format.',
-    type: 'new',
+    title: 'Remove Wrap/Unwrap Feature',
+    description: 'Simplified the Liquidity page by removing the Wrap/Unwrap tab.',
+    type: 'removed',
   },
 ];
 
