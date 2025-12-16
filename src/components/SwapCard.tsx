@@ -5,6 +5,7 @@ import { TokenSelect } from './TokenSelect';
 import { SlippageSettings } from './SlippageSettings';
 import { PriceImpactWarning, PriceImpactBadge, SlippageProtection, getPriceImpactSeverity } from './PriceImpactWarning';
 import { RouteDisplay, CompactRoute } from './RouteDisplay';
+import { SwapConfirmation } from './SwapConfirmation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -54,6 +55,9 @@ export function SwapCard() {
     reason: string;
   } | null>(null);
   const [isAutoSlippage, setIsAutoSlippage] = useState(settings.autoSlippage);
+  
+  // Confirmation modal state
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const isNativeToken = (token: TokenInfo | null) => 
     token?.address === '0x0000000000000000000000000000000000000000';
@@ -230,6 +234,11 @@ export function SwapCard() {
     setAmountOut(tempAmount);
   };
 
+  const openSwapConfirmation = () => {
+    if (!tokenIn || !tokenOut || !amountIn || parseFloat(amountIn) === 0) return;
+    setShowConfirmation(true);
+  };
+
   const handleSwap = async () => {
     if (!signer || !tokenIn || !tokenOut || !amountIn || !provider) return;
 
@@ -237,11 +246,8 @@ export function SwapCard() {
     const severity = getPriceImpactSeverity(priceImpact);
     if (severity === 'critical') {
       toast.error('Price impact is too high! Please reduce your trade size.');
+      setShowConfirmation(false);
       return;
-    }
-    
-    if (severity === 'danger') {
-      toast.warning(`High price impact: ${priceImpact.toFixed(2)}%. Proceed with caution.`);
     }
 
     setLoading(true);
@@ -323,6 +329,7 @@ export function SwapCard() {
       updateTransactionStatus(address, tx.hash, 'confirmed');
       toast.success(`Swap successful! TX: ${receipt.hash.slice(0, 10)}...`);
       
+      setShowConfirmation(false);
       setAmountIn('');
       setAmountOut('');
       fetchBalances();
@@ -491,7 +498,7 @@ export function SwapCard() {
       {/* Swap Button */}
       {isConnected ? (
         <Button
-          onClick={handleSwap}
+          onClick={openSwapConfirmation}
           disabled={loading || !amountIn || !amountOut || parseFloat(amountIn) === 0 || getPriceImpactSeverity(priceImpact) === 'critical'}
           className={cn(
             'w-full h-14 text-lg font-semibold btn-glow',
@@ -512,7 +519,7 @@ export function SwapCard() {
               Price Impact Too High
             </>
           ) : (
-            'Swap'
+            'Review Swap'
           )}
         </Button>
       ) : (
@@ -561,6 +568,24 @@ export function SwapCard() {
             <SlippageProtection slippage={slippage} priceImpact={priceImpact} />
           </div>
         </div>
+      )}
+
+      {/* Swap Confirmation Modal */}
+      {tokenIn && tokenOut && (
+        <SwapConfirmation
+          open={showConfirmation}
+          onOpenChange={setShowConfirmation}
+          onConfirm={handleSwap}
+          tokenIn={tokenIn}
+          tokenOut={tokenOut}
+          amountIn={amountIn}
+          amountOut={amountOut}
+          slippage={slippage}
+          priceImpact={priceImpact}
+          route={bestRoute}
+          deadline={deadline}
+          loading={loading}
+        />
       )}
     </div>
   );
