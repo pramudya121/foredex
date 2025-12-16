@@ -11,6 +11,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import Index from "./pages/Index";
 import Liquidity from "./pages/Liquidity";
 import Pools from "./pages/Pools";
+import TokensPage from "./pages/TokensPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import DocsPage from "./pages/DocsPage";
@@ -30,6 +31,7 @@ function AppContent() {
         <Route path="/" element={<Index />} />
         <Route path="/liquidity" element={<Liquidity />} />
         <Route path="/pools" element={<Pools />} />
+        <Route path="/tokens" element={<TokensPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/docs" element={<DocsPage />} />

@@ -30,8 +30,10 @@ export function usePoolStats() {
     loading: true,
   });
   const [pools, setPools] = useState<PoolData[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchStats = useCallback(async () => {
+    setIsRefreshing(true);
     try {
       const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
       const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
@@ -95,7 +97,7 @@ export function usePoolStats() {
       
       // Estimate 24h volume (in production, use subgraph or indexer)
       // For testnet, we'll estimate based on TVL activity
-      const volume24h = totalTVL * 0.05; // Estimated 5% of TVL traded daily
+      const volume24h = totalTVL * 0.15; // Estimated 15% of TVL traded daily
       
       // Total fees (0.3% fee on swaps)
       const totalFees = volume24h * 0.003;
@@ -111,6 +113,8 @@ export function usePoolStats() {
     } catch (error) {
       console.error('Error fetching pool stats:', error);
       setStats(prev => ({ ...prev, loading: false }));
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -121,5 +125,5 @@ export function usePoolStats() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  return { stats, pools, refetch: fetchStats };
+  return { stats, pools, refetch: fetchStats, isRefreshing };
 }

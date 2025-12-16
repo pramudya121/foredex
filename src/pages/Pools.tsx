@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
 import { CreatePair } from '@/components/CreatePair';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Droplets, Plus, TrendingUp, BarChart3, Coins, RefreshCw } from 'lucide-react';
+import { Droplets, Plus, TrendingUp, BarChart3, Coins, RefreshCw, Flame } from 'lucide-react';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 const Pools = () => {
   const [activeTab, setActiveTab] = useState('pools');
-  const { stats, refetch } = usePoolStats();
+  const { stats, refetch, isRefreshing } = usePoolStats();
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
@@ -18,86 +19,101 @@ const Pools = () => {
   };
 
   return (
-    <main className="container py-8 md:py-12 max-w-6xl">
+    <main className="container py-8 md:py-12 max-w-7xl">
       {/* Hero Section */}
-      <div className="mb-8 text-center md:text-left flex items-start justify-between">
+      <div className="mb-8 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-            Liquidity Pools
-          </h1>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-3 rounded-xl bg-gradient-wolf">
+              <Droplets className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold">
+                Liquidity <span className="text-primary">Pools</span>
+              </h1>
+              <Badge variant="secondary" className="mt-1">
+                <Flame className="w-3 h-3 mr-1 text-orange-500" />
+                Earn 0.3% on every trade
+              </Badge>
+            </div>
+          </div>
           <p className="text-muted-foreground text-lg max-w-2xl">
-            Provide liquidity to earn trading fees. Create new pools or add to existing ones.
+            Provide liquidity to earn trading fees. APR calculated from real on-chain trading volume.
           </p>
         </div>
         <Button 
           variant="outline" 
           size="sm" 
           onClick={refetch}
-          className="hidden md:flex items-center gap-2"
+          disabled={isRefreshing}
+          className="flex items-center gap-2 self-start"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="glass-card p-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="glass-card p-5 hover:border-primary/30 transition-colors">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Droplets className="w-5 h-5 text-primary" />
+            <div className="p-3 rounded-xl bg-primary/10">
+              <Droplets className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Pools</p>
+              <p className="text-sm text-muted-foreground">Total Pools</p>
               {stats.loading ? (
-                <Skeleton className="h-7 w-12" />
+                <Skeleton className="h-8 w-14 mt-1" />
               ) : (
-                <p className="text-xl font-bold">{stats.totalPools}</p>
+                <p className="text-2xl font-bold">{stats.totalPools}</p>
               )}
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
+        
+        <div className="glass-card p-5 hover:border-green-500/30 transition-colors">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <TrendingUp className="w-5 h-5 text-green-500" />
+            <div className="p-3 rounded-xl bg-green-500/10">
+              <TrendingUp className="w-6 h-6 text-green-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total TVL</p>
+              <p className="text-sm text-muted-foreground">Total TVL</p>
               {stats.loading ? (
-                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-8 w-24 mt-1" />
               ) : (
-                <p className="text-xl font-bold">{formatNumber(stats.totalTVL)}</p>
+                <p className="text-2xl font-bold">{formatNumber(stats.totalTVL)}</p>
               )}
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
+        
+        <div className="glass-card p-5 hover:border-blue-500/30 transition-colors">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <BarChart3 className="w-5 h-5 text-blue-500" />
+            <div className="p-3 rounded-xl bg-blue-500/10">
+              <BarChart3 className="w-6 h-6 text-blue-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">24h Volume</p>
+              <p className="text-sm text-muted-foreground">24h Volume</p>
               {stats.loading ? (
-                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-8 w-24 mt-1" />
               ) : (
-                <p className="text-xl font-bold">{formatNumber(stats.volume24h)}</p>
+                <p className="text-2xl font-bold">{formatNumber(stats.volume24h)}</p>
               )}
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
+        
+        <div className="glass-card p-5 hover:border-purple-500/30 transition-colors">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/10">
-              <Coins className="w-5 h-5 text-purple-500" />
+            <div className="p-3 rounded-xl bg-purple-500/10">
+              <Coins className="w-6 h-6 text-purple-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Fees</p>
+              <p className="text-sm text-muted-foreground">Total Fees (24h)</p>
               {stats.loading ? (
-                <Skeleton className="h-7 w-16" />
+                <Skeleton className="h-8 w-20 mt-1" />
               ) : (
-                <p className="text-xl font-bold">{formatNumber(stats.totalFees)}</p>
+                <p className="text-2xl font-bold text-green-500">{formatNumber(stats.totalFees)}</p>
               )}
             </div>
           </div>

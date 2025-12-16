@@ -17,15 +17,21 @@ import {
   Rocket,
   Settings,
   Globe,
-  ChevronRight
+  ChevronRight,
+  Download,
+  FileText,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import wolfLogo from '@/assets/wolf-logo.png';
 
 const DOCS_SECTIONS = [
   { id: 'overview', label: 'Overview', icon: Book },
+  { id: 'updates', label: "Today's Updates", icon: Sparkles },
   { id: 'technology', label: 'Technology Stack', icon: Code },
   { id: 'contracts', label: 'Smart Contracts', icon: Shield },
   { id: 'features', label: 'Features', icon: Zap },
@@ -43,6 +49,7 @@ const TECH_STACK = [
   { name: 'Radix UI', description: 'Unstyled, accessible UI component primitives', category: 'UI Components' },
   { name: 'UniswapV2 Protocol', description: 'Battle-tested AMM smart contracts', category: 'Smart Contracts' },
   { name: 'Solidity', description: 'Smart contract programming language', category: 'Smart Contracts' },
+  { name: 'Zustand', description: 'Lightweight state management for React', category: 'State Management' },
 ];
 
 const FEATURES_LIST = [
@@ -78,6 +85,59 @@ const FEATURES_LIST = [
   },
 ];
 
+const TODAYS_UPDATES = [
+  {
+    title: 'Token Market Page',
+    description: 'New CoinMarketCap-style token listing page with prices, 24h changes, volume, TVL, and mini charts.',
+    type: 'new',
+  },
+  {
+    title: 'Remove Wrap/Unwrap Feature',
+    description: 'Simplified the Liquidity page by removing the Wrap/Unwrap tab.',
+    type: 'removed',
+  },
+  {
+    title: 'Add Liquidity Button on Pools',
+    description: 'Each pool now has a direct "Add Liquidity" button for quick access.',
+    type: 'improved',
+  },
+  {
+    title: 'On-chain APR Calculation',
+    description: 'APR is now calculated from real on-chain volume and fees data.',
+    type: 'improved',
+  },
+  {
+    title: 'Professional Pools Page Redesign',
+    description: 'Enhanced pools page with better stats cards, APR display, and improved mobile view.',
+    type: 'improved',
+  },
+  {
+    title: 'Limit Order Feature',
+    description: 'Create limit orders with target prices on the Swap page.',
+    type: 'new',
+  },
+  {
+    title: 'Limit Order Price Notifications',
+    description: 'Real-time notifications when limit order target prices are reached.',
+    type: 'new',
+  },
+  {
+    title: 'Favorite Pools',
+    description: 'Save your favorite pools for quick access with persistent storage.',
+    type: 'new',
+  },
+  {
+    title: 'Swap Confirmation Modal',
+    description: 'Review complete transaction details including gas estimate before executing swaps.',
+    type: 'new',
+  },
+  {
+    title: 'Documentation Download',
+    description: 'Download complete documentation in JSON or Markdown format.',
+    type: 'new',
+  },
+];
+
 const ROADMAP = [
   {
     phase: 'Phase 1',
@@ -99,14 +159,13 @@ const ROADMAP = [
       'Add/Remove liquidity interface',
       'Pool creation functionality',
       'Pools list with TVL tracking',
-      'Token faucet for testing',
       'Transaction history tracking',
     ],
   },
   {
     phase: 'Phase 3',
     title: 'Analytics & Visualization',
-    status: 'in-progress',
+    status: 'completed',
     items: [
       'Price charts with historical data',
       'TVL and volume tracking',
@@ -118,13 +177,13 @@ const ROADMAP = [
   {
     phase: 'Phase 4',
     title: 'Advanced Features',
-    status: 'planned',
+    status: 'completed',
     items: [
       'Limit orders',
       'Price impact warnings',
       'Multi-hop routing',
-      'Gas optimization',
-      'Mobile-first PWA',
+      'Swap confirmation modal',
+      'Favorite pools system',
     ],
   },
   {
@@ -167,6 +226,125 @@ export default function DocsPage() {
     setTimeout(() => setCopiedAddress(null), 2000);
   };
 
+  const downloadDocumentation = (format: 'json' | 'md') => {
+    const docContent = {
+      project: 'FOREDEX',
+      description: 'Decentralized Exchange on Nexus Network',
+      version: '1.0.0',
+      lastUpdated: new Date().toISOString(),
+      network: NEXUS_TESTNET,
+      contracts: CONTRACT_INFO,
+      tokens: TOKEN_INFO,
+      techStack: TECH_STACK,
+      features: FEATURES_LIST.map(f => ({ title: f.title, description: f.description })),
+      roadmap: ROADMAP,
+      todaysUpdates: TODAYS_UPDATES,
+    };
+
+    let content: string;
+    let filename: string;
+    let mimeType: string;
+
+    if (format === 'json') {
+      content = JSON.stringify(docContent, null, 2);
+      filename = 'foredex-documentation.json';
+      mimeType = 'application/json';
+    } else {
+      content = generateMarkdown(docContent);
+      filename = 'foredex-documentation.md';
+      mimeType = 'text/markdown';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Documentation downloaded as ${filename}`);
+  };
+
+  const generateMarkdown = (doc: any) => {
+    return `# FOREDEX Documentation
+
+## Overview
+${doc.description}
+
+**Version:** ${doc.version}  
+**Last Updated:** ${new Date(doc.lastUpdated).toLocaleDateString()}
+
+---
+
+## Network Configuration
+
+| Property | Value |
+|----------|-------|
+| Network Name | ${doc.network.name} |
+| Chain ID | ${doc.network.chainId} |
+| RPC URL | ${doc.network.rpcUrl} |
+| Block Explorer | ${doc.network.blockExplorer} |
+
+---
+
+## Smart Contracts
+
+${doc.contracts.map((c: any) => `### ${c.name}
+- **Address:** \`${c.address}\`
+- **Description:** ${c.description}
+`).join('\n')}
+
+---
+
+## Tokens
+
+${doc.tokens.map((t: any) => `### ${t.name}
+- **Address:** \`${t.address}\`
+- **Description:** ${t.description}
+`).join('\n')}
+
+---
+
+## Technology Stack
+
+${['Frontend', 'Web3', 'Smart Contracts', 'Build Tool', 'UI Components', 'Data Visualization', 'State Management'].map(category => {
+  const techs = doc.techStack.filter((t: any) => t.category === category);
+  if (techs.length === 0) return '';
+  return `### ${category}
+${techs.map((t: any) => `- **${t.name}:** ${t.description}`).join('\n')}
+`;
+}).join('\n')}
+
+---
+
+## Features
+
+${doc.features.map((f: any) => `### ${f.title}
+${f.description}
+`).join('\n')}
+
+---
+
+## Today's Updates
+
+${doc.todaysUpdates.map((u: any) => `- **[${u.type.toUpperCase()}]** ${u.title}: ${u.description}`).join('\n')}
+
+---
+
+## Roadmap
+
+${doc.roadmap.map((p: any) => `### ${p.phase}: ${p.title} (${p.status})
+${p.items.map((i: string) => `- ${i}`).join('\n')}
+`).join('\n')}
+
+---
+
+*Generated by FOREDEX Documentation System*
+`;
+  };
+
   return (
     <main className="container py-8 md:py-12 max-w-7xl">
       <div className="flex flex-col lg:flex-row gap-8">
@@ -192,10 +370,43 @@ export default function DocsPage() {
                   >
                     <Icon className="w-4 h-4" />
                     {section.label}
+                    {section.id === 'updates' && (
+                      <Badge variant="secondary" className="ml-auto text-xs px-1.5 py-0">
+                        New
+                      </Badge>
+                    )}
                   </button>
                 );
               })}
             </nav>
+
+            {/* Download Section */}
+            <div className="mt-6 pt-6 border-t border-border">
+              <h3 className="font-semibold text-sm text-muted-foreground mb-3 uppercase tracking-wider flex items-center gap-2">
+                <Download className="w-4 h-4" />
+                Download Docs
+              </h3>
+              <div className="space-y-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start gap-2"
+                  onClick={() => downloadDocumentation('md')}
+                >
+                  <FileText className="w-4 h-4" />
+                  Markdown (.md)
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start gap-2"
+                  onClick={() => downloadDocumentation('json')}
+                >
+                  <Code className="w-4 h-4" />
+                  JSON (.json)
+                </Button>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -288,6 +499,79 @@ export default function DocsPage() {
             </section>
           )}
 
+          {/* Today's Updates Section */}
+          {activeSection === 'updates' && (
+            <section className="space-y-6">
+              <div className="glass-card p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 rounded-xl bg-gradient-wolf">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Today's Updates</h2>
+                    <p className="text-muted-foreground flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {TODAYS_UPDATES.map((update, index) => (
+                    <div 
+                      key={index} 
+                      className="p-4 rounded-lg bg-muted/30 border-l-4 transition-colors hover:bg-muted/40"
+                      style={{
+                        borderLeftColor: update.type === 'new' ? 'hsl(var(--primary))' : 
+                                        update.type === 'improved' ? '#22c55e' : '#ef4444'
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Badge 
+                          variant="secondary" 
+                          className={cn(
+                            'shrink-0',
+                            update.type === 'new' && 'bg-primary/20 text-primary',
+                            update.type === 'improved' && 'bg-green-500/20 text-green-500',
+                            update.type === 'removed' && 'bg-red-500/20 text-red-500'
+                          )}
+                        >
+                          {update.type === 'new' ? '✨ NEW' : update.type === 'improved' ? '⬆️ IMPROVED' : '🗑️ REMOVED'}
+                        </Badge>
+                        <div>
+                          <h4 className="font-semibold mb-1">{update.title}</h4>
+                          <p className="text-sm text-muted-foreground">{update.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Summary Stats */}
+                <div className="mt-8 pt-6 border-t border-border grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-3xl font-bold text-primary">
+                      {TODAYS_UPDATES.filter(u => u.type === 'new').length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">New Features</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-3xl font-bold text-green-500">
+                      {TODAYS_UPDATES.filter(u => u.type === 'improved').length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Improvements</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-3xl font-bold text-red-500">
+                      {TODAYS_UPDATES.filter(u => u.type === 'removed').length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Removed</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Technology Section */}
           {activeSection === 'technology' && (
             <section className="space-y-6">
@@ -298,7 +582,7 @@ export default function DocsPage() {
                 </p>
 
                 <div className="grid gap-4">
-                  {['Frontend', 'Web3', 'Smart Contracts', 'Build Tool', 'UI Components', 'Data Visualization'].map((category) => (
+                  {['Frontend', 'Web3', 'Smart Contracts', 'Build Tool', 'UI Components', 'Data Visualization', 'State Management'].map((category) => (
                     <div key={category}>
                       <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
                         {category}
