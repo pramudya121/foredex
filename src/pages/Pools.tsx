@@ -1,23 +1,43 @@
 import { useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
 import { CreatePair } from '@/components/CreatePair';
-import { TokenFaucet } from '@/components/TokenFaucet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Droplets, Plus, Coins, TrendingUp, BarChart3 } from 'lucide-react';
+import { Droplets, Plus, TrendingUp, BarChart3, Coins, RefreshCw } from 'lucide-react';
+import { usePoolStats } from '@/hooks/usePoolStats';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 const Pools = () => {
   const [activeTab, setActiveTab] = useState('pools');
+  const { stats, refetch } = usePoolStats();
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
+    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
+  };
 
   return (
     <main className="container py-8 md:py-12 max-w-6xl">
       {/* Hero Section */}
-      <div className="mb-8 text-center md:text-left">
-        <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-          Liquidity Pools
-        </h1>
-        <p className="text-muted-foreground text-lg max-w-2xl">
-          Provide liquidity to earn trading fees. Create new pools or add to existing ones.
-        </p>
+      <div className="mb-8 text-center md:text-left flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+            Liquidity Pools
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl">
+            Provide liquidity to earn trading fees. Create new pools or add to existing ones.
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={refetch}
+          className="hidden md:flex items-center gap-2"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -29,7 +49,11 @@ const Pools = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Pools</p>
-              <p className="text-xl font-bold">--</p>
+              {stats.loading ? (
+                <Skeleton className="h-7 w-12" />
+              ) : (
+                <p className="text-xl font-bold">{stats.totalPools}</p>
+              )}
             </div>
           </div>
         </div>
@@ -40,7 +64,11 @@ const Pools = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total TVL</p>
-              <p className="text-xl font-bold">--</p>
+              {stats.loading ? (
+                <Skeleton className="h-7 w-20" />
+              ) : (
+                <p className="text-xl font-bold">{formatNumber(stats.totalTVL)}</p>
+              )}
             </div>
           </div>
         </div>
@@ -51,7 +79,11 @@ const Pools = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">24h Volume</p>
-              <p className="text-xl font-bold">--</p>
+              {stats.loading ? (
+                <Skeleton className="h-7 w-20" />
+              ) : (
+                <p className="text-xl font-bold">{formatNumber(stats.volume24h)}</p>
+              )}
             </div>
           </div>
         </div>
@@ -62,7 +94,11 @@ const Pools = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Fees</p>
-              <p className="text-xl font-bold">--</p>
+              {stats.loading ? (
+                <Skeleton className="h-7 w-16" />
+              ) : (
+                <p className="text-xl font-bold">{formatNumber(stats.totalFees)}</p>
+              )}
             </div>
           </div>
         </div>
@@ -85,13 +121,6 @@ const Pools = () => {
             <Plus className="w-4 h-4" />
             Create Pool
           </TabsTrigger>
-          <TabsTrigger 
-            value="faucet" 
-            className="flex items-center gap-2 px-6 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Coins className="w-4 h-4" />
-            Token Faucet
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pools" className="mt-6">
@@ -101,12 +130,6 @@ const Pools = () => {
         <TabsContent value="create" className="mt-6">
           <div className="max-w-lg mx-auto">
             <CreatePair />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="faucet" className="mt-6">
-          <div className="max-w-lg mx-auto">
-            <TokenFaucet />
           </div>
         </TabsContent>
       </Tabs>
