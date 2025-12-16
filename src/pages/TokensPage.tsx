@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
@@ -88,6 +89,7 @@ function MiniChart({ data, isPositive }: { data: { time: number; price: number }
 }
 
 export default function TokensPage() {
+  const navigate = useNavigate();
   const [tokens, setTokens] = useState<TokenData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -377,6 +379,7 @@ export default function TokensPage() {
                 <TableRow 
                   key={token.address}
                   className="hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/tokens/${token.address}`)}
                 >
                   <TableCell>
                     <Button
@@ -448,7 +451,11 @@ export default function TokensPage() {
       {/* Mobile Cards */}
       <div className="md:hidden mt-6 space-y-3">
         {filteredTokens.map((token, index) => (
-          <div key={token.address} className="glass-card p-4">
+          <div 
+            key={token.address} 
+            className="glass-card p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+            onClick={() => navigate(`/tokens/${token.address}`)}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <Button
