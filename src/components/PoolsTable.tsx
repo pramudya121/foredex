@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useMemo, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
@@ -40,50 +40,51 @@ interface Pool {
   apr: number;
 }
 
-function PoolSkeleton() {
-  return (
-    <div className="glass-card p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex -space-x-2">
-            <Skeleton className="w-12 h-12 rounded-full" />
-            <Skeleton className="w-12 h-12 rounded-full" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-4 w-36" />
-          </div>
+const PoolSkeleton = memo(() => (
+  <div className="glass-card p-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex -space-x-2">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="w-10 h-10 rounded-full" />
         </div>
-        <div className="flex items-center gap-8">
-          <div className="space-y-2 text-right">
-            <Skeleton className="h-3 w-12 ml-auto" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-          <Skeleton className="w-10 h-10 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-4 w-16" />
         </div>
       </div>
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-5 w-16" />
+        <Skeleton className="w-8 h-8 rounded-lg" />
+      </div>
     </div>
-  );
-}
+  </div>
+));
 
-export function PoolsTable() {
+PoolSkeleton.displayName = 'PoolSkeleton';
+
+function PoolsTableInner() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
 
   // Sort pools: favorites first, then by TVL
-  const sortedPools = [...pools].sort((a, b) => {
-    const aFav = isFavorite(a.address);
-    const bFav = isFavorite(b.address);
-    if (aFav && !bFav) return -1;
-    if (!aFav && bFav) return 1;
-    return (b.tvl || 0) - (a.tvl || 0);
-  });
+  const sortedPools = useMemo(() => {
+    return [...pools].sort((a, b) => {
+      const aFav = isFavorite(a.address);
+      const bFav = isFavorite(b.address);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      return (b.tvl || 0) - (a.tvl || 0);
+    });
+  }, [pools, isFavorite]);
 
-  const displayedPools = showFavoritesOnly 
-    ? sortedPools.filter(p => isFavorite(p.address))
-    : sortedPools;
+  const displayedPools = useMemo(() => {
+    return showFavoritesOnly 
+      ? sortedPools.filter(p => isFavorite(p.address))
+      : sortedPools;
+  }, [sortedPools, showFavoritesOnly, isFavorite]);
 
   useEffect(() => {
     const fetchPools = async () => {
@@ -197,14 +198,14 @@ export function PoolsTable() {
 
       {/* Table Header - Desktop */}
       <div className="glass-card p-4 hidden lg:block">
-        <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
-          <div className="col-span-1"></div>
-          <div className="col-span-3">Pool</div>
-          <div className="col-span-2 text-right">TVL</div>
-          <div className="col-span-1 text-right">APR</div>
-          <div className="col-span-2 text-right">24h Volume</div>
-          <div className="col-span-2 text-right">24h Fees</div>
-          <div className="col-span-1"></div>
+        <div className="grid grid-cols-[40px_1fr_120px_80px_120px_100px_140px] gap-4 text-sm font-medium text-muted-foreground">
+          <div></div>
+          <div>Pool</div>
+          <div className="text-right">TVL</div>
+          <div className="text-right">APR</div>
+          <div className="text-right">24h Volume</div>
+          <div className="text-right">24h Fees</div>
+          <div className="text-right">Actions</div>
         </div>
       </div>
 
@@ -244,17 +245,17 @@ export function PoolsTable() {
                 )}
               >
                 {/* Desktop View */}
-                <div className="hidden lg:grid grid-cols-12 gap-4 items-center">
+                <div className="hidden lg:grid grid-cols-[40px_1fr_120px_80px_120px_100px_140px] gap-4 items-center">
                   {/* Favorite Button */}
-                  <div className="col-span-1">
+                  <div className="flex-shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleFavorite(pool.address)}
-                      className="h-10 w-10 p-0"
+                      className="h-9 w-9 p-0"
                     >
                       <Star className={cn(
-                        'w-5 h-5 transition-colors',
+                        'w-4 h-4 transition-colors',
                         isFavorite(pool.address) 
                           ? 'fill-yellow-500 text-yellow-500' 
                           : 'text-muted-foreground hover:text-yellow-500'
@@ -263,80 +264,75 @@ export function PoolsTable() {
                   </div>
 
                   {/* Pool Info */}
-                  <div className="col-span-3 flex items-center gap-4">
-                    <div className="flex -space-x-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex -space-x-2 flex-shrink-0">
                       <TokenLogo 
                         symbol={pool.token0.symbol} 
                         logoURI={pool.token0.logoURI} 
-                        size="lg"
+                        size="md"
                         className="border-2 border-background z-10 ring-2 ring-background" 
                       />
                       <TokenLogo 
                         symbol={pool.token1.symbol} 
                         logoURI={pool.token1.logoURI} 
-                        size="lg"
+                        size="md"
                         className="border-2 border-background ring-2 ring-background" 
                       />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg group-hover:text-primary transition-colors">
+                    <div className="min-w-0">
+                      <h3 className="font-bold group-hover:text-primary transition-colors truncate">
                         {pool.token0.symbol}/{pool.token1.symbol}
                       </h3>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs px-2 py-0">
-                          <Percent className="w-3 h-3 mr-1" />
-                          0.3% fee
-                        </Badge>
-                      </div>
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                        <Percent className="w-3 h-3 mr-1" />
+                        0.3%
+                      </Badge>
                     </div>
                   </div>
 
                   {/* TVL */}
-                  <div className="col-span-2 text-right">
-                    <p className="font-bold text-lg">{formatNumber(pool.tvl)}</p>
-                    <p className="text-xs text-muted-foreground">Total Value Locked</p>
+                  <div className="text-right">
+                    <p className="font-bold">{formatNumber(pool.tvl)}</p>
+                    <p className="text-xs text-muted-foreground">TVL</p>
                   </div>
 
                   {/* APR */}
-                  <div className="col-span-1 text-right">
+                  <div className="text-right">
                     <p className={cn(
-                      'font-bold text-lg flex items-center justify-end gap-1',
+                      'font-bold flex items-center justify-end gap-1',
                       pool.apr > 50 ? 'text-green-500' : pool.apr > 20 ? 'text-primary' : 'text-foreground'
                     )}>
-                      {pool.apr > 50 && <Flame className="w-4 h-4" />}
+                      {pool.apr > 50 && <Flame className="w-3 h-3" />}
                       {pool.apr.toFixed(1)}%
                     </p>
-                    <p className="text-xs text-muted-foreground">Annual</p>
                   </div>
 
                   {/* 24h Volume */}
-                  <div className="col-span-2 text-right">
-                    <p className="font-semibold">{formatNumber(pool.volume24h)}</p>
-                    <p className="text-xs text-muted-foreground">Volume</p>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm">{formatNumber(pool.volume24h)}</p>
                   </div>
 
                   {/* 24h Fees */}
-                  <div className="col-span-2 text-right">
-                    <p className="font-semibold text-green-500">{formatNumber(pool.fees24h)}</p>
-                    <p className="text-xs text-muted-foreground">Earned</p>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm text-green-500">{formatNumber(pool.fees24h)}</p>
                   </div>
 
                   {/* Actions */}
-                  <div className="col-span-1 flex justify-end gap-1">
+                  <div className="flex items-center justify-end gap-2">
                     <Link
                       to={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Button 
                         size="sm" 
-                        className="bg-gradient-wolf gap-1"
+                        className="bg-gradient-wolf h-8 px-3 text-xs"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3 h-3 mr-1" />
                         Add
                       </Button>
                     </Link>
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                         <BarChart3 className="w-4 h-4 text-muted-foreground hover:text-primary" />
                       </Button>
                     </CollapsibleTrigger>
@@ -345,9 +341,9 @@ export function PoolsTable() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="p-2 rounded-lg hover:bg-primary/10 transition-colors group/link"
+                      className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
                     >
-                      <ExternalLink className="w-4 h-4 text-muted-foreground group-hover/link:text-primary" />
+                      <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-primary" />
                     </a>
                   </div>
                 </div>
@@ -453,3 +449,5 @@ export function PoolsTable() {
     </div>
   );
 }
+
+export const PoolsTable = memo(PoolsTableInner);
