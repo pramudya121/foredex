@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { ExternalLink, TrendingUp, Droplets, Percent, ChevronRight, ChevronDown, BarChart3 } from 'lucide-react';
+import { ExternalLink, TrendingUp, Droplets, Percent, ChevronDown, BarChart3, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PoolChart } from './PoolChart';
+import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import {
   Collapsible,
   CollapsibleContent,
@@ -57,6 +58,21 @@ function PoolSkeleton() {
 export function PoolsTable() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
+
+  // Sort pools: favorites first, then by TVL
+  const sortedPools = [...pools].sort((a, b) => {
+    const aFav = isFavorite(a.address);
+    const bFav = isFavorite(b.address);
+    if (aFav && !bFav) return -1;
+    if (!aFav && bFav) return 1;
+    return (b.tvl || 0) - (a.tvl || 0);
+  });
+
+  const displayedPools = showFavoritesOnly 
+    ? sortedPools.filter(p => isFavorite(p.address))
+    : sortedPools;
 
   useEffect(() => {
     const fetchPools = async () => {
@@ -133,10 +149,24 @@ export function PoolsTable() {
 
   return (
     <div className="space-y-4">
+      {/* Filter Bar */}
+      <div className="flex items-center justify-between">
+        <Button
+          variant={showFavoritesOnly ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className="flex items-center gap-2"
+        >
+          <Star className={cn('w-4 h-4', showFavoritesOnly && 'fill-current')} />
+          Favorites ({favorites.length})
+        </Button>
+      </div>
+
       {/* Header */}
       <div className="glass-card p-4 hidden md:block">
         <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
-          <div className="col-span-4">Pool</div>
+          <div className="col-span-1"></div>
+          <div className="col-span-3">Pool</div>
           <div className="col-span-2 text-right">TVL</div>
           <div className="col-span-2 text-right">APR</div>
           <div className="col-span-3 text-right">Reserves</div>
@@ -168,20 +198,38 @@ export function PoolsTable() {
       )}
 
       {/* Pools List */}
-      {!loading && pools.length > 0 && (
+      {!loading && displayedPools.length > 0 && (
         <div className="space-y-3">
-          {pools.map((pool) => (
+          {displayedPools.map((pool) => (
             <Collapsible key={pool.address}>
               <div
                 className={cn(
                   'glass-card p-4 hover:border-primary/40 transition-all group',
-                  'hover:shadow-lg hover:shadow-primary/5'
+                  'hover:shadow-lg hover:shadow-primary/5',
+                  isFavorite(pool.address) && 'border-yellow-500/30'
                 )}
               >
                 {/* Desktop View */}
                 <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                  {/* Favorite Button */}
+                  <div className="col-span-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleFavorite(pool.address)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Star className={cn(
+                        'w-4 h-4 transition-colors',
+                        isFavorite(pool.address) 
+                          ? 'fill-yellow-500 text-yellow-500' 
+                          : 'text-muted-foreground hover:text-yellow-500'
+                      )} />
+                    </Button>
+                  </div>
+
                   {/* Pool Info */}
-                  <div className="col-span-4 flex items-center gap-4">
+                  <div className="col-span-3 flex items-center gap-4">
                     <div className="flex -space-x-3">
                       <TokenLogo 
                         symbol={pool.token0.symbol} 
@@ -257,6 +305,19 @@ export function PoolsTable() {
                 <div className="md:hidden space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleFavorite(pool.address)}
+                        className="h-8 w-8 p-0 -ml-2"
+                      >
+                        <Star className={cn(
+                          'w-4 h-4 transition-colors',
+                          isFavorite(pool.address) 
+                            ? 'fill-yellow-500 text-yellow-500' 
+                            : 'text-muted-foreground hover:text-yellow-500'
+                        )} />
+                      </Button>
                       <div className="flex -space-x-2">
                         <TokenLogo 
                           symbol={pool.token0.symbol} 
