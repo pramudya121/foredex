@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TokenLogoProps {
@@ -14,34 +14,40 @@ const sizeClasses = {
   lg: 'w-10 h-10 text-base',
 };
 
-export function TokenLogo({ symbol, logoURI, size = 'md', className }: TokenLogoProps) {
-  const [imageError, setImageError] = useState(false);
+export const TokenLogo = forwardRef<HTMLImageElement | HTMLDivElement, TokenLogoProps>(
+  ({ symbol, logoURI, size = 'md', className }, ref) => {
+    const [imageError, setImageError] = useState(false);
 
-  if (logoURI && !imageError) {
+    if (logoURI && !imageError) {
+      return (
+        <img
+          ref={ref as React.Ref<HTMLImageElement>}
+          src={logoURI}
+          alt={symbol}
+          className={cn(
+            'rounded-full object-cover',
+            sizeClasses[size],
+            className
+          )}
+          onError={() => setImageError(true)}
+        />
+      );
+    }
+
+    // Fallback to letter avatar
     return (
-      <img
-        src={logoURI}
-        alt={symbol}
+      <div
+        ref={ref as React.Ref<HTMLDivElement>}
         className={cn(
-          'rounded-full object-cover',
+          'rounded-full bg-primary/20 flex items-center justify-center font-bold',
           sizeClasses[size],
           className
         )}
-        onError={() => setImageError(true)}
-      />
+      >
+        {symbol[0]}
+      </div>
     );
   }
+);
 
-  // Fallback to letter avatar
-  return (
-    <div
-      className={cn(
-        'rounded-full bg-primary/20 flex items-center justify-center font-bold',
-        sizeClasses[size],
-        className
-      )}
-    >
-      {symbol[0]}
-    </div>
-  );
-}
+TokenLogo.displayName = 'TokenLogo';
