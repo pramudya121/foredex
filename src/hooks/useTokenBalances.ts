@@ -10,105 +10,137 @@ export interface TokenBalance {
   balanceRaw: bigint;
 }
 
-// Cache for balances to reduce RPC calls
+// Global cache for balances to reduce RPC calls
 const balanceCache = new Map<string, { balances: Map<string, TokenBalance>; timestamp: number }>();
 const CACHE_TTL = 30000; // 30 seconds
 
+// Initialize empty balances for all tokens
+function getEmptyBalances(): Map<string, TokenBalance> {
+  const map = new Map<string, TokenBalance>();
+  TOKEN_LIST.forEach((token) => {
+    map.set(token.address.toLowerCase(), {
+      token,
+      balance: '0',
+      balanceRaw: BigInt(0),
+    });
+  });
+  return map;
+}
+
 export function useTokenBalances(address: string | null) {
-  const [balances, setBalances] = useState<Map<string, TokenBalance>>(new Map());
+  const [balances, setBalances] = useState<Map<string, TokenBalance>>(() => getEmptyBalances());
   const [loading, setLoading] = useState(false);
   const isFetchingRef = useRef(false);
+  const addressRef = useRef(address);
+
+  // Update ref when address changes
+  useEffect(() => {
+    addressRef.current = address;
+  }, [address]);
 
   const fetchBalances = useCallback(async () => {
-    if (!address || isFetchingRef.current) {
-      if (!address) setBalances(new Map());
+    const currentAddress = addressRef.current;
+    
+    // If no address, reset to empty balances
+    if (!currentAddress) {
+      setBalances(getEmptyBalances());
+      setLoading(false);
+      return;
+    }
+
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
       return;
     }
 
     // Check cache first
-    const cacheKey = address.toLowerCase();
+    const cacheKey = currentAddress.toLowerCase();
     const cached = balanceCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       setBalances(cached.balances);
+      setLoading(false);
       return;
     }
 
     isFetchingRef.current = true;
     setLoading(true);
-    const newBalances = new Map<string, TokenBalance>();
+
+    const newBalances = getEmptyBalances();
 
     try {
       const provider = rpcProvider.getProvider();
       
+      // If RPC unavailable, just use empty balances
       if (!provider || !rpcProvider.isAvailable()) {
-        // Return zero balances when RPC unavailable
-        TOKEN_LIST.forEach((token) => {
-          newBalances.set(token.address.toLowerCase(), {
-            token,
-            balance: '0',
-            balanceRaw: BigInt(0),
-          });
-        });
         setBalances(newBalances);
         return;
       }
 
-      // Fetch balances sequentially with delays to avoid rate limiting
+      // Fetch balances for each token
       for (const token of TOKEN_LIST) {
+        // Skip if address changed during fetch
+        if (addressRef.current !== currentAddress) {
+          return;
+        }
+
         try {
           let balance: bigint | null = null;
           
           if (token.address === '0x0000000000000000000000000000000000000000') {
             // Native token (NEX)
             balance = await rpcProvider.call(
-              () => provider.getBalance(address),
-              `balance_native_${address}`
+              () => provider.getBalance(currentAddress),
+              `balance_native_${currentAddress}`
             );
           } else {
             // ERC20 token
             const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
             balance = await rpcProvider.call(
-              () => contract.balanceOf(address),
-              `balance_${token.address}_${address}`
+              () => contract.balanceOf(currentAddress),
+              `balance_${token.address}_${currentAddress}`
             );
           }
 
-          newBalances.set(token.address.toLowerCase(), {
-            token,
-            balance: balance ? ethers.formatUnits(balance, token.decimals) : '0',
-            balanceRaw: balance || BigInt(0),
-          });
+          if (balance !== null) {
+            newBalances.set(token.address.toLowerCase(), {
+              token,
+              balance: ethers.formatUnits(balance, token.decimals),
+              balanceRaw: balance,
+            });
+          }
         } catch {
-          newBalances.set(token.address.toLowerCase(), {
-            token,
-            balance: '0',
-            balanceRaw: BigInt(0),
-          });
+          // Keep default zero balance on error
         }
       }
 
-      // Update cache
-      balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
+      // Update cache only if address didn't change
+      if (addressRef.current === currentAddress) {
+        balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
+        setBalances(newBalances);
+      }
     } catch {
-      // Set empty balances on error
-      TOKEN_LIST.forEach((token) => {
-        newBalances.set(token.address.toLowerCase(), {
-          token,
-          balance: '0',
-          balanceRaw: BigInt(0),
-        });
-      });
+      // On error, use empty balances
+      if (addressRef.current === currentAddress) {
+        setBalances(newBalances);
+      }
     } finally {
-      setBalances(newBalances);
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [address]);
+  }, []);
 
+  // Fetch when address changes
   useEffect(() => {
     fetchBalances();
-    // Refresh balances every 60 seconds instead of 30
-    const interval = setInterval(fetchBalances, 60000);
+  }, [address, fetchBalances]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (addressRef.current) {
+        fetchBalances();
+      }
+    }, 60000);
     return () => clearInterval(interval);
   }, [fetchBalances]);
 
