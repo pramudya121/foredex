@@ -1,8 +1,9 @@
-import { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import { useState, useEffect, memo, useMemo, useRef } from 'react';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
+import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
 import { 
   ExternalLink, 
   TrendingUp, 
@@ -63,11 +64,16 @@ const PoolSkeleton = memo(() => (
 
 PoolSkeleton.displayName = 'PoolSkeleton';
 
+// Cache for pools table
+let poolsTableCache: { pools: Pool[]; timestamp: number } | null = null;
+const CACHE_TTL = 30000; // 30 seconds
+
 function PoolsTableInner() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
+  const isFetchingRef = useRef(false);
 
   // Sort pools: favorites first, then by TVL
   const sortedPools = useMemo(() => {
@@ -88,83 +94,107 @@ function PoolsTableInner() {
 
   useEffect(() => {
     const fetchPools = async () => {
+      // Prevent concurrent fetches
+      if (isFetchingRef.current) return;
+      
+      // Check cache first
+      if (poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
+        setPools(poolsTableCache.pools);
+        setLoading(false);
+        return;
+      }
+
+      isFetchingRef.current = true;
+
       try {
-        const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
-        const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+        const provider = rpcProvider.getProvider();
         
-        const pairCount = await factory.allPairsLength();
-        const poolPromises = [];
-
-        for (let i = 0; i < Math.min(Number(pairCount), 20); i++) {
-          poolPromises.push(
-            (async () => {
-              try {
-                const pairAddress = await factory.allPairs(i);
-                const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-
-                const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-                  pair.token0(),
-                  pair.token1(),
-                  pair.getReserves(),
-                  pair.totalSupply(),
-                ]);
-
-                const getTokenInfo = async (addr: string) => {
-                  const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                  if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
-                  
-                  try {
-                    const token = new ethers.Contract(addr, ERC20_ABI, provider);
-                    const [symbol, name] = await Promise.all([token.symbol(), token.name()]);
-                    return { address: addr, symbol, name, logoURI: undefined };
-                  } catch {
-                    return { address: addr, symbol: 'UNKNOWN', name: 'Unknown Token', logoURI: undefined };
-                  }
-                };
-
-                const [token0, token1] = await Promise.all([
-                  getTokenInfo(token0Addr),
-                  getTokenInfo(token1Addr),
-                ]);
-
-                const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-                const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-                const tvl = (reserve0 + reserve1) * 1; // Simplified TVL calculation
-                
-                // Calculate 24h volume (simulated based on reserves)
-                const volume24h = tvl * 0.15; // ~15% of TVL as daily volume
-                
-                // Calculate fees (0.3% of volume)
-                const fees24h = volume24h * 0.003;
-                
-                // Calculate APR: (fees * 365) / TVL * 100
-                const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
-
-                return {
-                  address: pairAddress,
-                  token0,
-                  token1,
-                  reserve0: ethers.formatEther(reserves[0]),
-                  reserve1: ethers.formatEther(reserves[1]),
-                  totalSupply: ethers.formatEther(totalSupply),
-                  tvl,
-                  volume24h,
-                  fees24h,
-                  apr,
-                };
-              } catch {
-                return null;
-              }
-            })()
-          );
+        if (!provider || !rpcProvider.isAvailable()) {
+          setLoading(false);
+          isFetchingRef.current = false;
+          return;
         }
 
-        const results = await Promise.all(poolPromises);
-        setPools(results.filter((p): p is Pool => p !== null));
-      } catch (error) {
-        console.error('Error fetching pools:', error);
+        const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+        
+        const pairCount = await rpcProvider.call(
+          () => factory.allPairsLength(),
+          'poolsTable_allPairsLength'
+        );
+        
+        if (pairCount === null) {
+          setLoading(false);
+          isFetchingRef.current = false;
+          return;
+        }
+
+        const fetchedPools: Pool[] = [];
+        const maxPools = Math.min(Number(pairCount), 10); // Reduced to minimize RPC calls
+
+        for (let i = 0; i < maxPools; i++) {
+          try {
+            const pairAddress = await rpcProvider.call(
+              () => factory.allPairs(i),
+              `poolsTable_pair_${i}`
+            );
+            
+            if (!pairAddress) continue;
+
+            const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+
+            const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+              rpcProvider.call(() => pair.token0(), `poolsTable_token0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `poolsTable_token1_${pairAddress}`),
+              rpcProvider.call(() => pair.getReserves(), `poolsTable_reserves_${pairAddress}`),
+              rpcProvider.call(() => pair.totalSupply(), `poolsTable_supply_${pairAddress}`),
+            ]);
+
+            if (!token0Addr || !token1Addr || !reserves || !totalSupply) continue;
+
+            const getTokenInfo = (addr: string) => {
+              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+              if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+              return { address: addr, symbol: 'UNKNOWN', name: 'Unknown Token', logoURI: undefined };
+            };
+
+            const token0 = getTokenInfo(token0Addr);
+            const token1 = getTokenInfo(token1Addr);
+
+            const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+            const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+            const tvl = reserve0 + reserve1;
+            const volume24h = tvl * 0.15;
+            const fees24h = volume24h * 0.003;
+            const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
+
+            fetchedPools.push({
+              address: pairAddress,
+              token0,
+              token1,
+              reserve0: ethers.formatEther(reserves[0]),
+              reserve1: ethers.formatEther(reserves[1]),
+              totalSupply: ethers.formatEther(totalSupply),
+              tvl,
+              volume24h,
+              fees24h,
+              apr,
+            });
+          } catch {
+            continue;
+          }
+        }
+
+        setPools(fetchedPools);
+        // Update cache
+        poolsTableCache = { pools: fetchedPools, timestamp: Date.now() };
+      } catch (error: any) {
+        const errorMessage = error?.message || String(error);
+        if (!errorMessage.includes('coalesce') && !errorMessage.includes('timeout')) {
+          console.warn('Error fetching pools:', errorMessage);
+        }
       } finally {
         setLoading(false);
+        isFetchingRef.current = false;
       }
     };
 
