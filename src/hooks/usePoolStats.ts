@@ -35,10 +35,22 @@ export function usePoolStats() {
   const fetchStats = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl, undefined, {
+        staticNetwork: true,
+        batchMaxCount: 1
+      });
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('RPC timeout')), 15000)
+      );
+      
       const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
       
-      const pairCount = await factory.allPairsLength();
+      const pairCount = await Promise.race([
+        factory.allPairsLength(),
+        timeoutPromise
+      ]);
       const totalPools = Number(pairCount);
       
       let totalTVL = 0;
@@ -110,9 +122,22 @@ export function usePoolStats() {
         totalFees,
         loading: false,
       });
-    } catch (error) {
-      console.error('Error fetching pool stats:', error);
-      setStats(prev => ({ ...prev, loading: false }));
+    } catch (error: any) {
+      // Handle "could not coalesce error" and other RPC errors gracefully
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('coalesce') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        console.warn('RPC connection issue, using fallback stats');
+      } else {
+        console.error('Error fetching pool stats:', error);
+      }
+      // Set fallback stats to prevent UI from breaking
+      setStats({
+        totalPools: 0,
+        totalTVL: 0,
+        volume24h: 0,
+        totalFees: 0,
+        loading: false,
+      });
     } finally {
       setIsRefreshing(false);
     }

@@ -36,7 +36,14 @@ class RealtimePriceService {
   private isRunning = false;
 
   private constructor() {
-    this.provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
+    try {
+      this.provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl, undefined, {
+        staticNetwork: true,
+        batchMaxCount: 1
+      });
+    } catch {
+      this.provider = null;
+    }
   }
 
   static getInstance(): RealtimePriceService {
