@@ -1,10 +1,12 @@
-import { useState, forwardRef } from 'react';
+import { useState } from 'react';
 import { TOKEN_LIST, TokenInfo } from '@/config/contracts';
 import { Button } from '@/components/ui/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Search, X } from 'lucide-react';
+import { ChevronDown, Search, X, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useWeb3 } from '@/contexts/Web3Context';
+import { useTokenBalances } from '@/hooks/useTokenBalances';
 
 interface TokenSelectProps {
   selected: TokenInfo | null;
@@ -16,6 +18,8 @@ interface TokenSelectProps {
 export function TokenSelect({ selected, onSelect, excludeToken, className }: TokenSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const { address, isConnected } = useWeb3();
+  const { getBalance, loading: balancesLoading } = useTokenBalances(address);
 
   const filteredTokens = TOKEN_LIST.filter((token) => {
     if (excludeToken && token.address === excludeToken.address) return false;
@@ -30,6 +34,16 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
     onSelect(token);
     setOpen(false);
     setSearch('');
+  };
+
+  const formatBalance = (balance: string): string => {
+    const num = parseFloat(balance);
+    if (isNaN(num) || num === 0) return '0';
+    if (num < 0.0001) return '<0.0001';
+    if (num < 1) return num.toFixed(4);
+    if (num < 1000) return num.toFixed(2);
+    if (num < 1000000) return (num / 1000).toFixed(2) + 'K';
+    return (num / 1000000).toFixed(2) + 'M';
   };
 
   return (
@@ -75,6 +89,12 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
             <DialogPrimitive.Title className="text-lg font-semibold leading-none tracking-tight">
               Select a token
             </DialogPrimitive.Title>
+            {isConnected && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Wallet className="w-3 h-3" />
+                Your balances shown
+              </p>
+            )}
           </div>
           
           <div className="space-y-4">
@@ -88,37 +108,60 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
               />
             </div>
             <div className="space-y-1 max-h-[300px] overflow-y-auto">
-              {filteredTokens.map((token) => (
-                <button
-                  key={token.address}
-                  type="button"
-                  onClick={() => handleSelect(token)}
-                  className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-lg transition-all',
-                    'hover:bg-primary/10 text-left',
-                    selected?.address === token.address && 'bg-primary/10'
-                  )}
-                >
-                  {token.logoURI ? (
-                    <img 
-                      src={token.logoURI} 
-                      alt={token.symbol} 
-                      className="w-8 h-8 rounded-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-                  <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold ${token.logoURI ? 'hidden' : ''}`}>
-                    {token.symbol[0]}
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium">{token.symbol}</div>
-                    <div className="text-xs text-muted-foreground">{token.name}</div>
-                  </div>
-                </button>
-              ))}
+              {filteredTokens.map((token) => {
+                const balance = isConnected ? getBalance(token.address) : '0';
+                const hasBalance = parseFloat(balance) > 0;
+                
+                return (
+                  <button
+                    key={token.address}
+                    type="button"
+                    onClick={() => handleSelect(token)}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3 rounded-lg transition-all',
+                      'hover:bg-primary/10 text-left',
+                      selected?.address === token.address && 'bg-primary/10',
+                      hasBalance && 'bg-primary/5'
+                    )}
+                  >
+                    {token.logoURI ? (
+                      <img 
+                        src={token.logoURI} 
+                        alt={token.symbol} 
+                        className="w-8 h-8 rounded-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold ${token.logoURI ? 'hidden' : ''}`}>
+                      {token.symbol[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">{token.symbol}</div>
+                      <div className="text-xs text-muted-foreground truncate">{token.name}</div>
+                    </div>
+                    {isConnected && (
+                      <div className="text-right shrink-0">
+                        {balancesLoading ? (
+                          <div className="text-xs text-muted-foreground">Loading...</div>
+                        ) : (
+                          <>
+                            <div className={cn(
+                              "text-sm font-medium",
+                              hasBalance ? "text-primary" : "text-muted-foreground"
+                            )}>
+                              {formatBalance(balance)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">Balance</div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
