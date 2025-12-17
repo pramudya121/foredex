@@ -19,6 +19,8 @@ import {
   calculateRemoveLiquidity,
 } from '@/lib/uniswapV2Library';
 import { addTransaction, updateTransactionStatus } from './TransactionHistory';
+import { useTokenPairBalances } from '@/hooks/useStableBalances';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 export function LiquidityPanel() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -27,8 +29,6 @@ export function LiquidityPanel() {
   const [tokenB, setTokenB] = useState<TokenInfo | null>(TOKEN_LIST[4]);
   const [amountA, setAmountA] = useState('');
   const [amountB, setAmountB] = useState('');
-  const [balanceA, setBalanceA] = useState('0');
-  const [balanceB, setBalanceB] = useState('0');
   const [lpBalance, setLpBalance] = useState('0');
   const [lpToRemove, setLpToRemove] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,37 +41,21 @@ export function LiquidityPanel() {
   const [removeAmounts, setRemoveAmounts] = useState<{ amountA: string; amountB: string }>({ amountA: '0', amountB: '0' });
   const [estimatedShare, setEstimatedShare] = useState(0);
 
+  // Use stable balance hook
+  const { balanceA, balanceB, loading: loadingBalances, refetch: refetchBalances } = 
+    useTokenPairBalances(address, tokenA, tokenB);
+
   const isNativeToken = (token: TokenInfo | null) =>
     token?.address === '0x0000000000000000000000000000000000000000';
 
   const getTokenAddress = (token: TokenInfo) =>
-    isNativeToken(token) ? TOKENS.WETH : token.address;
+    isNativeToken(token) ? CONTRACTS.WETH : token.address;
 
-  // Fetch pair and balances
-  const fetchData = useCallback(async () => {
+  // Fetch pair info and LP balance (separate from token balances)
+  const fetchPairData = useCallback(async () => {
     if (!provider || !address || !tokenA || !tokenB) return;
 
     try {
-      // Fetch token balances
-      if (isNativeToken(tokenA)) {
-        const bal = await provider.getBalance(address);
-        setBalanceA(ethers.formatEther(bal));
-      } else {
-        const contract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
-        const bal = await contract.balanceOf(address);
-        setBalanceA(ethers.formatUnits(bal, tokenA.decimals));
-      }
-
-      if (isNativeToken(tokenB)) {
-        const bal = await provider.getBalance(address);
-        setBalanceB(ethers.formatEther(bal));
-      } else {
-        const contract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
-        const bal = await contract.balanceOf(address);
-        setBalanceB(ethers.formatUnits(bal, tokenB.decimals));
-      }
-
-      // Check if pair exists and get reserves using library
       const tokenAAddr = getTokenAddress(tokenA);
       const tokenBAddr = getTokenAddress(tokenB);
       
@@ -81,18 +65,32 @@ export function LiquidityPanel() {
         setPairAddress(pair);
         setReserves({ reserveA, reserveB });
         
-        const pairContract = new ethers.Contract(pair, PAIR_ABI, provider);
-        const [lpBal, supply] = await Promise.all([
-          pairContract.balanceOf(address),
-          pairContract.totalSupply()
-        ]);
-        
-        setLpBalance(ethers.formatEther(lpBal));
-        setTotalSupply(BigInt(supply));
-        
-        // Calculate pool share using library
-        const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
-        setPoolShare(share);
+        // Use rpcProvider for LP balance fetch
+        const rpc = rpcProvider.getProvider();
+        if (rpc && rpcProvider.isAvailable()) {
+          const pairContract = new ethers.Contract(pair, PAIR_ABI, rpc);
+          
+          const lpBal = await rpcProvider.call(
+            () => pairContract.balanceOf(address),
+            `lp_balance_${pair}_${address}`
+          );
+          
+          const supply = await rpcProvider.call(
+            () => pairContract.totalSupply(),
+            `lp_supply_${pair}`
+          );
+          
+          if (lpBal !== null) {
+            setLpBalance(ethers.formatEther(lpBal));
+          }
+          if (supply !== null) {
+            setTotalSupply(BigInt(supply));
+            if (lpBal !== null) {
+              const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
+              setPoolShare(share);
+            }
+          }
+        }
       } else {
         setPairAddress(null);
         setLpBalance('0');
@@ -101,7 +99,7 @@ export function LiquidityPanel() {
         setTotalSupply(BigInt(0));
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching pair data:', error);
     }
   }, [provider, address, tokenA, tokenB]);
 
@@ -158,8 +156,8 @@ export function LiquidityPanel() {
   }, [lpToRemove, reserves, totalSupply, tokenA, tokenB]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchPairData();
+  }, [fetchPairData]);
 
   const handleAddLiquidity = async () => {
     if (!signer || !tokenA || !tokenB || !amountA || !amountB || !provider) return;
@@ -249,7 +247,7 @@ export function LiquidityPanel() {
       
       setAmountA('');
       setAmountB('');
-      fetchData();
+      fetchPairData();
     } catch (error: any) {
       console.error('Add liquidity error:', error);
       toast.error(error.reason || error.message || 'Failed to add liquidity');
@@ -310,7 +308,7 @@ export function LiquidityPanel() {
       toast.success(`Liquidity removed! TX: ${receipt.hash.slice(0, 10)}...`);
       
       setLpToRemove('');
-      fetchData();
+      fetchPairData();
     } catch (error: any) {
       console.error('Remove liquidity error:', error);
       toast.error(error.reason || error.message || 'Failed to remove liquidity');
