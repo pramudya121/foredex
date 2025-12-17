@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect } from 'react';
 import { rpcProvider } from '@/lib/rpcProvider';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,7 @@ import {
 
 type RpcStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
 
-function RpcStatusIndicatorInner() {
+export function RpcStatusIndicator() {
   const [status, setStatus] = useState<RpcStatus>('connecting');
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
@@ -133,5 +133,3 @@ function RpcStatusIndicatorInner() {
     </Tooltip>
   );
 }
-
-export const RpcStatusIndicator = memo(RpcStatusIndicatorInner);
