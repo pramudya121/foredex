@@ -307,11 +307,11 @@ export function SwapCard() {
   };
 
   return (
-    <div className="glass-card p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
+    <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold">Swap</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-bold">Swap</h2>
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Auto Slippage Toggle */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -377,18 +377,18 @@ export function SwapCard() {
       )}
 
       {/* Token In */}
-      <div className="token-input mb-2">
+      <div className="token-input mb-2 p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-muted-foreground">You pay</span>
-          <span className="text-sm text-muted-foreground flex items-center gap-1">
+          <span className="text-xs sm:text-sm text-muted-foreground">You pay</span>
+          <span className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
             Balance: {loadingBalances ? (
-              <Skeleton className="h-4 w-16 inline-block" />
+              <Skeleton className="h-3 sm:h-4 w-12 sm:w-16 inline-block" />
             ) : (
               <>
                 {parseFloat(balanceIn).toFixed(4)}
                 <button
                   onClick={() => setAmountIn(balanceIn)}
-                  className="ml-1 text-primary hover:underline"
+                  className="ml-1 text-primary hover:underline font-medium"
                 >
                   MAX
                 </button>
@@ -396,13 +396,13 @@ export function SwapCard() {
             )}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Input
             type="number"
             placeholder="0.0"
             value={amountIn}
             onChange={(e) => setAmountIn(e.target.value)}
-            className="flex-1 text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+            className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
           />
           <TokenSelect selected={tokenIn} onSelect={setTokenIn} excludeToken={tokenOut} />
         </div>
@@ -421,28 +421,28 @@ export function SwapCard() {
       </div>
 
       {/* Token Out */}
-      <div className="token-input mt-2 mb-6">
+      <div className="token-input mt-2 mb-4 sm:mb-6 p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-muted-foreground">You receive</span>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-xs sm:text-sm text-muted-foreground">You receive</span>
+          <span className="text-xs sm:text-sm text-muted-foreground">
             Balance: {loadingBalances ? (
-              <Skeleton className="h-4 w-16 inline-block" />
+              <Skeleton className="h-3 sm:h-4 w-12 sm:w-16 inline-block" />
             ) : (
               parseFloat(balanceOut).toFixed(4)
             )}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex-1 flex items-center">
             {quoting ? (
-              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+              <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-muted-foreground" />
             ) : (
               <Input
                 type="text"
                 placeholder="0.0"
                 value={amountOut}
                 readOnly
-                className="flex-1 text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
               />
             )}
           </div>

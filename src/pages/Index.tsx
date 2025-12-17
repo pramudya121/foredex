@@ -13,17 +13,19 @@ const LimitOrderPanel = lazy(() =>
 );
 const RecentTrades = lazy(() => import('@/components/RecentTrades'));
 
-const LimitOrderLoading = () => (
-  <div className="glass-card p-6 w-full max-w-md mx-auto">
+const LimitOrderLoading = memo(() => (
+  <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto">
     <div className="space-y-4">
       <Skeleton className="h-10 w-full" />
       <Skeleton className="h-24 w-full" />
       <Skeleton className="h-12 w-full" />
     </div>
   </div>
-);
+));
 
-const WidgetLoading = () => (
+LimitOrderLoading.displayName = 'LimitOrderLoading';
+
+const WidgetLoading = memo(() => (
   <div className="glass-card p-4">
     <Skeleton className="h-6 w-32 mb-4" />
     <div className="space-y-2">
@@ -32,7 +34,9 @@ const WidgetLoading = () => (
       ))}
     </div>
   </div>
-);
+));
+
+WidgetLoading.displayName = 'WidgetLoading';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('market');
@@ -42,45 +46,45 @@ const Index = () => {
   useLimitOrderMonitor();
 
   return (
-    <main className="container py-6 md:py-10">
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-3 mb-3">
-          <h1 className="text-3xl md:text-4xl font-bold">
+    <main className="container py-4 sm:py-6 md:py-10 px-3 sm:px-4">
+      <div className="text-center mb-6 sm:mb-8">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2 sm:mb-3 flex-wrap">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">
             Trade with the <span className="gradient-text">Pack</span>
           </h1>
           <ConnectionStatus isConnected={isConnected} />
         </div>
-        <p className="text-base text-muted-foreground max-w-xl mx-auto">
+        <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto px-2">
           Swap tokens instantly on Nexus Testnet. Low fees, fast transactions.
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 max-w-5xl mx-auto justify-center">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 max-w-5xl mx-auto justify-center">
         {/* Main Trading Area */}
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md mx-auto lg:mx-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 glass-card p-1 mb-4">
+            <TabsList className="grid w-full grid-cols-2 glass-card p-1 mb-3 sm:mb-4">
               <TabsTrigger 
                 value="market" 
-                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="flex items-center justify-center gap-1.5 sm:gap-2 text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <ArrowLeftRight className="w-4 h-4" />
-                Market
+                <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Market</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="limit" 
-                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="flex items-center justify-center gap-1.5 sm:gap-2 text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <Target className="w-4 h-4" />
-                Limit
+                <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Limit</span>
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="market" className="mt-4">
+            <TabsContent value="market" className="mt-3 sm:mt-4">
               <SwapCard />
             </TabsContent>
 
-            <TabsContent value="limit" className="mt-4">
+            <TabsContent value="limit" className="mt-3 sm:mt-4">
               <Suspense fallback={<LimitOrderLoading />}>
                 <LimitOrderPanel />
               </Suspense>
@@ -88,8 +92,8 @@ const Index = () => {
           </Tabs>
         </div>
 
-        {/* Right Sidebar - Recent Trades */}
-        <div className="w-full max-w-sm">
+        {/* Right Sidebar - Recent Trades (hidden on mobile, shown on lg+) */}
+        <div className="hidden lg:block w-full max-w-sm">
           <Suspense fallback={<WidgetLoading />}>
             <RecentTrades />
           </Suspense>

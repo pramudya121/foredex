@@ -23,17 +23,17 @@ const StatCard = memo(({
   loading: boolean;
   valueColor?: string;
 }) => (
-  <div className={`glass-card p-4 sm:p-5 hover:border-${iconColor}/30 transition-colors`}>
-    <div className="flex items-center gap-3">
-      <div className={`p-2.5 sm:p-3 rounded-xl ${bgColor}`}>
-        <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />
+  <div className={`glass-card p-3 sm:p-4 md:p-5 hover:border-${iconColor}/30 transition-colors`}>
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl ${bgColor}`}>
+        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 ${iconColor}`} />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs sm:text-sm text-muted-foreground truncate">{label}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground truncate">{label}</p>
         {loading ? (
-          <Skeleton className="h-6 sm:h-8 w-16 sm:w-20 mt-1" />
+          <Skeleton className="h-5 sm:h-6 md:h-8 w-14 sm:w-16 md:w-20 mt-0.5 sm:mt-1" />
         ) : (
-          <p className={`text-lg sm:text-2xl font-bold truncate ${valueColor || ''}`}>{value}</p>
+          <p className={`text-sm sm:text-lg md:text-2xl font-bold truncate ${valueColor || ''}`}>{value}</p>
         )}
       </div>
     </div>
@@ -59,25 +59,25 @@ const Pools = () => {
   ], [stats, formatNumber]);
 
   return (
-    <main className="container py-6 md:py-10 max-w-7xl">
+    <main className="container py-4 sm:py-6 md:py-10 max-w-7xl px-3 sm:px-4">
       {/* Hero Section */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 rounded-xl bg-gradient-wolf">
-              <Droplets className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-wolf">
+              <Droplets className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">
                 Liquidity <span className="text-primary">Pools</span>
               </h1>
-              <Badge variant="secondary" className="mt-1 text-xs">
+              <Badge variant="secondary" className="mt-0.5 sm:mt-1 text-xs">
                 <Flame className="w-3 h-3 mr-1 text-orange-500" />
                 Earn 0.3% on every trade
               </Badge>
             </div>
           </div>
-          <p className="text-muted-foreground text-sm md:text-base max-w-xl">
+          <p className="text-muted-foreground text-xs sm:text-sm md:text-base max-w-xl">
             Provide liquidity to earn trading fees. APR calculated from real on-chain data.
           </p>
         </div>
@@ -89,12 +89,12 @@ const Pools = () => {
           className="flex items-center gap-2 self-start"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
         {statsData.map((stat, index) => (
           <StatCard
             key={index}
