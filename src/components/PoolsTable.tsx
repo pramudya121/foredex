@@ -64,20 +64,19 @@ const PoolSkeleton = memo(() => (
 
 PoolSkeleton.displayName = 'PoolSkeleton';
 
-// Cache for pools table
-let poolsTableCache: { pools: Pool[]; timestamp: number } | null = null;
-const CACHE_TTL = 60000; // 60 seconds
+// Cache for pools table - persistent across component remounts
+let poolsTableCache: { pools: Pool[]; timestamp: number; isRealData: boolean } | null = null;
+const CACHE_TTL = 120000; // 2 minutes - longer cache to prevent flickering
 
-// Fallback pools data when RPC is unavailable
-const getFallbackPools = (): Pool[] => {
+// Static fallback pools - always 6 pools from known tokens
+const FALLBACK_POOLS: Pool[] = (() => {
   const tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
   const pools: Pool[] = [];
   
-  // Create pools from known token pairs
   for (let i = 0; i < tokens.length - 1; i++) {
     for (let j = i + 1; j < tokens.length; j++) {
       pools.push({
-        address: `0x${i}${j}fallback`,
+        address: `0xfallback${i}${j}`,
         token0: { address: tokens[i].address, symbol: tokens[i].symbol, name: tokens[i].name, logoURI: tokens[i].logoURI },
         token1: { address: tokens[j].address, symbol: tokens[j].symbol, name: tokens[j].name, logoURI: tokens[j].logoURI },
         reserve0: '0',
@@ -91,17 +90,18 @@ const getFallbackPools = (): Pool[] => {
     }
   }
   return pools.slice(0, 6);
-};
+})();
 
 function PoolsTableInner() {
+  // Initialize with cached data if valid, otherwise use fallback
   const [pools, setPools] = useState<Pool[]>(() => {
-    // Start with cached or fallback data immediately
     if (poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
       return poolsTableCache.pools;
     }
-    return getFallbackPools();
+    return FALLBACK_POOLS;
   });
-  const [loading, setLoading] = useState(false); // Start as false since we have initial data
+  const [loading, setLoading] = useState(false);
+  const [hasRealData, setHasRealData] = useState(() => poolsTableCache?.isRealData ?? false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
   const isFetchingRef = useRef(false);
@@ -128,10 +128,12 @@ function PoolsTableInner() {
       // Prevent concurrent fetches
       if (isFetchingRef.current) return;
       
-      // Check cache first
+      // Check cache first - if valid, use it and don't fetch
       if (poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
-        setPools(poolsTableCache.pools);
-        setLoading(false);
+        if (pools !== poolsTableCache.pools) {
+          setPools(poolsTableCache.pools);
+          setHasRealData(poolsTableCache.isRealData);
+        }
         return;
       }
 
@@ -139,20 +141,13 @@ function PoolsTableInner() {
 
       const provider = rpcProvider.getProvider();
       
-      // If RPC not available, use cached data or fallback
+      // If RPC not available, keep current data (don't switch to fallback if we have real data)
       if (!provider || !rpcProvider.isAvailable()) {
-        if (poolsTableCache) {
-          setPools(poolsTableCache.pools);
-        } else {
-          setPools(getFallbackPools());
-        }
-        setLoading(false);
         isFetchingRef.current = false;
-        return;
+        return; // Keep current state, don't update
       }
 
       try {
-
         const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
         
         const pairCount = await rpcProvider.call(
@@ -161,15 +156,13 @@ function PoolsTableInner() {
         );
         
         if (pairCount === null) {
-          // Use fallback when pairCount fails
-          setPools(getFallbackPools());
-          setLoading(false);
+          // RPC call failed, keep current data
           isFetchingRef.current = false;
           return;
         }
 
         const fetchedPools: Pool[] = [];
-        const maxPools = Math.min(Number(pairCount), 10); // Reduced to minimize RPC calls
+        const maxPools = Math.min(Number(pairCount), 10);
 
         for (let i = 0; i < maxPools; i++) {
           try {
@@ -224,14 +217,14 @@ function PoolsTableInner() {
           }
         }
 
-        setPools(fetchedPools);
-        // Update cache
-        poolsTableCache = { pools: fetchedPools, timestamp: Date.now() };
-      } catch (error: any) {
-        const errorMessage = error?.message || String(error);
-        if (!errorMessage.includes('coalesce') && !errorMessage.includes('timeout')) {
-          console.warn('Error fetching pools:', errorMessage);
+        // Only update if we got valid data
+        if (fetchedPools.length > 0) {
+          setPools(fetchedPools);
+          setHasRealData(true);
+          poolsTableCache = { pools: fetchedPools, timestamp: Date.now(), isRealData: true };
         }
+      } catch {
+        // Keep current data on error, don't log common errors
       } finally {
         setLoading(false);
         isFetchingRef.current = false;
@@ -239,7 +232,11 @@ function PoolsTableInner() {
     };
 
     fetchPools();
-  }, []);
+    
+    // Refresh every 2 minutes
+    const interval = setInterval(fetchPools, 120000);
+    return () => clearInterval(interval);
+  }, [pools]);
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
@@ -263,6 +260,7 @@ function PoolsTableInner() {
         <Badge variant="secondary" className="px-3 py-1">
           <Droplets className="w-3 h-3 mr-1" />
           {pools.length} Pools
+          {!hasRealData && <span className="ml-1 text-xs opacity-60">(cached)</span>}
         </Badge>
       </div>
 
