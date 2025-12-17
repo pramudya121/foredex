@@ -23,6 +23,7 @@ import { findBestRoute, SwapRoute } from '@/lib/multiHopRouter';
 import { addTransaction, updateTransactionStatus } from './TransactionHistory';
 import { calculateAutoSlippage, getSlippageSeverityColor } from '@/lib/autoSlippage';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useTokenPairBalances } from '@/hooks/useStableBalances';
 import {
   Tooltip,
   TooltipContent,
@@ -36,17 +37,18 @@ export function SwapCard() {
   const [tokenOut, setTokenOut] = useState<TokenInfo | null>(TOKEN_LIST[4]); // FRDX
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
-  const [balanceIn, setBalanceIn] = useState('0');
-  const [balanceOut, setBalanceOut] = useState('0');
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
-  const [loadingBalances, setLoadingBalances] = useState(true);
   const [slippage, setSlippage] = useState(settings.defaultSlippage);
   const [deadline, setDeadline] = useState(settings.transactionDeadline);
   const [priceImpact, setPriceImpact] = useState(0);
   const [bestRoute, setBestRoute] = useState<SwapRoute | null>(null);
   const [allRoutes, setAllRoutes] = useState<SwapRoute[]>([]);
   const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
+  
+  // Use stable balance hook
+  const { balanceA: balanceIn, balanceB: balanceOut, loading: loadingBalances, refetch: refetchBalances } = 
+    useTokenPairBalances(address, tokenIn, tokenOut);
   
   // Auto-slippage state
   const [autoSlippageResult, setAutoSlippageResult] = useState<{
@@ -63,48 +65,11 @@ export function SwapCard() {
     token?.address === '0x0000000000000000000000000000000000000000';
 
   const getTokenAddress = (token: TokenInfo) => 
-    isNativeToken(token) ? TOKENS.WETH : token.address;
-
-  // Fetch balances
-  const fetchBalances = useCallback(async () => {
-    if (!provider || !address) {
-      setLoadingBalances(false);
-      return;
-    }
-
-    setLoadingBalances(true);
-    try {
-      if (tokenIn) {
-        if (isNativeToken(tokenIn)) {
-          const bal = await provider.getBalance(address);
-          setBalanceIn(ethers.formatEther(bal));
-        } else {
-          const contract = new ethers.Contract(tokenIn.address, ERC20_ABI, provider);
-          const bal = await contract.balanceOf(address);
-          setBalanceIn(ethers.formatUnits(bal, tokenIn.decimals));
-        }
-      }
-
-      if (tokenOut) {
-        if (isNativeToken(tokenOut)) {
-          const bal = await provider.getBalance(address);
-          setBalanceOut(ethers.formatEther(bal));
-        } else {
-          const contract = new ethers.Contract(tokenOut.address, ERC20_ABI, provider);
-          const bal = await contract.balanceOf(address);
-          setBalanceOut(ethers.formatUnits(bal, tokenOut.decimals));
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching balances:', error);
-    } finally {
-      setLoadingBalances(false);
-    }
-  }, [provider, address, tokenIn, tokenOut]);
+    isNativeToken(token) ? CONTRACTS.WETH : token.address;
 
   useEffect(() => {
-    fetchBalances();
-  }, [fetchBalances]);
+    // Balances are auto-fetched by useTokenPairBalances hook
+  }, []);
 
   // Get quote using multi-hop router
   const getQuote = useCallback(async (inputAmount: string) => {
@@ -332,7 +297,7 @@ export function SwapCard() {
       setShowConfirmation(false);
       setAmountIn('');
       setAmountOut('');
-      fetchBalances();
+      refetchBalances();
     } catch (error: any) {
       console.error('Swap error:', error);
       toast.error(error.reason || error.message || 'Swap failed');
