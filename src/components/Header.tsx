@@ -17,6 +17,7 @@ import { NetworkStatus } from './NetworkStatus';
 import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
+import { RpcStatusIndicator } from './RpcStatusIndicator';
 
 const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 
@@ -109,6 +110,9 @@ export function Header() {
 
           {/* Theme Toggle */}
           <ThemeToggle />
+
+          {/* RPC Status */}
+          <RpcStatusIndicator />
 
           {/* Network Status */}
           <NetworkStatus />
