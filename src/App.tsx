@@ -15,6 +15,8 @@ import TokensPage from "./pages/TokensPage";
 import TokenDetailPage from "./pages/TokenDetailPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import PortfolioPage from "./pages/PortfolioPage";
+import TradingAnalyticsPage from "./pages/TradingAnalyticsPage";
+import TokenComparisonPage from "./pages/TokenComparisonPage";
 import DocsPage from "./pages/DocsPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
@@ -35,6 +37,8 @@ function AppContent() {
         <Route path="/tokens" element={<TokensPage />} />
         <Route path="/tokens/:address" element={<TokenDetailPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
+        <Route path="/compare" element={<TokenComparisonPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/docs" element={<DocsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
