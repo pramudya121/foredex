@@ -67,17 +67,17 @@ export function Header() {
         {/* Mobile Menu */}
         <MobileNav />
 
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 group">
+        {/* Logo - Always visible */}
+        <Link to="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
           <div className="relative">
             <img 
               src={wolfLogo} 
               alt="FOREDEX" 
-              className="h-10 w-10 transition-transform duration-300 group-hover:scale-110"
+              className="h-8 w-8 sm:h-10 sm:w-10 transition-transform duration-300 group-hover:scale-110"
             />
             <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <span className="text-xl font-bold tracking-tight">
+          <span className="text-lg sm:text-xl font-bold tracking-tight whitespace-nowrap">
             FORE<span className="text-primary">DEX</span>
           </span>
         </Link>
@@ -119,14 +119,14 @@ export function Header() {
           {isConnected ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2 border-primary/30 hover:border-primary/50">
-                  <Wallet className="w-4 h-4 text-primary" />
-                  <span className="hidden sm:inline">{parseFloat(balance).toFixed(4)} NEX</span>
-                  <span className="font-mono">{formatAddress(address!)}</span>
-                  <ChevronDown className="w-4 h-4" />
+                <Button variant="outline" className="gap-1 sm:gap-2 border-primary/30 hover:border-primary/50 px-2 sm:px-4">
+                  <Wallet className="w-4 h-4 text-primary shrink-0" />
+                  <span className="hidden md:inline text-sm">{parseFloat(balance).toFixed(3)} NEX</span>
+                  <span className="font-mono text-xs sm:text-sm">{formatAddress(address!)}</span>
+                  <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-56 bg-popover border border-border">
                 <DropdownMenuItem onClick={copyAddress}>
                   <Copy className="w-4 h-4 mr-2" />
                   Copy Address
