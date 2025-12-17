@@ -15,24 +15,33 @@ class RPCProviderService {
   private isInitializing = false;
 
   private constructor() {
-    this.initProvider();
+    // Delay initialization to avoid immediate network detection
+    setTimeout(() => this.initProvider(), 100);
   }
 
-  private initProvider() {
-    if (this.isInitializing) return;
+  private async initProvider() {
+    if (this.isInitializing || this.provider) return;
     this.isInitializing = true;
     
     try {
-      this.provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl, {
+      // Create provider with static network to avoid network detection
+      const network = {
         chainId: NEXUS_TESTNET.chainId,
         name: NEXUS_TESTNET.name,
-      }, {
-        staticNetwork: true,
-        batchMaxCount: 1,
-        polling: false,
-      });
+      };
+      
+      this.provider = new ethers.JsonRpcProvider(
+        NEXUS_TESTNET.rpcUrl,
+        network,
+        {
+          staticNetwork: ethers.Network.from(network),
+          batchMaxCount: 1,
+          polling: false,
+        }
+      );
     } catch {
       this.provider = null;
+      this.cooldownUntil = Date.now() + 30000; // 30s cooldown on init failure
     } finally {
       this.isInitializing = false;
     }
