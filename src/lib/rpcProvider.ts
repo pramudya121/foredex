@@ -92,13 +92,13 @@ class RPCProviderService {
     const errorMessage = error?.message || String(error);
     this.errorCount++;
     
-    // Check for rate limiting (429)
+    // Check for rate limiting (429) - silent handling
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
       this.cooldownUntil = Date.now() + 60000; // 60 second cooldown for 429
-      console.warn('RPC rate limited, cooling down for 60s');
     } else if (errorMessage.includes('CORS') || errorMessage.includes('coalesce') || errorMessage.includes('ERR_FAILED')) {
       this.cooldownUntil = Date.now() + 30000; // 30 second cooldown for CORS/network errors
-      console.warn('RPC network error, cooling down for 30s');
+    } else if (errorMessage.includes('Timeout')) {
+      this.cooldownUntil = Date.now() + 15000; // 15 second cooldown for timeout
     } else {
       // General error - shorter cooldown
       this.cooldownUntil = Date.now() + 10000;
