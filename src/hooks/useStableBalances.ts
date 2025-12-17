@@ -195,109 +195,119 @@ export function useTokenPairBalances(
   const [balanceB, setBalanceB] = useState('0');
   const [loading, setLoading] = useState(false);
   const mountedRef = useRef(true);
-  const lastFetchRef = useRef<string>('');
+  const fetchCountRef = useRef(0);
 
-  const fetchBalances = useCallback(async () => {
+  const fetchBalances = useCallback(async (force = false) => {
+    // If no wallet, show 0 balance
     if (!address) {
       setBalanceA('0');
       setBalanceB('0');
-      return;
-    }
-
-    // Create a key for this fetch to detect stale updates
-    const fetchKey = `${address}-${tokenA?.address}-${tokenB?.address}`;
-    if (fetchKey === lastFetchRef.current) return;
-    lastFetchRef.current = fetchKey;
-
-    setLoading(true);
-    const provider = rpcProvider.getProvider();
-    
-    if (!provider || !rpcProvider.isAvailable()) {
       setLoading(false);
       return;
     }
 
+    const currentFetch = ++fetchCountRef.current;
+    setLoading(true);
+
+    const fetchTokenBalance = async (token: TokenInfo | null): Promise<string> => {
+      if (!token) return '0';
+      
+      const provider = rpcProvider.getProvider();
+      if (!provider) return '0';
+
+      try {
+        const isNative = token.address === '0x0000000000000000000000000000000000000000';
+        const cacheKey = `balance_${isNative ? 'native' : token.address}_${address}`;
+        
+        // Skip cache check if forcing refresh
+        if (!force) {
+          const cached = globalBalanceCache[cacheKey];
+          if (cached && Date.now() - cached.timestamp < BALANCE_CACHE_TTL) {
+            return cached.balance;
+          }
+        }
+        
+        // Check if RPC is available
+        if (!rpcProvider.isAvailable()) {
+          const cached = globalBalanceCache[cacheKey];
+          return cached?.balance || '0';
+        }
+        
+        let balance: string = '0';
+        if (isNative) {
+          const result = await rpcProvider.call(
+            () => provider.getBalance(address),
+            cacheKey
+          );
+          balance = result ? ethers.formatEther(result) : '0';
+        } else {
+          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+          const result = await rpcProvider.call(
+            () => contract.balanceOf(address),
+            cacheKey
+          );
+          balance = result ? ethers.formatUnits(result, token.decimals) : '0';
+        }
+
+        // Update cache
+        globalBalanceCache[cacheKey] = {
+          balance,
+          timestamp: Date.now(),
+        };
+
+        return balance;
+      } catch {
+        // Return cached value on error
+        const cacheKey = `balance_${token.address === '0x0000000000000000000000000000000000000000' ? 'native' : token.address}_${address}`;
+        const cached = globalBalanceCache[cacheKey];
+        return cached?.balance || '0';
+      }
+    };
+
     try {
-      // Fetch token A balance
-      if (tokenA) {
-        const isNative = tokenA.address === '0x0000000000000000000000000000000000000000';
-        const cacheKey = `balance_${isNative ? 'native' : tokenA.address}_${address}`;
-        
-        let balA: string = '0';
-        if (isNative) {
-          const result = await rpcProvider.call(
-            () => provider.getBalance(address),
-            cacheKey
-          );
-          balA = result ? ethers.formatEther(result) : '0';
-        } else {
-          const contract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
-          const result = await rpcProvider.call(
-            () => contract.balanceOf(address),
-            cacheKey
-          );
-          balA = result ? ethers.formatUnits(result, tokenA.decimals) : '0';
-        }
-        
-        if (mountedRef.current && lastFetchRef.current === fetchKey) {
-          setBalanceA(balA);
-        }
-      }
-
-      // Small delay between requests
-      await new Promise(r => setTimeout(r, 200));
-
-      // Fetch token B balance
-      if (tokenB) {
-        const isNative = tokenB.address === '0x0000000000000000000000000000000000000000';
-        const cacheKey = `balance_${isNative ? 'native' : tokenB.address}_${address}`;
-        
-        let balB: string = '0';
-        if (isNative) {
-          const result = await rpcProvider.call(
-            () => provider.getBalance(address),
-            cacheKey
-          );
-          balB = result ? ethers.formatEther(result) : '0';
-        } else {
-          const contract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
-          const result = await rpcProvider.call(
-            () => contract.balanceOf(address),
-            cacheKey
-          );
-          balB = result ? ethers.formatUnits(result, tokenB.decimals) : '0';
-        }
-        
-        if (mountedRef.current && lastFetchRef.current === fetchKey) {
-          setBalanceB(balB);
-        }
-      }
-    } catch (error) {
-      // Silent fail - keep existing balances
+      // Fetch both balances with small delay between
+      const balA = await fetchTokenBalance(tokenA);
+      if (!mountedRef.current || currentFetch !== fetchCountRef.current) return;
+      setBalanceA(balA);
+      
+      // Small delay to prevent rate limiting
+      await new Promise(r => setTimeout(r, 300));
+      
+      const balB = await fetchTokenBalance(tokenB);
+      if (!mountedRef.current || currentFetch !== fetchCountRef.current) return;
+      setBalanceB(balB);
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && currentFetch === fetchCountRef.current) {
         setLoading(false);
       }
     }
   }, [address, tokenA, tokenB]);
 
+  // Fetch when dependencies change
   useEffect(() => {
     mountedRef.current = true;
     fetchBalances();
     
-    // Refresh every 45 seconds
-    const interval = setInterval(fetchBalances, 45000);
-    
     return () => {
       mountedRef.current = false;
-      clearInterval(interval);
     };
-  }, [fetchBalances]);
+  }, [address, tokenA?.address, tokenB?.address]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (address) {
+        fetchBalances();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [address, fetchBalances]);
 
   return {
     balanceA,
     balanceB,
     loading,
-    refetch: fetchBalances,
+    refetch: () => fetchBalances(true),
   };
 }
