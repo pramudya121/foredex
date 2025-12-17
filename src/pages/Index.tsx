@@ -11,7 +11,6 @@ import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 const LimitOrderPanel = lazy(() => 
   import('@/components/LimitOrderPanel').then(m => ({ default: m.LimitOrderPanel }))
 );
-const WatchlistWidget = lazy(() => import('@/components/WatchlistWidget'));
 const RecentTrades = lazy(() => import('@/components/RecentTrades'));
 
 const LimitOrderLoading = () => (
@@ -56,16 +55,9 @@ const Index = () => {
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-        {/* Left Sidebar - Watchlist */}
-        <div className="hidden lg:block">
-          <Suspense fallback={<WidgetLoading />}>
-            <WatchlistWidget />
-          </Suspense>
-        </div>
-
+      <div className="flex flex-col lg:flex-row gap-6 max-w-5xl mx-auto justify-center">
         {/* Main Trading Area */}
-        <div className="lg:col-span-1">
+        <div className="w-full max-w-md">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 glass-card p-1 mb-4">
               <TabsTrigger 
@@ -97,18 +89,11 @@ const Index = () => {
         </div>
 
         {/* Right Sidebar - Recent Trades */}
-        <div className="hidden lg:block">
+        <div className="w-full max-w-sm">
           <Suspense fallback={<WidgetLoading />}>
             <RecentTrades />
           </Suspense>
         </div>
-      </div>
-
-      {/* Mobile Widgets */}
-      <div className="lg:hidden mt-6 space-y-4">
-        <Suspense fallback={<WidgetLoading />}>
-          <RecentTrades />
-        </Suspense>
       </div>
     </main>
   );
