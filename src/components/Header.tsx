@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   { path: '/trading-analytics', label: 'P&L' },
   { path: '/analytics', label: 'Analytics' },
   { path: '/portfolio', label: 'Portfolio' },
+  { path: '/docs', label: 'Docs' },
 ];
 
 const WALLETS = [
