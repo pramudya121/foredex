@@ -6,11 +6,11 @@ class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 500; // 500ms between requests (faster for better UX)
+  private minRequestInterval = 300; // 300ms between requests (faster)
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 30000; // Cache for 30 seconds
+  private cacheTTL = 20000; // Cache for 20 seconds
   private errorCount = 0;
-  private maxErrors = 5; // More tolerant of errors
+  private maxErrors = 10; // Very tolerant of errors
   private cooldownUntil = 0;
   private isInitializing = false;
 
@@ -39,7 +39,7 @@ class RPCProviderService {
       );
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 10000; // 10s cooldown on init failure
+      this.cooldownUntil = Date.now() + 5000;
     } finally {
       this.isInitializing = false;
     }
@@ -63,10 +63,8 @@ class RPCProviderService {
     // Auto-reset cooldown after it expires
     if (Date.now() >= this.cooldownUntil) {
       this.cooldownUntil = 0;
-      // Gradually reduce error count after cooldown
-      if (this.errorCount > 0) {
-        this.errorCount = Math.max(0, this.errorCount - 1);
-      }
+      // Reset error count after cooldown
+      this.errorCount = 0;
     }
     return this.provider !== null && this.errorCount < this.maxErrors;
   }
@@ -97,15 +95,15 @@ class RPCProviderService {
     const errorMessage = error?.message || String(error);
     this.errorCount++;
     
-    // Check for rate limiting (429) - shorter cooldown
+    // Very short cooldowns - just enough to prevent hammering
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      this.cooldownUntil = Date.now() + 15000; // 15s cooldown for 429 (reduced from 60s)
+      this.cooldownUntil = Date.now() + 5000; // 5s cooldown for 429
     } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED')) {
-      this.cooldownUntil = Date.now() + 10000; // 10s for CORS errors
+      this.cooldownUntil = Date.now() + 3000; // 3s for CORS errors
     } else if (errorMessage.includes('Timeout') || errorMessage.includes('coalesce')) {
-      this.cooldownUntil = Date.now() + 5000; // 5s for timeout
+      this.cooldownUntil = Date.now() + 2000; // 2s for timeout
     } else {
-      this.cooldownUntil = Date.now() + 3000; // 3s for general errors
+      this.cooldownUntil = Date.now() + 1000; // 1s for general errors
     }
   }
 
@@ -113,7 +111,7 @@ class RPCProviderService {
     contractCall: () => Promise<T>,
     cacheKey?: string
   ): Promise<T | null> {
-    // Check cache first
+    // Check cache first - always return cached value if available
     if (cacheKey) {
       const cached = this.getFromCache(cacheKey);
       if (cached !== null) return cached;
@@ -139,7 +137,7 @@ class RPCProviderService {
       const result = await Promise.race([
         contractCall(),
         new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 15000) // 15s timeout
+          setTimeout(() => reject(new Error('Timeout')), 10000) // 10s timeout
         )
       ]);
       
