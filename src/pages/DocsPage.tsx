@@ -87,64 +87,64 @@ const FEATURES_LIST = [
 
 const TODAYS_UPDATES = [
   {
-    title: 'Real-time Price Updates',
-    description: 'Live price data with WebSocket-style updates every 5 seconds. Visual indicators show price movements in real-time.',
+    title: 'Transaction History Page',
+    description: 'Halaman baru /history dengan filtering berdasarkan tipe transaksi (All/Swaps/Liquidity/Pending), clear history, dan responsive mobile.',
     type: 'new',
   },
   {
-    title: 'Price Alerts System',
-    description: 'Set custom price alerts for any token. Get notified via toast and browser notifications when prices hit your targets.',
-    type: 'new',
-  },
-  {
-    title: 'Token Detail Page',
-    description: 'Comprehensive token analytics page with historical price/volume charts, multiple timeframes (24H to 1Y), and detailed metrics.',
-    type: 'new',
-  },
-  {
-    title: 'Watchlist Widget',
-    description: 'Quick access to your favorite tokens with live price updates on the main trading page.',
-    type: 'new',
-  },
-  {
-    title: 'Recent Trades Feed',
-    description: 'Live feed showing recent trades across all pools with real-time updates.',
-    type: 'new',
-  },
-  {
-    title: 'Live Connection Status',
-    description: 'Visual indicator showing real-time data connection status throughout the app.',
-    type: 'new',
-  },
-  {
-    title: 'Token Market Page',
-    description: 'CoinMarketCap-style token listing page with prices, 24h changes, volume, TVL, and mini charts.',
-    type: 'new',
-  },
-  {
-    title: 'On-chain APR Calculation',
-    description: 'APR is now calculated from real on-chain volume and fees data.',
+    title: 'Mobile Navigation Sync',
+    description: 'Sinkronisasi navigasi mobile dengan desktop - menambahkan link Tokens, Compare, P&L, History di mobile menu.',
     type: 'improved',
   },
   {
-    title: 'Professional Pools Page',
-    description: 'Enhanced pools page with better stats cards, APR display, and Add Liquidity buttons.',
-    type: 'improved',
-  },
-  {
-    title: 'Limit Order Feature',
-    description: 'Create limit orders with target prices on the Swap page.',
+    title: 'Enhanced Skeleton Components',
+    description: 'Komponen skeleton loader baru: SkeletonCard, SkeletonTable, SkeletonSwapCard untuk loading states yang lebih baik.',
     type: 'new',
   },
   {
-    title: 'Performance Optimization',
-    description: 'Added React.memo, lazy loading, and optimized data fetching for faster performance.',
+    title: 'Error State Components',
+    description: 'Komponen ErrorState, LoadingState, EmptyState dengan variant network/timeout/empty untuk error handling.',
+    type: 'new',
+  },
+  {
+    title: 'Mobile UX Enhancement',
+    description: 'Perbaikan responsivitas LiquidityPanel, Swap, Pools dengan touch-manipulation dan inputMode decimal.',
     type: 'improved',
   },
   {
-    title: 'Remove Wrap/Unwrap Feature',
-    description: 'Simplified the Liquidity page by removing the Wrap/Unwrap tab.',
-    type: 'removed',
+    title: 'RPC Provider Optimization',
+    description: 'Toleransi error lebih tinggi (maxErrors 10), cooldown lebih singkat, cache 20 detik untuk performa lebih baik.',
+    type: 'improved',
+  },
+  {
+    title: 'Token Balance Direct Fetch',
+    description: 'Fetch balance token langsung tanpa melalui rpcProvider utama untuk reliabilitas lebih tinggi.',
+    type: 'improved',
+  },
+  {
+    title: 'Pool Stats Fallback Data',
+    description: 'Data fallback realistis untuk pools dengan TVL, volume, fees yang terkalkulasi.',
+    type: 'improved',
+  },
+  {
+    title: 'Lazy Loading Pages',
+    description: 'Semua halaman menggunakan React.lazy dan Suspense untuk bundle splitting dan loading lebih cepat.',
+    type: 'improved',
+  },
+  {
+    title: 'Portfolio Analytics Enhancement',
+    description: 'Perbaikan halaman portfolio dengan statistik P&L, performance metrics, dan visualisasi lebih baik.',
+    type: 'improved',
+  },
+  {
+    title: 'Header Navigation Update',
+    description: 'Menambahkan link History di navigasi desktop dan mobile.',
+    type: 'new',
+  },
+  {
+    title: 'Documentation Update',
+    description: 'Update halaman docs dengan pembaruan hari ini dan fitur-fitur terbaru.',
+    type: 'improved',
   },
 ];
 

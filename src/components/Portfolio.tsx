@@ -150,12 +150,36 @@ export function Portfolio() {
     );
   }
 
+  // Calculate total portfolio value
+  const totalTokenValue = tokenBalances.reduce((acc, t) => acc + parseFloat(t.balance), 0);
+  const totalLPValue = lpPositions.reduce((acc, p) => acc + parseFloat(p.lpBalance), 0);
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Portfolio</h2>
-        <div className="text-sm text-muted-foreground">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold">Portfolio</h2>
+        <div className="text-xs sm:text-sm text-muted-foreground font-mono">
           {address?.slice(0, 6)}...{address?.slice(-4)}
+        </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        <div className="glass-card p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground">NEX Balance</p>
+          <p className="text-base sm:text-xl font-bold">{parseFloat(balance).toFixed(4)}</p>
+        </div>
+        <div className="glass-card p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground">Token Holdings</p>
+          <p className="text-base sm:text-xl font-bold">{tokenBalances.length}</p>
+        </div>
+        <div className="glass-card p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground">LP Positions</p>
+          <p className="text-base sm:text-xl font-bold">{lpPositions.length}</p>
+        </div>
+        <div className="glass-card p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground">Total LP Value</p>
+          <p className="text-base sm:text-xl font-bold">{totalLPValue.toFixed(4)}</p>
         </div>
       </div>
 
@@ -163,40 +187,40 @@ export function Portfolio() {
       <PortfolioValueChart />
 
       {/* Native Balance */}
-      <div className="glass-card p-6">
-        <div className="flex items-center gap-4">
+      <div className="glass-card p-4 sm:p-6">
+        <div className="flex items-center gap-3 sm:gap-4">
           <TokenLogo symbol="NEX" logoURI="/tokens/nex.jpg" size="lg" />
           <div>
-            <p className="text-sm text-muted-foreground">NEX Balance</p>
-            <p className="text-2xl font-bold">{parseFloat(balance).toFixed(4)} NEX</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">NEX Balance</p>
+            <p className="text-lg sm:text-2xl font-bold">{parseFloat(balance).toFixed(4)} NEX</p>
           </div>
         </div>
       </div>
 
       {/* Token Holdings */}
-      <div className="glass-card p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Wallet className="w-5 h-5 text-primary" />
+      <div className="glass-card p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+          <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           Token Holdings
         </h3>
         
         {tokenBalances.length === 0 ? (
-          <p className="text-center text-muted-foreground py-4">No tokens found</p>
+          <p className="text-center text-muted-foreground py-4 text-sm">No tokens found</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {tokenBalances.map((token) => (
               <div
                 key={token.address}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                className="flex items-center justify-between p-2.5 sm:p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                   <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="md" />
-                  <div>
-                    <p className="font-medium">{token.symbol}</p>
-                    <p className="text-xs text-muted-foreground">{token.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm sm:text-base truncate">{token.symbol}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{token.name}</p>
                   </div>
                 </div>
-                <p className="font-mono">{parseFloat(token.balance).toFixed(4)}</p>
+                <p className="font-mono text-sm sm:text-base shrink-0">{parseFloat(token.balance).toFixed(4)}</p>
               </div>
             ))}
           </div>
@@ -204,22 +228,22 @@ export function Portfolio() {
       </div>
 
       {/* LP Positions */}
-      <div className="glass-card p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Droplets className="w-5 h-5 text-primary" />
+      <div className="glass-card p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+          <Droplets className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           Liquidity Positions
         </h3>
         
         {lpPositions.length === 0 ? (
-          <p className="text-center text-muted-foreground py-4">No liquidity positions</p>
+          <p className="text-center text-muted-foreground py-4 text-sm">No liquidity positions</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {lpPositions.map((position) => (
               <div
                 key={position.pairAddress}
-                className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <div className="flex -space-x-2">
                     <TokenLogo 
                       symbol={position.token0Symbol} 
@@ -235,22 +259,22 @@ export function Portfolio() {
                     />
                   </div>
                   <div>
-                    <p className="font-medium">{position.token0Symbol}/{position.token1Symbol}</p>
-                    <p className="text-xs text-muted-foreground">Pool share: {position.share}%</p>
+                    <p className="font-medium text-sm sm:text-base">{position.token0Symbol}/{position.token1Symbol}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Pool share: {position.share}%</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-auto">
                   <div className="text-right">
-                    <p className="font-mono">{parseFloat(position.lpBalance).toFixed(6)}</p>
-                    <p className="text-xs text-muted-foreground">LP Tokens</p>
+                    <p className="font-mono text-sm sm:text-base">{parseFloat(position.lpBalance).toFixed(6)}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">LP Tokens</p>
                   </div>
                   <a
                     href={`${NEXUS_TESTNET.blockExplorer}/address/${position.pairAddress}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-lg hover:bg-muted transition-colors"
+                    className="p-1.5 sm:p-2 rounded-lg hover:bg-muted transition-colors touch-manipulation"
                   >
-                    <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                    <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                   </a>
                 </div>
               </div>
@@ -260,9 +284,9 @@ export function Portfolio() {
       </div>
 
       {/* Recent Activity */}
-      <div className="glass-card p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <History className="w-5 h-5 text-primary" />
+      <div className="glass-card p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+          <History className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           Recent Activity
         </h3>
         <TransactionHistory />
