@@ -318,10 +318,10 @@ export function LiquidityPanel() {
   };
 
   return (
-    <div className="glass-card p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
+    <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
       {/* Header with Settings */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Manage Liquidity</h2>
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h2 className="text-base sm:text-lg font-semibold">Manage Liquidity</h2>
         <SlippageSettings
           slippage={slippage}
           onSlippageChange={setSlippage}
@@ -331,33 +331,34 @@ export function LiquidityPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="add" className="gap-2">
+        <TabsList className="grid w-full grid-cols-2 mb-4 sm:mb-6">
+          <TabsTrigger value="add" className="gap-1.5 sm:gap-2 text-sm touch-manipulation">
             <Plus className="w-4 h-4" />
             Add
           </TabsTrigger>
-          <TabsTrigger value="remove" className="gap-2">
+          <TabsTrigger value="remove" className="gap-1.5 sm:gap-2 text-sm touch-manipulation">
             <Minus className="w-4 h-4" />
             Remove
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="add" className="space-y-4">
+        <TabsContent value="add" className="space-y-3 sm:space-y-4">
           {/* Token A */}
           <div className="token-input">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Token A</span>
-              <span className="text-sm text-muted-foreground">
+            <div className="flex justify-between mb-2 flex-wrap gap-1">
+              <span className="text-xs sm:text-sm text-muted-foreground">Token A</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 Balance: {parseFloat(balanceA).toFixed(4)}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Input
                 type="number"
+                inputMode="decimal"
                 placeholder="0.0"
                 value={amountA}
                 onChange={(e) => setAmountA(e.target.value)}
-                className="flex-1 text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
               />
               <TokenSelect selected={tokenA} onSelect={setTokenA} excludeToken={tokenB} />
             </div>
@@ -371,19 +372,20 @@ export function LiquidityPanel() {
 
           {/* Token B */}
           <div className="token-input">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Token B</span>
-              <span className="text-sm text-muted-foreground">
+            <div className="flex justify-between mb-2 flex-wrap gap-1">
+              <span className="text-xs sm:text-sm text-muted-foreground">Token B</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 Balance: {parseFloat(balanceB).toFixed(4)}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Input
                 type="number"
+                inputMode="decimal"
                 placeholder="0.0"
                 value={amountB}
                 onChange={(e) => setAmountB(e.target.value)}
-                className="flex-1 text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
               />
               <TokenSelect selected={tokenB} onSelect={setTokenB} excludeToken={tokenA} />
             </div>
@@ -391,21 +393,21 @@ export function LiquidityPanel() {
 
           {/* Pool Info */}
           {pairAddress && tokenA && tokenB && (
-            <div className="p-3 rounded-lg bg-muted/30 space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                <Info className="w-4 h-4" />
+            <div className="p-2.5 sm:p-3 rounded-lg bg-muted/30 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1.5 sm:mb-2">
+                <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>Pool Info</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reserve {tokenA.symbol}</span>
-                <span>{ethers.formatUnits(reserves.reserveA, tokenA.decimals).slice(0, 10)}</span>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground truncate">Reserve {tokenA.symbol}</span>
+                <span className="font-mono">{ethers.formatUnits(reserves.reserveA, tokenA.decimals).slice(0, 10)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reserve {tokenB.symbol}</span>
-                <span>{ethers.formatUnits(reserves.reserveB, tokenB.decimals).slice(0, 10)}</span>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground truncate">Reserve {tokenB.symbol}</span>
+                <span className="font-mono">{ethers.formatUnits(reserves.reserveB, tokenB.decimals).slice(0, 10)}</span>
               </div>
               {amountA && estimatedShare > 0 && (
-                <div className="flex justify-between text-primary">
+                <div className="flex justify-between text-primary gap-2">
                   <span>Est. Pool Share</span>
                   <span>{estimatedShare.toFixed(2)}%</span>
                 </div>
@@ -414,7 +416,7 @@ export function LiquidityPanel() {
           )}
 
           {!pairAddress && tokenA && tokenB && amountA && amountB && (
-            <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-sm">
+            <div className="p-2.5 sm:p-3 rounded-lg bg-primary/10 border border-primary/30 text-xs sm:text-sm">
               <p className="text-primary font-medium">New Pool</p>
               <p className="text-muted-foreground">You will be the first liquidity provider.</p>
             </div>
@@ -425,42 +427,42 @@ export function LiquidityPanel() {
               onClick={handleAddLiquidity}
               disabled={loading || !amountA || !amountB}
               className={cn(
-                'w-full h-14 text-lg font-semibold btn-glow',
+                'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold btn-glow touch-manipulation',
                 'bg-gradient-wolf hover:opacity-90'
               )}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Adding Liquidity...
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                  Adding...
                 </>
               ) : (
                 'Add Liquidity'
               )}
             </Button>
           ) : (
-            <Button disabled className="w-full h-14" variant="secondary">
+            <Button disabled className="w-full h-12 sm:h-14 touch-manipulation" variant="secondary">
               Connect Wallet
             </Button>
           )}
         </TabsContent>
 
-        <TabsContent value="remove" className="space-y-4">
+        <TabsContent value="remove" className="space-y-3 sm:space-y-4">
           {/* Token Selection for Remove */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-3 sm:mb-4">
             <TokenSelect selected={tokenA} onSelect={setTokenA} excludeToken={tokenB} className="flex-1" />
             <TokenSelect selected={tokenB} onSelect={setTokenB} excludeToken={tokenA} className="flex-1" />
           </div>
 
           {/* LP Balance */}
           <div className="token-input">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-muted-foreground">LP Tokens to Remove</span>
-              <span className="text-sm text-muted-foreground">
+            <div className="flex justify-between mb-2 flex-wrap gap-1">
+              <span className="text-xs sm:text-sm text-muted-foreground">LP Tokens to Remove</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 Balance: {parseFloat(lpBalance).toFixed(6)}
                 <button
                   onClick={() => setLpToRemove(lpBalance)}
-                  className="ml-2 text-primary hover:underline"
+                  className="ml-2 text-primary hover:underline active:opacity-80 touch-manipulation"
                 >
                   MAX
                 </button>
@@ -468,39 +470,40 @@ export function LiquidityPanel() {
             </div>
             <Input
               type="number"
+              inputMode="decimal"
               placeholder="0.0"
               value={lpToRemove}
               onChange={(e) => setLpToRemove(e.target.value)}
-              className="text-xl font-medium bg-transparent border-none focus-visible:ring-0"
+              className="text-lg sm:text-xl font-medium bg-transparent border-none focus-visible:ring-0"
             />
           </div>
 
           {/* Expected output */}
           {lpToRemove && parseFloat(lpToRemove) > 0 && pairAddress && (
-            <div className="p-3 rounded-lg bg-muted/30 space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                <Info className="w-4 h-4" />
+            <div className="p-2.5 sm:p-3 rounded-lg bg-muted/30 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1.5 sm:mb-2">
+                <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>You will receive</span>
               </div>
-              <div className="flex justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex justify-between items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" />
-                  <span>{tokenA?.symbol}</span>
+                  <span className="truncate">{tokenA?.symbol}</span>
                 </div>
-                <span className="font-mono">{parseFloat(removeAmounts.amountA).toFixed(6)}</span>
+                <span className="font-mono shrink-0">{parseFloat(removeAmounts.amountA).toFixed(6)}</span>
               </div>
-              <div className="flex justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex justify-between items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" />
-                  <span>{tokenB?.symbol}</span>
+                  <span className="truncate">{tokenB?.symbol}</span>
                 </div>
-                <span className="font-mono">{parseFloat(removeAmounts.amountB).toFixed(6)}</span>
+                <span className="font-mono shrink-0">{parseFloat(removeAmounts.amountB).toFixed(6)}</span>
               </div>
             </div>
           )}
 
           {!pairAddress && tokenA && tokenB && (
-            <div className="p-4 rounded-lg bg-muted/30 text-center text-muted-foreground">
+            <div className="p-3 sm:p-4 rounded-lg bg-muted/30 text-center text-muted-foreground text-sm">
               No pool exists for this pair
             </div>
           )}
@@ -510,21 +513,21 @@ export function LiquidityPanel() {
               onClick={handleRemoveLiquidity}
               disabled={loading || !lpToRemove || !pairAddress || parseFloat(lpToRemove) === 0}
               className={cn(
-                'w-full h-14 text-lg font-semibold',
+                'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold touch-manipulation',
                 'bg-destructive hover:bg-destructive/90'
               )}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Removing Liquidity...
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                  Removing...
                 </>
               ) : (
                 'Remove Liquidity'
               )}
             </Button>
           ) : (
-            <Button disabled className="w-full h-14" variant="secondary">
+            <Button disabled className="w-full h-12 sm:h-14 touch-manipulation" variant="secondary">
               Connect Wallet
             </Button>
           )}
