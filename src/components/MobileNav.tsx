@@ -11,7 +11,8 @@ import {
   Settings,
   Coins,
   GitCompare,
-  TrendingUp
+  TrendingUp,
+  History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { path: '/trading-analytics', label: 'P&L', icon: TrendingUp },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/portfolio', label: 'Portfolio', icon: Wallet },
+  { path: '/history', label: 'History', icon: History },
   { path: '/docs', label: 'Docs', icon: FileText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
