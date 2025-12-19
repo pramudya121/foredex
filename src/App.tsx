@@ -21,20 +21,21 @@ const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
 const TradingAnalyticsPage = lazy(() => import("./pages/TradingAnalyticsPage"));
 const TokenComparisonPage = lazy(() => import("./pages/TokenComparisonPage"));
+const TransactionHistoryPage = lazy(() => import("./pages/TransactionHistoryPage"));
 const DocsPage = lazy(() => import("./pages/DocsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading component for lazy pages
 const PageLoader = memo(() => (
-  <div className="container py-10 max-w-7xl space-y-6">
-    <Skeleton className="h-12 w-64" />
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  <div className="container py-10 max-w-7xl space-y-6 px-4">
+    <Skeleton className="h-10 sm:h-12 w-48 sm:w-64" />
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {[...Array(4)].map((_, i) => (
-        <Skeleton key={i} className="h-24 rounded-xl" />
+        <Skeleton key={i} className="h-20 sm:h-24 rounded-xl" />
       ))}
     </div>
-    <Skeleton className="h-96 rounded-xl" />
+    <Skeleton className="h-72 sm:h-96 rounded-xl" />
   </div>
 ));
 
@@ -68,6 +69,7 @@ const AppContent = memo(function AppContent() {
           <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
           <Route path="/compare" element={<TokenComparisonPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/history" element={<TransactionHistoryPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFound />} />
