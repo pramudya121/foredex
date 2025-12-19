@@ -288,66 +288,66 @@ export default function TokensPage() {
   const totalVolume = tokens.reduce((acc, t) => acc + t.volume24h, 0);
 
   return (
-    <main className="container py-8 md:py-12 max-w-7xl">
+    <main className="container py-6 px-4 sm:py-8 md:py-12 max-w-7xl">
       {/* Header */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold mb-3">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3">
             Token <span className="text-primary">Market</span>
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-sm sm:text-base text-muted-foreground sm:text-lg max-w-xl">
             Track prices, volume, and trends for all tokens on FOREDEX.
           </p>
         </div>
         <Badge variant="secondary" className="self-start px-3 py-1.5">
           <Coins className="w-4 h-4 mr-2" />
-          {tokens.length} Tokens Available
+          {tokens.length} Tokens
         </Badge>
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Coins className="w-5 h-5 text-primary" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div className="glass-card p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
+              <Coins className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Tokens</p>
-              <p className="text-xl font-bold">{tokens.length}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Total Tokens</p>
+              <p className="text-lg sm:text-xl font-bold">{tokens.length}</p>
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <DollarSign className="w-5 h-5 text-green-500" />
+        <div className="glass-card p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-green-500/10">
+              <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total TVL</p>
-              <p className="text-xl font-bold">{formatNumber(totalTVL)}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Total TVL</p>
+              <p className="text-lg sm:text-xl font-bold">{formatNumber(totalTVL)}</p>
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <Activity className="w-5 h-5 text-blue-500" />
+        <div className="glass-card p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-blue-500/10">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">24h Volume</p>
-              <p className="text-xl font-bold">{formatNumber(totalVolume)}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">24h Volume</p>
+              <p className="text-lg sm:text-xl font-bold">{formatNumber(totalVolume)}</p>
             </div>
           </div>
         </div>
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/10">
-              <BarChart3 className="w-5 h-5 text-purple-500" />
+        <div className="glass-card p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-purple-500/10">
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Trading Pairs</p>
-              <p className="text-xl font-bold">{tokens.length > 0 ? (tokens.length * (tokens.length - 1)) / 2 : 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Trading Pairs</p>
+              <p className="text-lg sm:text-xl font-bold">{tokens.length > 0 ? (tokens.length * (tokens.length - 1)) / 2 : 0}</p>
             </div>
           </div>
         </div>
