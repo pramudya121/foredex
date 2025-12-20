@@ -4,6 +4,35 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
+/* Wolf Spinner Animations */
+@keyframes wolf-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes wolf-glow {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 4px hsl(var(--primary) / 0.3)); }
+  50% { filter: brightness(1.1) drop-shadow(0 0 12px hsl(var(--primary) / 0.6)); }
+}
+
+@keyframes orbit {
+  0% { transform: rotate(0deg) translateX(150%) rotate(0deg); opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { transform: rotate(360deg) translateX(150%) rotate(-360deg); opacity: 1; }
+}
+
+.animate-wolf-breathe {
+  animation: wolf-breathe 2s ease-in-out infinite;
+}
+
+.animate-wolf-glow {
+  animation: wolf-glow 2s ease-in-out infinite;
+}
+
+.animate-orbit {
+  animation: orbit 2s linear infinite;
+}
+
 @layer base {
   :root {
     /* FOREDEX Dark Theme - Red/Black Wolf */

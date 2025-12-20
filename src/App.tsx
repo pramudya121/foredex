@@ -9,7 +9,8 @@ import { Header } from "@/components/Header";
 import { WaveBackground } from "@/components/WaveBackground";
 import { PriceTicker } from "@/components/PriceTicker";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { Skeleton } from "@/components/ui/skeleton";
+import { WolfSpinner } from "@/components/WolfSpinner";
+import { PageTransition } from "@/components/PageTransition";
 
 // Lazy load pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -28,14 +29,8 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading component for lazy pages
 const PageLoader = memo(() => (
-  <div className="container py-10 max-w-7xl space-y-6 px-4">
-    <Skeleton className="h-10 sm:h-12 w-48 sm:w-64" />
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      {[...Array(4)].map((_, i) => (
-        <Skeleton key={i} className="h-20 sm:h-24 rounded-xl" />
-      ))}
-    </div>
-    <Skeleton className="h-72 sm:h-96 rounded-xl" />
+  <div className="flex-1 flex items-center justify-center py-20">
+    <WolfSpinner size="lg" text="Loading..." />
   </div>
 ));
 
@@ -59,21 +54,23 @@ const AppContent = memo(function AppContent() {
       <Header />
       {settings.showPriceTicker && <PriceTicker />}
       <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/liquidity" element={<Liquidity />} />
-          <Route path="/pools" element={<Pools />} />
-          <Route path="/tokens" element={<TokensPage />} />
-          <Route path="/tokens/:address" element={<TokenDetailPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
-          <Route path="/compare" element={<TokenComparisonPage />} />
-          <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/history" element={<TransactionHistoryPage />} />
-          <Route path="/docs" element={<DocsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <PageTransition>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/liquidity" element={<Liquidity />} />
+            <Route path="/pools" element={<Pools />} />
+            <Route path="/tokens" element={<TokensPage />} />
+            <Route path="/tokens/:address" element={<TokenDetailPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
+            <Route path="/compare" element={<TokenComparisonPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/history" element={<TransactionHistoryPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </PageTransition>
       </Suspense>
     </div>
   );
