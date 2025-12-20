@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SoundSettings } from './SoundSettings';
 import { 
   Settings, 
   Sliders, 
@@ -23,7 +24,8 @@ import {
   Check,
   Sun,
   Moon,
-  Info
+  Info,
+  Volume2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -316,6 +318,15 @@ export function SettingsPanel() {
                 </div>
               </>
             )}
+          </div>
+
+          {/* Sound Effects Section */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Volume2 className="w-5 h-5 text-primary" />
+              Sound Effects
+            </h3>
+            <SoundSettings />
           </div>
         </TabsContent>
 
