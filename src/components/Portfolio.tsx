@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { Wallet, Droplets, History, ExternalLink } from 'lucide-react';
+import { Wallet, Droplets, History, ExternalLink, RefreshCw } from 'lucide-react';
 import { TokenLogo } from './TokenLogo';
 import { TransactionHistory } from './TransactionHistory';
 import { PortfolioValueChart } from './PortfolioValueChart';
+import { rpcProvider } from '@/lib/rpcProvider';
+import { Button } from './ui/button';
 
 interface TokenBalance {
   symbol: string;
@@ -27,107 +29,138 @@ interface LPPosition {
 }
 
 export function Portfolio() {
-  const { provider, address, isConnected, balance } = useWeb3();
+  const { address, isConnected, balance } = useWeb3();
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
   const [lpPositions, setLpPositions] = useState<LPPosition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchPortfolio = async () => {
-      if (!provider || !address) {
-        setLoading(false);
-        return;
-      }
+  const fetchPortfolio = useCallback(async () => {
+    if (!address) {
+      setLoading(false);
+      return;
+    }
 
-      try {
-        // Fetch token balances
-        const balancePromises = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000').map(async (token): Promise<TokenBalance | null> => {
-          try {
-            const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-            const bal = await contract.balanceOf(address);
-            return {
+    const provider = rpcProvider.getProvider();
+    if (!provider || !rpcProvider.isAvailable()) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch token balances sequentially with delays to avoid rate limiting
+      const balances: TokenBalance[] = [];
+      const tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
+      
+      for (const token of tokens) {
+        try {
+          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+          const bal = await rpcProvider.call(
+            () => contract.balanceOf(address),
+            `token_balance_${token.address}_${address}`
+          );
+          
+          if (bal !== null && bal > 0n) {
+            balances.push({
               symbol: token.symbol,
               name: token.name,
               balance: ethers.formatUnits(bal, token.decimals),
               address: token.address,
               logoURI: token.logoURI,
-            };
-          } catch {
-            return null;
+            });
           }
-        });
-
-        const balanceResults = await Promise.all(balancePromises);
-        const balances = balanceResults.filter((b): b is TokenBalance => b !== null && parseFloat(b.balance) > 0);
-        setTokenBalances(balances);
-
-        // Fetch LP positions
-        const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
-        const pairCount = await factory.allPairsLength();
-        
-        const lpPromises = [];
-        for (let i = 0; i < Math.min(Number(pairCount), 20); i++) {
-          lpPromises.push(
-            (async () => {
-              try {
-                const pairAddress = await factory.allPairs(i);
-                const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-                const lpBalance = await pair.balanceOf(address);
-                
-                if (lpBalance > 0n) {
-                  const [token0Addr, token1Addr, totalSupply] = await Promise.all([
-                    pair.token0(),
-                    pair.token1(),
-                    pair.totalSupply(),
-                  ]);
-
-                  const getSymbol = async (addr: string) => {
-                    const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                    if (known) return { symbol: known.symbol, logoURI: known.logoURI };
-                    try {
-                      const token = new ethers.Contract(addr, ERC20_ABI, provider);
-                      return { symbol: await token.symbol(), logoURI: undefined };
-                    } catch {
-                      return { symbol: 'UNKNOWN', logoURI: undefined };
-                    }
-                  };
-
-                  const [token0Info, token1Info] = await Promise.all([
-                    getSymbol(token0Addr),
-                    getSymbol(token1Addr),
-                  ]);
-
-                  const share = (Number(lpBalance) / Number(totalSupply)) * 100;
-
-                  return {
-                    pairAddress,
-                    token0Symbol: token0Info.symbol,
-                    token1Symbol: token1Info.symbol,
-                    token0Logo: token0Info.logoURI,
-                    token1Logo: token1Info.logoURI,
-                    lpBalance: ethers.formatEther(lpBalance),
-                    share: share.toFixed(2),
-                  };
-                }
-                return null;
-              } catch {
-                return null;
-              }
-            })()
-          );
+        } catch {
+          // Silent fail for individual token
         }
-
-        const positions = (await Promise.all(lpPromises)).filter((p): p is LPPosition => p !== null);
-        setLpPositions(positions);
-      } catch (error) {
-        console.error('Error fetching portfolio:', error);
-      } finally {
-        setLoading(false);
       }
-    };
+      
+      setTokenBalances(balances);
 
+      // Fetch LP positions with delays
+      const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+      const pairCount = await rpcProvider.call(
+        () => factory.allPairsLength(),
+        'factory_pair_count'
+      );
+      
+      if (!pairCount) {
+        setLpPositions([]);
+        return;
+      }
+
+      const positions: LPPosition[] = [];
+      const maxPairs = Math.min(Number(pairCount), 10); // Limit to 10 pairs
+      
+      for (let i = 0; i < maxPairs; i++) {
+        try {
+          const pairAddress = await rpcProvider.call(
+            () => factory.allPairs(i),
+            `pair_address_${i}`
+          );
+          
+          if (!pairAddress) continue;
+          
+          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+          const lpBalance = await rpcProvider.call(
+            () => pair.balanceOf(address),
+            `lp_balance_${pairAddress}_${address}`
+          );
+          
+          if (lpBalance && lpBalance > 0n) {
+            const [token0Addr, token1Addr, totalSupply] = await Promise.all([
+              rpcProvider.call(() => pair.token0(), `pair_token0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `pair_token1_${pairAddress}`),
+              rpcProvider.call(() => pair.totalSupply(), `pair_supply_${pairAddress}`),
+            ]);
+
+            if (!token0Addr || !token1Addr || !totalSupply) continue;
+
+            const getTokenInfo = (addr: string) => {
+              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+              return { symbol: known?.symbol || '?', logoURI: known?.logoURI };
+            };
+
+            const token0Info = getTokenInfo(token0Addr);
+            const token1Info = getTokenInfo(token1Addr);
+            const share = (Number(lpBalance) / Number(totalSupply)) * 100;
+
+            positions.push({
+              pairAddress,
+              token0Symbol: token0Info.symbol,
+              token1Symbol: token1Info.symbol,
+              token0Logo: token0Info.logoURI,
+              token1Logo: token1Info.logoURI,
+              lpBalance: ethers.formatEther(lpBalance),
+              share: share.toFixed(2),
+            });
+          }
+        } catch {
+          // Silent fail for individual pair
+        }
+      }
+
+      setLpPositions(positions);
+    } catch (error) {
+      console.error('Error fetching portfolio:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [address]);
+
+  useEffect(() => {
     fetchPortfolio();
-  }, [provider, address]);
+    
+    // Refresh every 2 minutes
+    const interval = setInterval(fetchPortfolio, 120000);
+    return () => clearInterval(interval);
+  }, [fetchPortfolio]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    rpcProvider.clearCache();
+    fetchPortfolio();
+  };
 
   if (!isConnected) {
     return (
@@ -157,7 +190,18 @@ export function Portfolio() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-        <h2 className="text-xl sm:text-2xl font-bold">Portfolio</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl sm:text-2xl font-bold">Portfolio</h2>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="h-8 w-8"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <div className="text-xs sm:text-sm text-muted-foreground font-mono">
           {address?.slice(0, 6)}...{address?.slice(-4)}
         </div>
