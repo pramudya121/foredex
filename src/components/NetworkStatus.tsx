@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 type NetworkState = 'connected' | 'wrong-network' | 'disconnected';
 
@@ -17,6 +18,7 @@ export function NetworkStatus() {
   const [networkState, setNetworkState] = useState<NetworkState>('disconnected');
   const [blockNumber, setBlockNumber] = useState<number | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
+  const lastCheckRef = useRef(0);
 
   useEffect(() => {
     if (!isConnected) {
@@ -31,35 +33,40 @@ export function NetworkStatus() {
 
     setNetworkState('connected');
 
-    // Check RPC health
+    // Check RPC health using centralized provider
     const checkHealth = async () => {
+      // Throttle health checks to every 60 seconds
+      const now = Date.now();
+      if (now - lastCheckRef.current < 60000) return;
+      lastCheckRef.current = now;
+
+      const provider = rpcProvider.getProvider();
+      if (!provider || !rpcProvider.isAvailable()) {
+        setLatency(null);
+        return;
+      }
+
       try {
         const start = Date.now();
-        const response = await fetch(NEXUS_TESTNET.rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'eth_blockNumber',
-            params: [],
-            id: 1,
-          }),
-        });
+        const block = await rpcProvider.call(
+          () => provider.getBlockNumber(),
+          'network_block_number'
+        );
         const end = Date.now();
-        setLatency(end - start);
-
-        const data = await response.json();
-        if (data.result) {
-          setBlockNumber(parseInt(data.result, 16));
+        
+        if (block !== null) {
+          setLatency(end - start);
+          setBlockNumber(block);
+        } else {
+          setLatency(null);
         }
-      } catch (error) {
-        console.error('RPC health check failed:', error);
+      } catch {
         setLatency(null);
       }
     };
 
     checkHealth();
-    const interval = setInterval(checkHealth, 30000);
+    const interval = setInterval(checkHealth, 60000); // Check every 60 seconds
     return () => clearInterval(interval);
   }, [isConnected, chainId]);
 
@@ -88,7 +95,7 @@ export function NetworkStatus() {
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
           <div className={cn(
             'w-2 h-2 rounded-full',
-            latency !== null ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
+            rpcProvider.isAvailable() ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
           )} />
           <span className="text-xs font-medium text-muted-foreground">
             Nexus
@@ -103,7 +110,7 @@ export function NetworkStatus() {
       <TooltipContent>
         <div className="text-xs space-y-1">
           <div className="flex items-center gap-2">
-            {latency !== null ? (
+            {rpcProvider.isAvailable() ? (
               <Wifi className="w-3 h-3 text-green-500" />
             ) : (
               <WifiOff className="w-3 h-3 text-yellow-500" />

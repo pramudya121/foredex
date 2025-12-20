@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, forwardRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,7 +51,7 @@ const generateHistoricalData = (basePrice: number, days: number = 30, symbol: st
   return data;
 };
 
-function TokenComparison() {
+const TokenComparison = forwardRef<HTMLDivElement>(function TokenComparison(_props, ref) {
   const { getAllPrices, isConnected } = useRealtimePrices();
   const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -488,6 +488,6 @@ function TokenComparison() {
       )}
     </div>
   );
-}
+});
 
-export default memo(TokenComparison);
+export default TokenComparison;

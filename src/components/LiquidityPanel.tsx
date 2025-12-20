@@ -310,8 +310,9 @@ export function LiquidityPanel() {
       setLpToRemove('');
       fetchPairData();
     } catch (error: any) {
-      console.error('Remove liquidity error:', error);
-      toast.error(error.reason || error.message || 'Failed to remove liquidity');
+      // Use rpcProvider to parse user-friendly error messages
+      const errorMsg = rpcProvider.parseError(error);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
