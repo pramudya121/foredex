@@ -76,53 +76,58 @@ export function Portfolio() {
       
       setTokenBalances(balances);
 
-      // Fetch LP positions with delays
+      // Fetch LP positions - directly check all pair contracts
       const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
-      const pairCount = await rpcProvider.call(
-        () => factory.allPairsLength(),
-        'factory_pair_count'
-      );
       
-      if (!pairCount) {
+      let pairCount;
+      try {
+        pairCount = await factory.allPairsLength();
+        console.log('Total pairs in factory:', Number(pairCount));
+      } catch (err) {
+        console.error('Error getting pair count:', err);
+        setLpPositions([]);
+        return;
+      }
+      
+      if (!pairCount || Number(pairCount) === 0) {
+        console.log('No pairs found');
         setLpPositions([]);
         return;
       }
 
       const positions: LPPosition[] = [];
-      const maxPairs = Math.min(Number(pairCount), 10); // Limit to 10 pairs
+      const maxPairs = Math.min(Number(pairCount), 20); // Check up to 20 pairs
       
       for (let i = 0; i < maxPairs; i++) {
         try {
-          const pairAddress = await rpcProvider.call(
-            () => factory.allPairs(i),
-            `pair_address_${i}`
-          );
+          // Get pair address directly without caching
+          const pairAddress = await factory.allPairs(i);
+          console.log(`Checking pair ${i}:`, pairAddress);
           
-          if (!pairAddress) continue;
+          if (!pairAddress || pairAddress === '0x0000000000000000000000000000000000000000') continue;
           
           const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-          const lpBalance = await rpcProvider.call(
-            () => pair.balanceOf(address),
-            `lp_balance_${pairAddress}_${address}`
-          );
           
-          if (lpBalance && lpBalance > 0n) {
+          // Get LP balance directly
+          const lpBalance = await pair.balanceOf(address);
+          console.log(`LP balance for pair ${i}:`, ethers.formatEther(lpBalance));
+          
+          if (lpBalance > 0n) {
+            // Get pair info
             const [token0Addr, token1Addr, totalSupply] = await Promise.all([
-              rpcProvider.call(() => pair.token0(), `pair_token0_${pairAddress}`),
-              rpcProvider.call(() => pair.token1(), `pair_token1_${pairAddress}`),
-              rpcProvider.call(() => pair.totalSupply(), `pair_supply_${pairAddress}`),
+              pair.token0(),
+              pair.token1(),
+              pair.totalSupply(),
             ]);
-
-            if (!token0Addr || !token1Addr || !totalSupply) continue;
 
             const getTokenInfo = (addr: string) => {
               const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-              return { symbol: known?.symbol || '?', logoURI: known?.logoURI };
+              return { symbol: known?.symbol || 'UNKNOWN', logoURI: known?.logoURI };
             };
 
             const token0Info = getTokenInfo(token0Addr);
             const token1Info = getTokenInfo(token1Addr);
-            const share = (Number(lpBalance) / Number(totalSupply)) * 100;
+            const share = totalSupply > 0n ? (Number(lpBalance) / Number(totalSupply)) * 100 : 0;
 
             positions.push({
               pairAddress,
@@ -133,12 +138,18 @@ export function Portfolio() {
               lpBalance: ethers.formatEther(lpBalance),
               share: share.toFixed(2),
             });
+            
+            console.log(`Found LP position: ${token0Info.symbol}/${token1Info.symbol} = ${ethers.formatEther(lpBalance)}`);
           }
-        } catch {
-          // Silent fail for individual pair
+          
+          // Small delay between pairs to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          console.error(`Error checking pair ${i}:`, err);
         }
       }
 
+      console.log('Total LP positions found:', positions.length);
       setLpPositions(positions);
     } catch (error) {
       console.error('Error fetching portfolio:', error);

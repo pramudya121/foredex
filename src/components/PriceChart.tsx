@@ -121,34 +121,35 @@ export function PriceChart({ token0Symbol, token1Symbol, currentPrice, className
   const isPositive = stats.change >= 0;
 
   return (
-    <div className={cn('glass-card p-4 sm:p-6', className)}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+    <div className={cn('p-4 sm:p-5', className)}>
+      {/* Header - More Compact */}
+      <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            {token0Symbol}/{token1Symbol}
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold">
+              {token0Symbol}/{token1Symbol}
+            </h3>
             <span className={cn(
-              'text-sm px-2 py-0.5 rounded-full',
-              isPositive ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
+              'text-xs px-2 py-0.5 rounded-full font-medium',
+              isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
             )}>
-              {isPositive ? <TrendingUp className="w-3 h-3 inline mr-1" /> : <TrendingDown className="w-3 h-3 inline mr-1" />}
               {isPositive ? '+' : ''}{stats.change.toFixed(2)}%
             </span>
-          </h3>
-          <p className="text-2xl font-bold mt-1">{currentPrice.toFixed(6)}</p>
+          </div>
+          <p className="text-xl font-bold mt-0.5">{currentPrice.toFixed(6)}</p>
         </div>
         
-        {/* Timeframe Selector */}
-        <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1">
+        {/* Timeframe Selector - Compact */}
+        <div className="flex items-center gap-0.5 bg-muted/40 rounded-lg p-0.5">
           {TIMEFRAMES.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setTimeframe(key)}
               className={cn(
-                'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
                 timeframe === key
                   ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
               {label}
@@ -157,30 +158,27 @@ export function PriceChart({ token0Symbol, token1Symbol, currentPrice, className
         </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-muted/20">
-          <p className="text-xs text-muted-foreground">High</p>
-          <p className="font-medium text-green-500">{stats.high.toFixed(6)}</p>
+      {/* Stats Row - Compact */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="p-2 rounded-lg bg-muted/20 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase">High</p>
+          <p className="text-sm font-medium text-green-400">{stats.high.toFixed(4)}</p>
         </div>
-        <div className="p-2 rounded-lg bg-muted/20">
-          <p className="text-xs text-muted-foreground">Low</p>
-          <p className="font-medium text-red-500">{stats.low.toFixed(6)}</p>
+        <div className="p-2 rounded-lg bg-muted/20 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase">Low</p>
+          <p className="text-sm font-medium text-red-400">{stats.low.toFixed(4)}</p>
         </div>
-        <div className="p-2 rounded-lg bg-muted/20">
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Avg Vol
-          </p>
-          <p className="font-medium">${stats.avgVolume.toFixed(0)}</p>
+        <div className="p-2 rounded-lg bg-muted/20 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase">Vol</p>
+          <p className="text-sm font-medium">${stats.avgVolume.toFixed(0)}</p>
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart - Reduced Height */}
       {loading ? (
-        <Skeleton className="h-[200px] w-full rounded-lg" />
+        <Skeleton className="h-[160px] w-full rounded-lg" />
       ) : (
-        <div className="h-[200px]">
+        <div className="h-[160px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
               <defs>
@@ -242,12 +240,12 @@ export function PriceChart({ token0Symbol, token1Symbol, currentPrice, className
         </div>
       )}
 
-      {/* Footer */}
-      <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
-        <span>Updated just now</span>
+      {/* Footer - Minimal */}
+      <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>Updated now</span>
         <span className="flex items-center gap-1">
           <div className={cn(
-            'w-2 h-2 rounded-full animate-pulse',
+            'w-1.5 h-1.5 rounded-full animate-pulse',
             isPositive ? 'bg-green-500' : 'bg-red-500'
           )} />
           Live
