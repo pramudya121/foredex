@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 interface Web3ContextType {
   provider: ethers.BrowserProvider | null;
@@ -14,6 +15,7 @@ interface Web3ContextType {
   connect: (walletType?: string) => Promise<void>;
   disconnect: () => void;
   switchToNexus: () => Promise<void>;
+  refreshBalance: () => Promise<void>;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -25,6 +27,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [balance, setBalance] = useState('0');
+  const balanceFetchRef = useRef<NodeJS.Timeout | null>(null);
 
   const isConnected = !!address;
 
@@ -74,6 +77,29 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }, [getProvider]);
 
+  // Separate balance fetch with rate limit protection
+  const refreshBalance = useCallback(async () => {
+    if (!address) return;
+    
+    try {
+      const rpc = rpcProvider.getProvider();
+      if (!rpc || !rpcProvider.isAvailable()) {
+        return; // Silently skip if RPC not available
+      }
+
+      const bal = await rpcProvider.call(
+        () => rpc.getBalance(address),
+        `user_balance_${address}`
+      );
+      
+      if (bal !== null) {
+        setBalance(ethers.formatEther(bal));
+      }
+    } catch {
+      // Silently fail - balance will update later
+    }
+  }, [address]);
+
   const connect = useCallback(async (walletType?: string) => {
     setIsConnecting(true);
     
@@ -104,23 +130,49 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       const browserSigner = await browserProvider.getSigner();
       const userAddress = await browserSigner.getAddress();
-      const userBalance = await browserProvider.getBalance(userAddress);
       
+      // Set state immediately without balance
       setProvider(browserProvider);
       setSigner(browserSigner);
       setAddress(userAddress);
-      setBalance(ethers.formatEther(userBalance));
+      setBalance('0'); // Default, will update after delay
       
       toast.success('Wallet connected!');
+      
+      // Fetch balance after a delay to avoid rate limiting
+      if (balanceFetchRef.current) {
+        clearTimeout(balanceFetchRef.current);
+      }
+      balanceFetchRef.current = setTimeout(async () => {
+        try {
+          const rpc = rpcProvider.getProvider();
+          if (rpc && rpcProvider.isAvailable()) {
+            const bal = await rpcProvider.call(
+              () => rpc.getBalance(userAddress),
+              `user_balance_${userAddress}`
+            );
+            if (bal !== null) {
+              setBalance(ethers.formatEther(bal));
+            }
+          }
+        } catch {
+          // Silent fail
+        }
+      }, 2000); // Wait 2 seconds before fetching balance
+      
     } catch (error: any) {
-      console.error('Connection error:', error);
-      toast.error(error.message || 'Failed to connect wallet');
+      // Parse user-friendly error message
+      const errorMsg = rpcProvider.parseError(error);
+      toast.error(errorMsg);
     } finally {
       setIsConnecting(false);
     }
   }, [getProvider, switchToNexus]);
 
   const disconnect = useCallback(() => {
+    if (balanceFetchRef.current) {
+      clearTimeout(balanceFetchRef.current);
+    }
     setProvider(null);
     setSigner(null);
     setAddress(null);
@@ -155,13 +207,28 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     };
   }, [address, connect, disconnect]);
 
-  // Auto-connect if previously connected
+  // Auto-connect if previously connected (with delay)
   useEffect(() => {
     const ethereum = (window as any).ethereum;
     if (ethereum?.selectedAddress) {
-      connect();
+      // Delay auto-connect to prevent immediate rate limiting
+      const timeout = setTimeout(() => {
+        connect();
+      }, 1000);
+      return () => clearTimeout(timeout);
     }
   }, []);
+
+  // Refresh balance periodically (every 60 seconds)
+  useEffect(() => {
+    if (!address) return;
+    
+    const interval = setInterval(() => {
+      refreshBalance();
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [address, refreshBalance]);
 
   return (
     <Web3Context.Provider value={{
@@ -175,6 +242,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       connect,
       disconnect,
       switchToNexus,
+      refreshBalance,
     }}>
       {children}
     </Web3Context.Provider>
