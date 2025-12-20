@@ -18,9 +18,12 @@ export function RpcStatusIndicator() {
     const checkStatus = () => {
       const provider = rpcProvider.getProvider();
       const isAvailable = rpcProvider.isAvailable();
+      const cooldown = rpcProvider.getCooldownRemaining();
       
       if (!provider) {
         setStatus('connecting');
+      } else if (cooldown > 0) {
+        setStatus('error');
       } else if (isAvailable) {
         setStatus('connected');
       } else {
@@ -32,8 +35,8 @@ export function RpcStatusIndicator() {
     // Initial check
     checkStatus();
 
-    // Check every 10 seconds
-    const interval = setInterval(checkStatus, 10000);
+    // Check every 30 seconds instead of 10
+    const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 

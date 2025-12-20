@@ -304,9 +304,11 @@ export function SwapCard() {
       setAmountOut('');
       refetchBalances();
     } catch (error: any) {
-      console.error('Swap error:', error);
       playErrorSound();
-      toast.error(error.reason || error.message || 'Swap failed');
+      // Use rpcProvider to parse user-friendly error messages
+      const { rpcProvider } = await import('@/lib/rpcProvider');
+      const errorMsg = rpcProvider.parseError(error);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }

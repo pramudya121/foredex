@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
+import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
-import { ExternalLink, Droplets } from 'lucide-react';
+import { ExternalLink, Droplets, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
+import { rpcProvider } from '@/lib/rpcProvider';
+import { NEXUS_TESTNET } from '@/config/contracts';
 
 interface Pool {
   address: string;
@@ -18,83 +20,110 @@ interface Pool {
 export function PoolsList() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPools = async () => {
+      const provider = rpcProvider.getProvider();
+      if (!provider || !rpcProvider.isAvailable()) {
+        setError('RPC temporarily unavailable');
+        setLoading(false);
+        return;
+      }
+
       try {
-        const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
         const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
         
-        const pairCount = await factory.allPairsLength();
-        const poolPromises = [];
-
-        for (let i = 0; i < Math.min(Number(pairCount), 20); i++) {
-          poolPromises.push(
-            (async () => {
-              try {
-                const pairAddress = await factory.allPairs(i);
-                const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-
-                const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-                  pair.token0(),
-                  pair.token1(),
-                  pair.getReserves(),
-                  pair.totalSupply(),
-                ]);
-
-                // Get token info
-                const getTokenInfo = async (addr: string) => {
-                  const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                  if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
-                  
-                  try {
-                    const token = new ethers.Contract(addr, ERC20_ABI, provider);
-                    const [symbol, name] = await Promise.all([token.symbol(), token.name()]);
-                    return { address: addr, symbol, name, logoURI: undefined };
-                  } catch {
-                    return { address: addr, symbol: 'UNKNOWN', name: 'Unknown Token', logoURI: undefined };
-                  }
-                };
-
-                const [token0, token1] = await Promise.all([
-                  getTokenInfo(token0Addr),
-                  getTokenInfo(token1Addr),
-                ]);
-
-                return {
-                  address: pairAddress,
-                  token0,
-                  token1,
-                  reserve0: ethers.formatEther(reserves[0]),
-                  reserve1: ethers.formatEther(reserves[1]),
-                  totalSupply: ethers.formatEther(totalSupply),
-                };
-              } catch {
-                return null;
-              }
-            })()
-          );
+        const pairCount = await rpcProvider.call(
+          () => factory.allPairsLength(),
+          'factory_pair_count'
+        );
+        
+        if (pairCount === null) {
+          setError('Unable to fetch pools');
+          setLoading(false);
+          return;
         }
 
-        const results = await Promise.all(poolPromises);
-        setPools(results.filter((p): p is Pool => p !== null));
-      } catch (error) {
-        console.error('Error fetching pools:', error);
+        const poolsData: Pool[] = [];
+        const limit = Math.min(Number(pairCount), 10); // Limit to 10 pools to reduce requests
+
+        for (let i = 0; i < limit; i++) {
+          try {
+            const pairAddress = await rpcProvider.call(
+              () => factory.allPairs(i),
+              `pair_address_${i}`
+            );
+            
+            if (!pairAddress) continue;
+            
+            const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+
+            const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+              rpcProvider.call(() => pair.token0(), `pair_token0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `pair_token1_${pairAddress}`),
+              rpcProvider.call(() => pair.getReserves(), `pair_reserves_${pairAddress}`),
+              rpcProvider.call(() => pair.totalSupply(), `pair_supply_${pairAddress}`),
+            ]);
+
+            if (!token0Addr || !token1Addr || !reserves || !totalSupply) continue;
+
+            // Get token info from known list first
+            const getTokenInfo = (addr: string) => {
+              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+              if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+              return { address: addr, symbol: addr.slice(0, 6), name: 'Unknown', logoURI: undefined };
+            };
+
+            const token0 = getTokenInfo(token0Addr);
+            const token1 = getTokenInfo(token1Addr);
+
+            poolsData.push({
+              address: pairAddress,
+              token0,
+              token1,
+              reserve0: ethers.formatEther(reserves[0]),
+              reserve1: ethers.formatEther(reserves[1]),
+              totalSupply: ethers.formatEther(totalSupply),
+            });
+          } catch {
+            // Skip failed pools silently
+            continue;
+          }
+        }
+
+        setPools(poolsData);
+        setError(null);
+      } catch {
+        setError('Failed to load pools');
       } finally {
         setLoading(false);
       }
     };
 
     fetchPools();
+    // Refresh every 60 seconds instead of constantly
+    const interval = setInterval(fetchPools, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   if (loading) {
     return (
       <div className="glass-card p-8 animate-fade-in">
         <div className="flex items-center justify-center gap-3 text-muted-foreground">
-          <Droplets className="w-5 h-5 animate-pulse" />
+          <RefreshCw className="w-5 h-5 animate-spin" />
           <span>Loading pools...</span>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card p-8 animate-fade-in text-center">
+        <Droplets className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+        <h3 className="text-lg font-semibold mb-2">Unable to Load Pools</h3>
+        <p className="text-muted-foreground text-sm">{error}</p>
       </div>
     );
   }
