@@ -3,10 +3,11 @@ import { TOKEN_LIST, TokenInfo } from '@/config/contracts';
 import { Button } from '@/components/ui/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Search, X, Wallet, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, X, Wallet, Loader2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { useTokenBalances } from '@/hooks/useTokenBalances';
+import { useWatchlistStore } from '@/stores/watchlistStore';
 
 interface TokenSelectProps {
   selected: TokenInfo | null;
@@ -21,6 +22,7 @@ export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(
     const [search, setSearch] = useState('');
     const { address, isConnected } = useWeb3();
     const { getBalance, loading: balancesLoading, refetch } = useTokenBalances(address);
+    const { addToken, removeToken, isWatched } = useWatchlistStore();
 
     const filteredTokens = TOKEN_LIST.filter((token) => {
       if (excludeToken && token.address === excludeToken.address) return false;
@@ -149,9 +151,37 @@ export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(
                         {token.symbol[0]}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium">{token.symbol}</div>
+                        <div className="font-medium flex items-center gap-1">
+                          {token.symbol}
+                          {isWatched(token.address) && (
+                            <Star className="w-3 h-3 text-primary fill-primary" />
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">{token.name}</div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isWatched(token.address)) {
+                            removeToken(token.address);
+                          } else {
+                            addToken({
+                              address: token.address,
+                              symbol: token.symbol,
+                              name: token.name,
+                              logoURI: token.logoURI,
+                            });
+                          }
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                        title={isWatched(token.address) ? 'Remove from watchlist' : 'Add to watchlist'}
+                      >
+                        <Star className={cn(
+                          'w-4 h-4',
+                          isWatched(token.address) ? 'text-primary fill-primary' : 'text-muted-foreground'
+                        )} />
+                      </button>
                       {isConnected && (
                         <div className="text-right shrink-0">
                           {balancesLoading ? (
