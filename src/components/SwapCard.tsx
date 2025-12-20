@@ -24,6 +24,7 @@ import { addTransaction, updateTransactionStatus } from './TransactionHistory';
 import { calculateAutoSlippage, getSlippageSeverityColor } from '@/lib/autoSlippage';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useTokenPairBalances } from '@/hooks/useStableBalances';
+import { playSwapSound, playSuccessSound, playErrorSound, playNotificationSound } from '@/lib/sounds';
 import {
   Tooltip,
   TooltipContent,
@@ -289,9 +290,13 @@ export function SwapCard() {
         status: 'pending',
       });
 
+      playNotificationSound();
       toast.info('Transaction submitted...');
       const receipt = await tx.wait();
       updateTransactionStatus(address, tx.hash, 'confirmed');
+      
+      playSuccessSound();
+      playSwapSound();
       toast.success(`Swap successful! TX: ${receipt.hash.slice(0, 10)}...`);
       
       setShowConfirmation(false);
@@ -300,6 +305,7 @@ export function SwapCard() {
       refetchBalances();
     } catch (error: any) {
       console.error('Swap error:', error);
+      playErrorSound();
       toast.error(error.reason || error.message || 'Swap failed');
     } finally {
       setLoading(false);
