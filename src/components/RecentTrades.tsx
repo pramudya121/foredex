@@ -129,14 +129,14 @@ function RecentTrades() {
 
   if (loading) {
     return (
-      <div className="glass-card p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <ArrowRightLeft className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">Recent Trades</h3>
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <ArrowRightLeft className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold">Recent Trades</h3>
         </div>
         <div className="space-y-2">
-          {Array(5).fill(0).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
+          {Array(4).fill(0).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
           ))}
         </div>
       </div>
@@ -144,19 +144,19 @@ function RecentTrades() {
   }
 
   return (
-    <div className="glass-card p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <ArrowRightLeft className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">Recent Trades</h3>
+          <ArrowRightLeft className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold">Recent Trades</h3>
         </div>
-        <span className="text-xs text-muted-foreground flex items-center gap-1">
+        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           Live
         </span>
       </div>
-      <div className="space-y-1">
-        {trades.map(trade => (
+      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+        {trades.slice(0, 6).map(trade => (
           <TradeRow 
             key={trade.id} 
             trade={trade} 

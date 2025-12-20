@@ -2,13 +2,12 @@ import { useState, memo, lazy, Suspense } from 'react';
 import { SwapCard } from '@/components/SwapCard';
 import { useLimitOrderMonitor } from '@/hooks/useLimitOrderMonitor';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeftRight, Target, Star } from 'lucide-react';
+import { ArrowLeftRight, Target } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import { PriceChart } from '@/components/PriceChart';
 import { TOKEN_LIST } from '@/config/contracts';
-import { TokenWatchlist } from '@/components/TokenWatchlist';
 
 // Lazy load components for better performance
 const LimitOrderPanel = lazy(() => 
@@ -95,22 +94,24 @@ const Index = () => {
           </Tabs>
         </div>
 
-        {/* Right Sidebar - Watchlist + Price Chart + Recent Trades */}
-        <div className="hidden lg:flex flex-col gap-4 w-full max-w-md">
-          {/* Token Watchlist */}
-          <TokenWatchlist />
+        {/* Right Sidebar - Price Chart + Recent Trades (More Compact) */}
+        <div className="hidden lg:flex flex-col gap-4 w-full max-w-sm">
+          {/* Price Chart - Compact */}
+          <div className="overflow-hidden rounded-2xl border border-border/30 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-sm shadow-xl">
+            <PriceChart 
+              token0Symbol="NEX" 
+              token1Symbol="FRDX" 
+              currentPrice={0.9976}
+              className="border-0 bg-transparent"
+            />
+          </div>
           
-          {/* Price Chart */}
-          <PriceChart 
-            token0Symbol="NEX" 
-            token1Symbol="FRDX" 
-            currentPrice={0.9976}
-          />
-          
-          {/* Recent Trades */}
-          <Suspense fallback={<WidgetLoading />}>
-            <RecentTrades />
-          </Suspense>
+          {/* Recent Trades - Compact */}
+          <div className="overflow-hidden rounded-2xl border border-border/30 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-sm shadow-xl">
+            <Suspense fallback={<WidgetLoading />}>
+              <RecentTrades />
+            </Suspense>
+          </div>
         </div>
       </div>
     </main>

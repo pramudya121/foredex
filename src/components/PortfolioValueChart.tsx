@@ -261,54 +261,105 @@ export function PortfolioValueChart() {
         </div>
       </div>
 
-      {/* Asset Allocation */}
+      {/* Asset Allocation - Enhanced Design */}
       {assets.length > 0 && (
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <PieChartIcon className="w-5 h-5 text-primary" />
-            Asset Allocation
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={assets}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {assets.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                    }}
-                    formatter={(value: number) => [value.toFixed(4), 'Value']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2">
-              {assets.map((asset, index) => (
-                <div key={index} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: asset.color }} />
-                    <span className="text-sm">{asset.name}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-mono">{asset.value.toFixed(4)}</p>
-                    <p className="text-xs text-muted-foreground">{asset.percentage.toFixed(1)}%</p>
+        <div className="glass-card overflow-hidden">
+          <div className="p-6 border-b border-border/30">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <PieChartIcon className="w-5 h-5 text-primary" />
+              Asset Allocation
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+            {/* Chart Section */}
+            <div className="p-6 flex items-center justify-center bg-gradient-to-br from-muted/20 to-transparent">
+              <div className="relative">
+                <div className="h-64 w-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <defs>
+                        {assets.map((entry, index) => (
+                          <linearGradient key={`gradient-${index}`} id={`gradient-${index}`} x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stopColor={entry.color} stopOpacity={1} />
+                            <stop offset="100%" stopColor={entry.color} stopOpacity={0.7} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <Pie
+                        data={assets}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={100}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="hsl(var(--background))"
+                        strokeWidth={2}
+                      >
+                        {assets.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '12px',
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                        }}
+                        formatter={(value: number, name: string) => [value.toFixed(4), name]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Center Label */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Total</p>
+                    <p className="text-xl font-bold">{totalValue.toFixed(2)}</p>
                   </div>
                 </div>
-              ))}
+              </div>
+            </div>
+            
+            {/* Assets List */}
+            <div className="p-4 border-t lg:border-t-0 lg:border-l border-border/30">
+              <div className="space-y-1 max-h-64 overflow-y-auto pr-2">
+                {assets.sort((a, b) => b.percentage - a.percentage).map((asset, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-muted/40 transition-all duration-200 group cursor-default"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-4 h-4 rounded-full shadow-lg ring-2 ring-background" 
+                        style={{ backgroundColor: asset.color }} 
+                      />
+                      <div>
+                        <p className="text-sm font-medium group-hover:text-primary transition-colors">
+                          {asset.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {asset.percentage.toFixed(1)}% of portfolio
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-mono font-medium">{asset.value.toFixed(4)}</p>
+                      <div className="w-20 h-1.5 bg-muted/30 rounded-full overflow-hidden mt-1">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${asset.percentage}%`,
+                            backgroundColor: asset.color 
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
