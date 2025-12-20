@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { CONTRACTS, TOKENS, NEXUS_TESTNET } from '@/config/contracts';
 import { 
   Book, 
@@ -87,6 +87,21 @@ const FEATURES_LIST = [
 
 const TODAYS_UPDATES = [
   {
+    title: 'Wolf Spinner Component',
+    description: 'Loading spinner baru dengan animasi logo wolf, breathing effect, glow, dan orbiting particles.',
+    type: 'new',
+  },
+  {
+    title: 'Page Transition Animations',
+    description: 'Animasi transisi halaman smooth dengan fade, scale, dan slide effects. Termasuk StaggerContainer dan FadeInView.',
+    type: 'new',
+  },
+  {
+    title: 'Enhanced Theme Toggle',
+    description: 'Toggle dark/light theme dengan animasi menarik - stars, clouds, rotation effect, dan glow transitions.',
+    type: 'improved',
+  },
+  {
     title: 'Transaction History Page',
     description: 'Halaman baru /history dengan filtering berdasarkan tipe transaksi (All/Swaps/Liquidity/Pending), clear history, dan responsive mobile.',
     type: 'new',
@@ -134,16 +149,6 @@ const TODAYS_UPDATES = [
   {
     title: 'Portfolio Analytics Enhancement',
     description: 'Perbaikan halaman portfolio dengan statistik P&L, performance metrics, dan visualisasi lebih baik.',
-    type: 'improved',
-  },
-  {
-    title: 'Header Navigation Update',
-    description: 'Menambahkan link History di navigasi desktop dan mobile.',
-    type: 'new',
-  },
-  {
-    title: 'Documentation Update',
-    description: 'Update halaman docs dengan pembaruan hari ini dan fitur-fitur terbaru.',
     type: 'improved',
   },
 ];
