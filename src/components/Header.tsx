@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
   { path: '/liquidity', label: 'Liquidity' },
   { path: '/pools', label: 'Pools' },
+  { path: '/farming', label: 'Farming' },
   { path: '/tokens', label: 'Tokens' },
   { path: '/compare', label: 'Compare' },
   { path: '/trading-analytics', label: 'P&L' },
