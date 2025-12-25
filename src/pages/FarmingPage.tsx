@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useFarmingData, PoolInfo } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Label } from '@/components/ui/label';
 import { 
   Dialog, 
   DialogContent, 
@@ -27,7 +28,11 @@ import {
   Flame,
   Sparkles,
   Clock,
-  Layers
+  Layers,
+  Shield,
+  Plus,
+  Settings,
+  Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -281,9 +286,193 @@ function StakeDialog({
   );
 }
 
+// Admin Panel Component
+function AdminPanel({ 
+  onAddPool, 
+  onSetAlloc,
+  pools,
+  isLoading 
+}: { 
+  onAddPool: (allocPoint: number, lpAddress: string) => Promise<void>;
+  onSetAlloc: (pid: number, allocPoint: number) => Promise<void>;
+  pools: PoolInfo[];
+  isLoading: boolean;
+}) {
+  const [lpAddress, setLpAddress] = useState('');
+  const [allocPoint, setAllocPoint] = useState('100');
+  const [addingPool, setAddingPool] = useState(false);
+  const [editPid, setEditPid] = useState<number | null>(null);
+  const [editAlloc, setEditAlloc] = useState('');
+  const [updatingAlloc, setUpdatingAlloc] = useState(false);
+
+  const handleAddPool = async () => {
+    if (!lpAddress || !allocPoint) {
+      toast.error('Please fill all fields');
+      return;
+    }
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(lpAddress)) {
+      toast.error('Invalid LP token address');
+      return;
+    }
+
+    setAddingPool(true);
+    try {
+      toast.loading('Adding new pool...', { id: 'add-pool' });
+      await onAddPool(parseInt(allocPoint), lpAddress);
+      toast.success('Pool added successfully!', { id: 'add-pool' });
+      setLpAddress('');
+      setAllocPoint('100');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add pool', { id: 'add-pool' });
+    } finally {
+      setAddingPool(false);
+    }
+  };
+
+  const handleUpdateAlloc = async () => {
+    if (editPid === null || !editAlloc) {
+      toast.error('Please select pool and enter allocation');
+      return;
+    }
+
+    setUpdatingAlloc(true);
+    try {
+      toast.loading('Updating allocation...', { id: 'update-alloc' });
+      await onSetAlloc(editPid, parseInt(editAlloc));
+      toast.success('Allocation updated!', { id: 'update-alloc' });
+      setEditPid(null);
+      setEditAlloc('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update', { id: 'update-alloc' });
+    } finally {
+      setUpdatingAlloc(false);
+    }
+  };
+
+  return (
+    <Card className="mb-8 border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+            <Shield className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              Admin Panel
+              <Badge variant="outline" className="border-primary/50 text-primary">Owner</Badge>
+            </CardTitle>
+            <CardDescription>Manage farming pools</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Add New Pool */}
+        <div className="space-y-4">
+          <h4 className="font-semibold flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add New Pool
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="lpAddress">LP Token Address</Label>
+              <Input
+                id="lpAddress"
+                placeholder="0x..."
+                value={lpAddress}
+                onChange={(e) => setLpAddress(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="allocPoint">Allocation Points</Label>
+              <Input
+                id="allocPoint"
+                type="number"
+                placeholder="100"
+                value={allocPoint}
+                onChange={(e) => setAllocPoint(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button 
+            onClick={handleAddPool} 
+            disabled={addingPool || isLoading}
+            className="bg-gradient-to-r from-primary to-primary/80"
+          >
+            {addingPool ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4 mr-2" />
+            )}
+            Add Pool
+          </Button>
+        </div>
+
+        {/* Modify Existing Pools */}
+        {pools.length > 0 && (
+          <div className="space-y-4 pt-4 border-t border-border/50">
+            <h4 className="font-semibold flex items-center gap-2">
+              <Settings className="w-4 h-4" /> Modify Pool Allocation
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Select Pool</Label>
+                <select
+                  value={editPid ?? ''}
+                  onChange={(e) => {
+                    const pid = e.target.value ? parseInt(e.target.value) : null;
+                    setEditPid(pid);
+                    if (pid !== null) {
+                      const pool = pools.find(p => p.pid === pid);
+                      setEditAlloc(pool?.allocPoint.toString() || '');
+                    }
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                >
+                  <option value="">Select pool...</option>
+                  {pools.map(pool => (
+                    <option key={pool.pid} value={pool.pid}>
+                      #{pool.pid} - {pool.token1Symbol ? `${pool.token0Symbol}-${pool.token1Symbol}` : pool.token0Symbol}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editAlloc">New Allocation</Label>
+                <Input
+                  id="editAlloc"
+                  type="number"
+                  placeholder="100"
+                  value={editAlloc}
+                  onChange={(e) => setEditAlloc(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button 
+                  onClick={handleUpdateAlloc} 
+                  disabled={updatingAlloc || editPid === null}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {updatingAlloc ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Update
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function FarmingPage() {
   const { isConnected } = useWeb3();
-  const { pools, stats, loading, error, refetch, deposit, withdraw, harvest } = useFarmingData();
+  const { pools, stats, loading, error, isOwner, refetch, deposit, withdraw, harvest, addPool, setPoolAlloc } = useFarmingData();
   const [selectedPool, setSelectedPool] = useState<PoolInfo | null>(null);
   const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -412,6 +601,16 @@ export default function FarmingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin Panel - Only visible to owner */}
+      {isOwner && (
+        <AdminPanel 
+          onAddPool={addPool} 
+          onSetAlloc={setPoolAlloc}
+          pools={pools}
+          isLoading={loading}
+        />
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="all" className="mb-6">
