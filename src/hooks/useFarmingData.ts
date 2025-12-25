@@ -38,6 +38,7 @@ export function useFarmingData() {
   const [stats, setStats] = useState<FarmingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   const getTokenSymbol = (tokenAddress: string): string => {
     const token = TOKEN_LIST.find(
@@ -55,7 +56,7 @@ export function useFarmingData() {
       const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, provider);
 
       // Fetch basic stats
-      const [rewardToken, rewardPerBlock, totalAllocPoint, startBlock, isPaused, poolLength] = 
+      const [rewardToken, rewardPerBlock, totalAllocPoint, startBlock, isPaused, poolLength, owner] = 
         await Promise.all([
           farmingContract.rewardToken(),
           farmingContract.rewardPerBlock(),
@@ -63,7 +64,13 @@ export function useFarmingData() {
           farmingContract.startBlock(),
           farmingContract.paused(),
           farmingContract.poolLength(),
+          farmingContract.owner(),
         ]);
+
+      // Check if current user is owner
+      if (address) {
+        setIsOwner(owner.toLowerCase() === address.toLowerCase());
+      }
 
       // Get reward token symbol
       let rewardTokenSymbol = 'FRDX';
@@ -227,6 +234,25 @@ export function useFarmingData() {
     return tx.wait();
   }, [signer]);
 
+  // Admin functions
+  const addPool = useCallback(async (allocPoint: number, lpTokenAddress: string) => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can add pools');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    const tx = await farmingContract.add(allocPoint, lpTokenAddress);
+    return tx.wait();
+  }, [signer, isOwner]);
+
+  const setPoolAlloc = useCallback(async (pid: number, allocPoint: number) => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can modify pools');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    const tx = await farmingContract.set(pid, allocPoint);
+    return tx.wait();
+  }, [signer, isOwner]);
+
   useEffect(() => {
     fetchFarmingData();
     const interval = setInterval(fetchFarmingData, 30000);
@@ -238,10 +264,13 @@ export function useFarmingData() {
     stats,
     loading,
     error,
+    isOwner,
     refetch: fetchFarmingData,
     deposit,
     withdraw,
     harvest,
     emergencyWithdraw,
+    addPool,
+    setPoolAlloc,
   };
 }
