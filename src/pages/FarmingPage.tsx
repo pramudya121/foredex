@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFarmingData, PoolInfo } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,8 +13,16 @@ import {
   DialogHeader, 
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Sprout, 
   TrendingUp, 
@@ -32,20 +40,27 @@ import {
   Shield,
   Plus,
   Settings,
-  Check
+  Check,
+  Zap,
+  Filter,
+  ArrowUpDown,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { TokenLogo } from '@/components/TokenLogo';
 
-function FarmCard({ pool, onDeposit, onWithdraw, onHarvest }: { 
+function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw }: { 
   pool: PoolInfo; 
   onDeposit: (pool: PoolInfo) => void;
   onWithdraw: (pool: PoolInfo) => void;
   onHarvest: (pid: number) => void;
+  onEmergencyWithdraw: (pid: number) => void;
 }) {
   const { isConnected } = useWeb3();
   const hasStake = parseFloat(pool.userStaked) > 0;
   const hasPending = parseFloat(pool.pendingReward) > 0;
+  const [showEmergency, setShowEmergency] = useState(false);
 
   return (
     <Card className="group relative overflow-hidden border-border/50 bg-gradient-to-br from-card/80 via-card to-card/90 backdrop-blur-sm hover:border-primary/50 transition-all duration-300">
@@ -62,19 +77,20 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest }: {
 
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-              <Sprout className="w-6 h-6 text-primary" />
-            </div>
+          <div className="relative flex -space-x-2">
+            <TokenLogo symbol={pool.token0Symbol} className="w-10 h-10 rounded-full border-2 border-card z-10" />
+            {pool.token1Symbol && (
+              <TokenLogo symbol={pool.token1Symbol} className="w-10 h-10 rounded-full border-2 border-card" />
+            )}
             {hasStake && (
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-card" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-card z-20" />
             )}
           </div>
           <div>
             <CardTitle className="text-lg font-bold">
               {pool.token1Symbol ? `${pool.token0Symbol}-${pool.token1Symbol}` : pool.token0Symbol}
             </CardTitle>
-            <p className="text-xs text-muted-foreground">Pool #{pool.pid}</p>
+            <p className="text-xs text-muted-foreground">Pool #{pool.pid} • {Number(pool.allocPoint)}x</p>
           </div>
         </div>
       </CardHeader>
@@ -84,10 +100,10 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest }: {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Layers className="w-3 h-3" /> Total Staked
+              <Layers className="w-3 h-3" /> TVL
             </p>
             <p className="text-sm font-semibold mt-1">
-              {parseFloat(pool.totalStaked).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+              {parseFloat(pool.totalStaked).toLocaleString(undefined, { maximumFractionDigits: 2 })} LP
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
@@ -145,13 +161,57 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest }: {
           </Button>
         </div>
 
-        {/* LP Balance */}
-        {isConnected && parseFloat(pool.lpBalance) > 0 && (
-          <p className="text-xs text-center text-muted-foreground">
-            Available: {parseFloat(pool.lpBalance).toFixed(6)} LP
-          </p>
-        )}
+        {/* LP Balance & Emergency */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          {isConnected && parseFloat(pool.lpBalance) > 0 ? (
+            <span>Available: {parseFloat(pool.lpBalance).toFixed(6)} LP</span>
+          ) : (
+            <span />
+          )}
+          {hasStake && (
+            <button
+              onClick={() => setShowEmergency(true)}
+              className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1"
+            >
+              <AlertTriangle className="w-3 h-3" />
+              Emergency
+            </button>
+          )}
+        </div>
       </CardContent>
+
+      {/* Emergency Withdraw Dialog */}
+      <Dialog open={showEmergency} onOpenChange={setShowEmergency}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Emergency Withdraw
+            </DialogTitle>
+            <DialogDescription>
+              This will withdraw all your staked LP tokens without harvesting pending rewards. Only use this if the normal withdraw is not working.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-medium">You will lose:</p>
+            <p className="text-lg font-bold text-destructive">{parseFloat(pool.pendingReward).toFixed(6)} rewards</p>
+            <p className="text-sm font-medium">You will receive:</p>
+            <p className="text-lg font-bold">{parseFloat(pool.userStaked).toFixed(6)} LP</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmergency(false)}>Cancel</Button>
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                onEmergencyWithdraw(pool.pid);
+                setShowEmergency(false);
+              }}
+            >
+              Confirm Emergency Withdraw
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -472,10 +532,27 @@ function AdminPanel({
 
 export default function FarmingPage() {
   const { isConnected } = useWeb3();
-  const { pools, stats, loading, error, isOwner, refetch, deposit, withdraw, harvest, addPool, setPoolAlloc } = useFarmingData();
+  const { pools, stats, loading, error, isOwner, refetch, deposit, withdraw, harvest, harvestAll, emergencyWithdraw, addPool, setPoolAlloc } = useFarmingData();
   const [selectedPool, setSelectedPool] = useState<PoolInfo | null>(null);
   const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
+  const [harvestingAll, setHarvestingAll] = useState(false);
+
+  const sortedPools = useMemo(() => {
+    return [...pools].sort((a, b) => {
+      switch (sortBy) {
+        case 'apr':
+          return b.apr - a.apr;
+        case 'tvl':
+          return parseFloat(b.totalStaked) - parseFloat(a.totalStaked);
+        case 'newest':
+          return b.pid - a.pid;
+        default:
+          return 0;
+      }
+    });
+  }, [pools, sortBy]);
 
   const handleDeposit = (pool: PoolInfo) => {
     setSelectedPool(pool);
@@ -497,6 +574,36 @@ export default function FarmingPage() {
       refetch();
     } catch (err: any) {
       toast.error(err.message || 'Failed to harvest', { id: 'harvest' });
+    }
+  };
+
+  const handleHarvestAll = async () => {
+    const poolsWithRewards = pools.filter(p => parseFloat(p.pendingReward) > 0);
+    if (poolsWithRewards.length === 0) {
+      toast.error('No rewards to harvest');
+      return;
+    }
+    setHarvestingAll(true);
+    try {
+      toast.loading(`Harvesting from ${poolsWithRewards.length} pools...`, { id: 'harvest-all' });
+      await harvestAll();
+      toast.success('All rewards harvested!', { id: 'harvest-all' });
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to harvest all', { id: 'harvest-all' });
+    } finally {
+      setHarvestingAll(false);
+    }
+  };
+
+  const handleEmergencyWithdraw = async (pid: number) => {
+    try {
+      toast.loading('Emergency withdrawing...', { id: 'emergency' });
+      await emergencyWithdraw(pid);
+      toast.success('Emergency withdraw successful!', { id: 'emergency' });
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Emergency withdraw failed', { id: 'emergency' });
     }
   };
 
@@ -523,6 +630,7 @@ export default function FarmingPage() {
 
   const totalPending = pools.reduce((sum, p) => sum + parseFloat(p.pendingReward), 0);
   const totalStaked = pools.reduce((sum, p) => sum + parseFloat(p.userStaked), 0);
+  const totalTVL = pools.reduce((sum, p) => sum + parseFloat(p.totalStaked), 0);
 
   return (
     <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
@@ -542,16 +650,31 @@ export default function FarmingPage() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <Card className="bg-gradient-to-br from-card to-card/80 border-border/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Layers className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total TVL</p>
+                <p className="text-xl font-bold">{totalTVL.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">LP Tokens</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="bg-gradient-to-br from-card to-card/80 border-border/50">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Layers className="w-5 h-5 text-primary" />
+                <Sprout className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Pools</p>
-                <p className="text-2xl font-bold">{pools.length}</p>
+                <p className="text-xs text-muted-foreground">Active Pools</p>
+                <p className="text-xl font-bold">{pools.length}</p>
               </div>
             </div>
           </CardContent>
@@ -564,8 +687,8 @@ export default function FarmingPage() {
                 <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Your Staked</p>
-                <p className="text-2xl font-bold">{totalStaked.toFixed(4)}</p>
+                <p className="text-xs text-muted-foreground">Your Staked</p>
+                <p className="text-xl font-bold">{totalStaked.toFixed(4)}</p>
               </div>
             </div>
           </CardContent>
@@ -578,8 +701,8 @@ export default function FarmingPage() {
                 <Gift className="w-5 h-5 text-yellow-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Pending Rewards</p>
-                <p className="text-2xl font-bold">{totalPending.toFixed(4)}</p>
+                <p className="text-xs text-muted-foreground">Pending Rewards</p>
+                <p className="text-xl font-bold text-yellow-500">{totalPending.toFixed(4)}</p>
               </div>
             </div>
           </CardContent>
@@ -589,11 +712,11 @@ export default function FarmingPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-purple-500" />
+                <Coins className="w-5 h-5 text-purple-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Reward/Block</p>
-                <p className="text-2xl font-bold">
+                <p className="text-xs text-muted-foreground">Reward/Block</p>
+                <p className="text-xl font-bold">
                   {stats ? parseFloat(stats.rewardPerBlock).toFixed(4) : '0'}
                 </p>
               </div>
@@ -619,10 +742,42 @@ export default function FarmingPage() {
             <TabsTrigger value="all">All Farms</TabsTrigger>
             <TabsTrigger value="my">My Farms</TabsTrigger>
           </TabsList>
-          <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Sort */}
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[140px] h-9">
+                <ArrowUpDown className="w-3 h-3 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="apr">Highest APR</SelectItem>
+                <SelectItem value="tvl">Highest TVL</SelectItem>
+                <SelectItem value="newest">Newest</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Harvest All */}
+            {totalPending > 0 && isConnected && (
+              <Button 
+                size="sm" 
+                onClick={handleHarvestAll}
+                disabled={harvestingAll}
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white"
+              >
+                {harvestingAll ? (
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                Harvest All
+              </Button>
+            )}
+            
+            <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
+              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {!isConnected && (
@@ -663,7 +818,7 @@ export default function FarmingPage() {
                 </Card>
               ))}
             </div>
-          ) : pools.length === 0 ? (
+          ) : sortedPools.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-16">
                 <Sprout className="w-16 h-16 text-muted-foreground/30 mb-4" />
@@ -675,13 +830,14 @@ export default function FarmingPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pools.map((pool) => (
+              {sortedPools.map((pool) => (
                 <FarmCard
                   key={pool.pid}
                   pool={pool}
                   onDeposit={handleDeposit}
                   onWithdraw={handleWithdraw}
                   onHarvest={handleHarvest}
+                  onEmergencyWithdraw={handleEmergencyWithdraw}
                 />
               ))}
             </div>
@@ -702,7 +858,7 @@ export default function FarmingPage() {
             </div>
           ) : (
             (() => {
-              const myPools = pools.filter(p => parseFloat(p.userStaked) > 0);
+              const myPools = sortedPools.filter(p => parseFloat(p.userStaked) > 0);
               if (myPools.length === 0) {
                 return (
                   <Card className="border-dashed">
@@ -725,6 +881,7 @@ export default function FarmingPage() {
                       onDeposit={handleDeposit}
                       onWithdraw={handleWithdraw}
                       onHarvest={handleHarvest}
+                      onEmergencyWithdraw={handleEmergencyWithdraw}
                     />
                   ))}
                 </div>

@@ -226,6 +226,18 @@ export function useFarmingData() {
     return tx.wait();
   }, [signer]);
 
+  const harvestAll = useCallback(async () => {
+    if (!signer) throw new Error('Wallet not connected');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    const poolsWithRewards = pools.filter(p => parseFloat(p.pendingReward) > 0);
+    
+    for (const pool of poolsWithRewards) {
+      const tx = await farmingContract.harvest(pool.pid);
+      await tx.wait();
+    }
+  }, [signer, pools]);
+
   const emergencyWithdraw = useCallback(async (pid: number) => {
     if (!signer) throw new Error('Wallet not connected');
 
@@ -269,6 +281,7 @@ export function useFarmingData() {
     deposit,
     withdraw,
     harvest,
+    harvestAll,
     emergencyWithdraw,
     addPool,
     setPoolAlloc,
