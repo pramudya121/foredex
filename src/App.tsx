@@ -16,6 +16,7 @@ import { PageTransition } from "@/components/PageTransition";
 const Index = lazy(() => import("./pages/Index"));
 const Liquidity = lazy(() => import("./pages/Liquidity"));
 const Pools = lazy(() => import("./pages/Pools"));
+const FarmingPage = lazy(() => import("./pages/FarmingPage"));
 const TokensPage = lazy(() => import("./pages/TokensPage"));
 const TokenDetailPage = lazy(() => import("./pages/TokenDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
@@ -59,6 +60,7 @@ const AppContent = memo(function AppContent() {
             <Route path="/" element={<Index />} />
             <Route path="/liquidity" element={<Liquidity />} />
             <Route path="/pools" element={<Pools />} />
+            <Route path="/farming" element={<FarmingPage />} />
             <Route path="/tokens" element={<TokensPage />} />
             <Route path="/tokens/:address" element={<TokenDetailPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
