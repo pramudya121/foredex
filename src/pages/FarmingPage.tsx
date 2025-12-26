@@ -393,7 +393,9 @@ function AdminPanel({
   onUpdatePool,
   pools,
   isLoading,
-  isPaused
+  isPaused,
+  isOpen,
+  onToggle
 }: { 
   onAddPool: (allocPoint: number, lpAddress: string) => Promise<void>;
   onSetAlloc: (pid: number, allocPoint: number) => Promise<void>;
@@ -403,6 +405,8 @@ function AdminPanel({
   pools: PoolInfo[];
   isLoading: boolean;
   isPaused: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const [lpAddress, setLpAddress] = useState('');
   const [allocPoint, setAllocPoint] = useState('100');
@@ -490,6 +494,19 @@ function AdminPanel({
     }
   };
 
+  if (!isOpen) {
+    return (
+      <Button 
+        onClick={onToggle}
+        className="mb-8 bg-gradient-to-r from-primary/80 to-primary border-primary/30"
+      >
+        <Shield className="w-4 h-4 mr-2" />
+        Open Admin Panel
+        {isPaused && <Badge variant="destructive" className="ml-2">Paused</Badge>}
+      </Button>
+    );
+  }
+
   return (
     <Card className="mb-8 border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card">
       <CardHeader>
@@ -509,21 +526,26 @@ function AdminPanel({
               <CardDescription>Manage farming pools</CardDescription>
             </div>
           </div>
-          <Button
-            variant={isPaused ? "default" : "destructive"}
-            size="sm"
-            onClick={handlePauseToggle}
-            disabled={pausing}
-          >
-            {pausing ? (
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-            ) : isPaused ? (
-              <Play className="w-4 h-4 mr-2" />
-            ) : (
-              <Pause className="w-4 h-4 mr-2" />
-            )}
-            {isPaused ? 'Unpause' : 'Pause'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={isPaused ? "default" : "destructive"}
+              size="sm"
+              onClick={handlePauseToggle}
+              disabled={pausing}
+            >
+              {pausing ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : isPaused ? (
+                <Play className="w-4 h-4 mr-2" />
+              ) : (
+                <Pause className="w-4 h-4 mr-2" />
+              )}
+              {isPaused ? 'Unpause' : 'Pause'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onToggle}>
+              Close
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -671,6 +693,7 @@ export default function FarmingPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
   const [harvestingAll, setHarvestingAll] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const sortedPools = useMemo(() => {
     return [...pools].sort((a, b) => {
@@ -873,6 +896,8 @@ export default function FarmingPage() {
           pools={pools}
           isLoading={loading}
           isPaused={stats?.isPaused || false}
+          isOpen={showAdminPanel}
+          onToggle={() => setShowAdminPanel(!showAdminPanel)}
         />
       )}
 
