@@ -1,7 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ethers } from 'ethers';
 import { useFarmingData, PoolInfo } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
+import { CONTRACTS } from '@/config/contracts';
+import { ERC20_ABI } from '@/config/abis';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -240,13 +243,60 @@ function DepositWithdrawDialog({
   mode: 'deposit' | 'withdraw';
   onConfirm: (amount: string) => void;
 }) {
+  const { signer, address } = useWeb3();
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
 
   const maxAmount = mode === 'deposit' ? pool?.lpBalance : pool?.userStaked;
 
+  // Check approval status for deposits
+  useEffect(() => {
+    const checkApproval = async () => {
+      if (!pool || !address || !amount || mode !== 'deposit') {
+        setIsApproved(mode === 'withdraw');
+        return;
+      }
+
+      try {
+        const provider = signer?.provider;
+        if (!provider) return;
+
+        const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, provider);
+        const amountWei = ethers.parseEther(amount || '0');
+        const allowance = await lpContract.allowance(address, CONTRACTS.FARMING);
+        setIsApproved(allowance >= amountWei);
+      } catch (error) {
+        console.error('Error checking approval:', error);
+        setIsApproved(false);
+      }
+    };
+
+    checkApproval();
+  }, [pool, address, amount, mode, signer]);
+
   const handleMax = () => {
     if (maxAmount) setAmount(maxAmount);
+  };
+
+  const handleApprove = async () => {
+    if (!signer || !pool) return;
+
+    setApproving(true);
+    try {
+      const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, signer);
+      toast.loading('Approving LP token...', { id: 'approve-lp' });
+      const tx = await lpContract.approve(CONTRACTS.FARMING, ethers.MaxUint256);
+      await tx.wait();
+      toast.success('LP token approved!', { id: 'approve-lp' });
+      setIsApproved(true);
+    } catch (error: any) {
+      console.error('Approval error:', error);
+      toast.error(error.reason || error.message || 'Failed to approve', { id: 'approve-lp' });
+    } finally {
+      setApproving(false);
+    }
   };
 
   const handleConfirm = async () => {
@@ -259,16 +309,28 @@ function DepositWithdrawDialog({
       await onConfirm(amount);
       setAmount('');
       onClose();
+    } catch (error: any) {
+      console.error('Transaction error:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setAmount('');
+      setIsApproved(false);
+    }
+  }, [isOpen]);
 
   if (!pool) return null;
 
   const pairName = pool.token1Symbol 
     ? `${pool.token0Symbol}-${pool.token1Symbol}` 
     : pool.token0Symbol;
+
+  const needsApproval = mode === 'deposit' && !isApproved && amount && parseFloat(amount) > 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -356,28 +418,45 @@ function DepositWithdrawDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+        <DialogFooter className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button 
-            onClick={handleConfirm}
-            disabled={loading || !amount || parseFloat(amount) <= 0}
-            className={cn(
-              mode === 'deposit' 
-                ? 'bg-gradient-to-r from-primary to-primary/80' 
-                : 'bg-gradient-to-r from-orange-500 to-orange-600'
-            )}
-          >
-            {loading ? (
-              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-            ) : mode === 'deposit' ? (
-              <ArrowDownToLine className="w-4 h-4 mr-2" />
-            ) : (
-              <ArrowUpFromLine className="w-4 h-4 mr-2" />
-            )}
-            {mode === 'deposit' ? 'Deposit' : 'Withdraw'}
-          </Button>
+          
+          {needsApproval ? (
+            <Button 
+              onClick={handleApprove}
+              disabled={approving}
+              className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/80"
+            >
+              {approving ? (
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Approve LP Token
+            </Button>
+          ) : (
+            <Button 
+              onClick={handleConfirm}
+              disabled={loading || !amount || parseFloat(amount) <= 0}
+              className={cn(
+                "w-full sm:w-auto",
+                mode === 'deposit' 
+                  ? 'bg-gradient-to-r from-primary to-primary/80' 
+                  : 'bg-gradient-to-r from-orange-500 to-orange-600'
+              )}
+            >
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+              ) : mode === 'deposit' ? (
+                <ArrowDownToLine className="w-4 h-4 mr-2" />
+              ) : (
+                <ArrowUpFromLine className="w-4 h-4 mr-2" />
+              )}
+              {mode === 'deposit' ? 'Deposit' : 'Withdraw'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
