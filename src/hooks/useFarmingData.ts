@@ -188,6 +188,7 @@ export function useFarmingData() {
     }
   }, [address]);
 
+  // Contract write functions - using contract's actual function names
   const deposit = useCallback(async (pid: number, amount: string) => {
     if (!signer || !address) throw new Error('Wallet not connected');
 
@@ -205,6 +206,7 @@ export function useFarmingData() {
       await approveTx.wait();
     }
 
+    // Call deposit function on contract
     const tx = await farmingContract.deposit(pid, amountWei);
     return tx.wait();
   }, [signer, address, pools]);
@@ -214,6 +216,7 @@ export function useFarmingData() {
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
     const amountWei = ethers.parseEther(amount);
+    // Call withdraw function on contract
     const tx = await farmingContract.withdraw(pid, amountWei);
     return tx.wait();
   }, [signer]);
@@ -222,6 +225,7 @@ export function useFarmingData() {
     if (!signer) throw new Error('Wallet not connected');
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call harvest function on contract
     const tx = await farmingContract.harvest(pid);
     return tx.wait();
   }, [signer]);
@@ -242,6 +246,7 @@ export function useFarmingData() {
     if (!signer) throw new Error('Wallet not connected');
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call emergencyWithdraw function on contract
     const tx = await farmingContract.emergencyWithdraw(pid);
     return tx.wait();
   }, [signer]);
@@ -252,6 +257,7 @@ export function useFarmingData() {
     if (!isOwner) throw new Error('Only owner can add pools');
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call add function on contract
     const tx = await farmingContract.add(allocPoint, lpTokenAddress);
     return tx.wait();
   }, [signer, isOwner]);
@@ -261,9 +267,59 @@ export function useFarmingData() {
     if (!isOwner) throw new Error('Only owner can modify pools');
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call set function on contract
     const tx = await farmingContract.set(pid, allocPoint);
     return tx.wait();
   }, [signer, isOwner]);
+
+  const pause = useCallback(async () => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can pause');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call pause function on contract
+    const tx = await farmingContract.pause();
+    return tx.wait();
+  }, [signer, isOwner]);
+
+  const unpause = useCallback(async () => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can unpause');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call unpause function on contract
+    const tx = await farmingContract.unpause();
+    return tx.wait();
+  }, [signer, isOwner]);
+
+  const updatePool = useCallback(async (pid: number) => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can update pools');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call updatePool function on contract
+    const tx = await farmingContract.updatePool(pid);
+    return tx.wait();
+  }, [signer, isOwner]);
+
+  const setPendingOwner = useCallback(async (newOwner: string) => {
+    if (!signer) throw new Error('Wallet not connected');
+    if (!isOwner) throw new Error('Only owner can set pending owner');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call setPendingOwner function on contract
+    const tx = await farmingContract.setPendingOwner(newOwner);
+    return tx.wait();
+  }, [signer, isOwner]);
+
+  const acceptOwnership = useCallback(async () => {
+    if (!signer) throw new Error('Wallet not connected');
+
+    const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+    // Call acceptOwnership function on contract
+    const tx = await farmingContract.acceptOwnership();
+    return tx.wait();
+  }, [signer]);
 
   useEffect(() => {
     fetchFarmingData();
@@ -278,12 +334,19 @@ export function useFarmingData() {
     error,
     isOwner,
     refetch: fetchFarmingData,
+    // User functions (matching contract)
     deposit,
     withdraw,
     harvest,
     harvestAll,
     emergencyWithdraw,
+    // Admin functions (matching contract)
     addPool,
     setPoolAlloc,
+    pause,
+    unpause,
+    updatePool,
+    setPendingOwner,
+    acceptOwnership,
   };
 }

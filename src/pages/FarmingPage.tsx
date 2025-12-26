@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useFarmingData, PoolInfo } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,30 +36,32 @@ import {
   AlertTriangle,
   Flame,
   Sparkles,
-  Clock,
   Layers,
   Shield,
   Plus,
   Settings,
   Check,
   Zap,
-  Filter,
   ArrowUpDown,
-  ExternalLink
+  ChevronRight,
+  Pause,
+  Play,
+  RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from '@/components/TokenLogo';
 
-function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw }: { 
+function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw, onViewDetails }: { 
   pool: PoolInfo; 
   onDeposit: (pool: PoolInfo) => void;
   onWithdraw: (pool: PoolInfo) => void;
   onHarvest: (pid: number) => void;
   onEmergencyWithdraw: (pid: number) => void;
+  onViewDetails: (pool: PoolInfo) => void;
 }) {
   const { isConnected } = useWeb3();
-  const hasStake = parseFloat(pool.userStaked) > 0;
+  const hasDeposit = parseFloat(pool.userStaked) > 0;
   const hasPending = parseFloat(pool.pendingReward) > 0;
   const [showEmergency, setShowEmergency] = useState(false);
 
@@ -82,7 +85,7 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
             {pool.token1Symbol && (
               <TokenLogo symbol={pool.token1Symbol} className="w-10 h-10 rounded-full border-2 border-card" />
             )}
-            {hasStake && (
+            {hasDeposit && (
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-card z-20" />
             )}
           </div>
@@ -108,7 +111,7 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
           </div>
           <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Coins className="w-3 h-3" /> Your Stake
+              <Coins className="w-3 h-3" /> Your Deposit
             </p>
             <p className="text-sm font-semibold mt-1">
               {parseFloat(pool.userStaked).toLocaleString(undefined, { maximumFractionDigits: 4 })}
@@ -139,7 +142,7 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Changed to Deposit/Withdraw */}
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
@@ -148,35 +151,43 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
             disabled={!isConnected}
           >
             <ArrowDownToLine className="w-4 h-4 mr-2" />
-            Stake
+            Deposit
           </Button>
           <Button
             variant="outline"
-            className="w-full border-destructive/30 hover:bg-destructive/10 text-foreground"
+            className="w-full border-orange-500/30 hover:bg-orange-500/10 text-foreground"
             onClick={() => onWithdraw(pool)}
-            disabled={!isConnected || !hasStake}
+            disabled={!isConnected || !hasDeposit}
           >
             <ArrowUpFromLine className="w-4 h-4 mr-2" />
-            Unstake
+            Withdraw
           </Button>
         </div>
 
-        {/* LP Balance & Emergency */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          {isConnected && parseFloat(pool.lpBalance) > 0 ? (
-            <span>Available: {parseFloat(pool.lpBalance).toFixed(6)} LP</span>
-          ) : (
-            <span />
-          )}
-          {hasStake && (
-            <button
-              onClick={() => setShowEmergency(true)}
-              className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1"
-            >
-              <AlertTriangle className="w-3 h-3" />
-              Emergency
-            </button>
-          )}
+        {/* View Details & Emergency */}
+        <div className="flex items-center justify-between text-xs">
+          <button
+            onClick={() => onViewDetails(pool)}
+            className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+          >
+            View Details
+            <ChevronRight className="w-3 h-3" />
+          </button>
+          
+          <div className="flex items-center gap-3">
+            {isConnected && parseFloat(pool.lpBalance) > 0 && (
+              <span className="text-muted-foreground">Available: {parseFloat(pool.lpBalance).toFixed(4)} LP</span>
+            )}
+            {hasDeposit && (
+              <button
+                onClick={() => setShowEmergency(true)}
+                className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                Emergency
+              </button>
+            )}
+          </div>
         </div>
       </CardContent>
 
@@ -189,7 +200,7 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
               Emergency Withdraw
             </DialogTitle>
             <DialogDescription>
-              This will withdraw all your staked LP tokens without harvesting pending rewards. Only use this if the normal withdraw is not working.
+              This will withdraw all your deposited LP tokens without harvesting pending rewards. Only use this if the normal withdraw is not working.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-2">
@@ -216,7 +227,7 @@ function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw 
   );
 }
 
-function StakeDialog({ 
+function DepositWithdrawDialog({ 
   pool, 
   isOpen, 
   onClose, 
@@ -267,13 +278,24 @@ function StakeDialog({
             {mode === 'deposit' ? (
               <ArrowDownToLine className="w-5 h-5 text-primary" />
             ) : (
-              <ArrowUpFromLine className="w-5 h-5 text-destructive" />
+              <ArrowUpFromLine className="w-5 h-5 text-orange-500" />
             )}
-            {mode === 'deposit' ? 'Stake' : 'Unstake'} {pairName}
+            {mode === 'deposit' ? 'Deposit' : 'Withdraw'} {pairName}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Token Pair Display */}
+          <div className="flex items-center justify-center gap-2 pb-2">
+            <TokenLogo symbol={pool.token0Symbol} size="lg" />
+            {pool.token1Symbol && (
+              <>
+                <span className="text-muted-foreground">+</span>
+                <TokenLogo symbol={pool.token1Symbol} size="lg" />
+              </>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Amount</span>
@@ -316,6 +338,22 @@ function StakeDialog({
               </div>
             </div>
           )}
+
+          {mode === 'withdraw' && (
+            <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Current Deposit</span>
+                <span>{parseFloat(pool.userStaked).toFixed(6)} LP</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pending Rewards</span>
+                <span className="text-primary">{parseFloat(pool.pendingReward).toFixed(6)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Note: Withdrawing will also harvest your pending rewards.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -328,7 +366,7 @@ function StakeDialog({
             className={cn(
               mode === 'deposit' 
                 ? 'bg-gradient-to-r from-primary to-primary/80' 
-                : 'bg-gradient-to-r from-destructive to-destructive/80'
+                : 'bg-gradient-to-r from-orange-500 to-orange-600'
             )}
           >
             {loading ? (
@@ -338,7 +376,7 @@ function StakeDialog({
             ) : (
               <ArrowUpFromLine className="w-4 h-4 mr-2" />
             )}
-            {mode === 'deposit' ? 'Stake' : 'Unstake'}
+            {mode === 'deposit' ? 'Deposit' : 'Withdraw'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -350,13 +388,21 @@ function StakeDialog({
 function AdminPanel({ 
   onAddPool, 
   onSetAlloc,
+  onPause,
+  onUnpause,
+  onUpdatePool,
   pools,
-  isLoading 
+  isLoading,
+  isPaused
 }: { 
   onAddPool: (allocPoint: number, lpAddress: string) => Promise<void>;
   onSetAlloc: (pid: number, allocPoint: number) => Promise<void>;
+  onPause: () => Promise<void>;
+  onUnpause: () => Promise<void>;
+  onUpdatePool: (pid: number) => Promise<void>;
   pools: PoolInfo[];
   isLoading: boolean;
+  isPaused: boolean;
 }) {
   const [lpAddress, setLpAddress] = useState('');
   const [allocPoint, setAllocPoint] = useState('100');
@@ -364,6 +410,8 @@ function AdminPanel({
   const [editPid, setEditPid] = useState<number | null>(null);
   const [editAlloc, setEditAlloc] = useState('');
   const [updatingAlloc, setUpdatingAlloc] = useState(false);
+  const [pausing, setPausing] = useState(false);
+  const [updatingPool, setUpdatingPool] = useState<number | null>(null);
 
   const handleAddPool = async () => {
     if (!lpAddress || !allocPoint) {
@@ -410,20 +458,72 @@ function AdminPanel({
     }
   };
 
+  const handlePauseToggle = async () => {
+    setPausing(true);
+    try {
+      if (isPaused) {
+        toast.loading('Unpausing contract...', { id: 'pause' });
+        await onUnpause();
+        toast.success('Contract unpaused!', { id: 'pause' });
+      } else {
+        toast.loading('Pausing contract...', { id: 'pause' });
+        await onPause();
+        toast.success('Contract paused!', { id: 'pause' });
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to toggle pause', { id: 'pause' });
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  const handleUpdatePool = async (pid: number) => {
+    setUpdatingPool(pid);
+    try {
+      toast.loading(`Updating pool #${pid}...`, { id: 'update-pool' });
+      await onUpdatePool(pid);
+      toast.success('Pool updated!', { id: 'update-pool' });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update pool', { id: 'update-pool' });
+    } finally {
+      setUpdatingPool(null);
+    }
+  };
+
   return (
     <Card className="mb-8 border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card">
       <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-primary" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                Admin Panel
+                <Badge variant="outline" className="border-primary/50 text-primary">Owner</Badge>
+                {isPaused && (
+                  <Badge variant="destructive" className="ml-2">Paused</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>Manage farming pools</CardDescription>
+            </div>
           </div>
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              Admin Panel
-              <Badge variant="outline" className="border-primary/50 text-primary">Owner</Badge>
-            </CardTitle>
-            <CardDescription>Manage farming pools</CardDescription>
-          </div>
+          <Button
+            variant={isPaused ? "default" : "destructive"}
+            size="sm"
+            onClick={handlePauseToggle}
+            disabled={pausing}
+          >
+            {pausing ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : isPaused ? (
+              <Play className="w-4 h-4 mr-2" />
+            ) : (
+              <Pause className="w-4 h-4 mr-2" />
+            )}
+            {isPaused ? 'Unpause' : 'Pause'}
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -474,7 +574,7 @@ function AdminPanel({
             <h4 className="font-semibold flex items-center gap-2">
               <Settings className="w-4 h-4" /> Modify Pool Allocation
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Select Pool</Label>
                 <select
@@ -519,7 +619,22 @@ function AdminPanel({
                   ) : (
                     <Check className="w-4 h-4 mr-2" />
                   )}
-                  Update
+                  Update Alloc
+                </Button>
+              </div>
+              <div className="flex items-end">
+                <Button 
+                  onClick={() => editPid !== null && handleUpdatePool(editPid)} 
+                  disabled={updatingPool !== null || editPid === null}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {updatingPool === editPid ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                  )}
+                  Update Pool
                 </Button>
               </div>
             </div>
@@ -531,8 +646,26 @@ function AdminPanel({
 }
 
 export default function FarmingPage() {
+  const navigate = useNavigate();
   const { isConnected } = useWeb3();
-  const { pools, stats, loading, error, isOwner, refetch, deposit, withdraw, harvest, harvestAll, emergencyWithdraw, addPool, setPoolAlloc } = useFarmingData();
+  const { 
+    pools, 
+    stats, 
+    loading, 
+    error, 
+    isOwner, 
+    refetch, 
+    deposit, 
+    withdraw, 
+    harvest, 
+    harvestAll, 
+    emergencyWithdraw, 
+    addPool, 
+    setPoolAlloc,
+    pause,
+    unpause,
+    updatePool
+  } = useFarmingData();
   const [selectedPool, setSelectedPool] = useState<PoolInfo | null>(null);
   const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -607,11 +740,15 @@ export default function FarmingPage() {
     }
   };
 
+  const handleViewDetails = (pool: PoolInfo) => {
+    navigate(`/farming/${pool.pid}`);
+  };
+
   const handleConfirmAction = async (amount: string) => {
     if (!selectedPool) return;
 
     try {
-      const action = dialogMode === 'deposit' ? 'Staking' : 'Unstaking';
+      const action = dialogMode === 'deposit' ? 'Depositing' : 'Withdrawing';
       toast.loading(`${action}...`, { id: 'action' });
       
       if (dialogMode === 'deposit') {
@@ -620,7 +757,7 @@ export default function FarmingPage() {
         await withdraw(selectedPool.pid, amount);
       }
       
-      toast.success(`${action} successful!`, { id: 'action' });
+      toast.success(`${dialogMode === 'deposit' ? 'Deposit' : 'Withdraw'} successful!`, { id: 'action' });
       refetch();
     } catch (err: any) {
       toast.error(err.message || 'Transaction failed', { id: 'action' });
@@ -629,7 +766,7 @@ export default function FarmingPage() {
   };
 
   const totalPending = pools.reduce((sum, p) => sum + parseFloat(p.pendingReward), 0);
-  const totalStaked = pools.reduce((sum, p) => sum + parseFloat(p.userStaked), 0);
+  const totalDeposited = pools.reduce((sum, p) => sum + parseFloat(p.userStaked), 0);
   const totalTVL = pools.reduce((sum, p) => sum + parseFloat(p.totalStaked), 0);
 
   return (
@@ -644,7 +781,7 @@ export default function FarmingPage() {
           Farm & Earn Rewards
         </h1>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          Stake your LP tokens to earn {stats?.rewardTokenSymbol || 'FRDX'} rewards. 
+          Deposit your LP tokens to earn {stats?.rewardTokenSymbol || 'FRDX'} rewards. 
           Higher APR pools mean more rewards!
         </p>
       </div>
@@ -687,8 +824,8 @@ export default function FarmingPage() {
                 <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Your Staked</p>
-                <p className="text-xl font-bold">{totalStaked.toFixed(4)}</p>
+                <p className="text-xs text-muted-foreground">Your Deposits</p>
+                <p className="text-xl font-bold">{totalDeposited.toFixed(4)}</p>
               </div>
             </div>
           </CardContent>
@@ -730,8 +867,12 @@ export default function FarmingPage() {
         <AdminPanel 
           onAddPool={addPool} 
           onSetAlloc={setPoolAlloc}
+          onPause={pause}
+          onUnpause={unpause}
+          onUpdatePool={updatePool}
           pools={pools}
           isLoading={loading}
+          isPaused={stats?.isPaused || false}
         />
       )}
 
@@ -784,7 +925,7 @@ export default function FarmingPage() {
           <Card className="mb-6 border-yellow-500/30 bg-yellow-500/5">
             <CardContent className="flex items-center gap-3 py-4">
               <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              <p className="text-sm">Connect your wallet to stake LP tokens and earn rewards.</p>
+              <p className="text-sm">Connect your wallet to deposit LP tokens and earn rewards.</p>
             </CardContent>
           </Card>
         )}
@@ -838,6 +979,7 @@ export default function FarmingPage() {
                   onWithdraw={handleWithdraw}
                   onHarvest={handleHarvest}
                   onEmergencyWithdraw={handleEmergencyWithdraw}
+                  onViewDetails={handleViewDetails}
                 />
               ))}
             </div>
@@ -864,9 +1006,9 @@ export default function FarmingPage() {
                   <Card className="border-dashed">
                     <CardContent className="flex flex-col items-center justify-center py-16">
                       <Wallet className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                      <h3 className="text-lg font-medium mb-2">No Active Stakes</h3>
+                      <h3 className="text-lg font-medium mb-2">No Active Deposits</h3>
                       <p className="text-muted-foreground text-center max-w-md">
-                        You haven't staked in any farms yet. Browse available farms and start earning rewards!
+                        You haven't deposited in any farms yet. Browse available farms and start earning rewards!
                       </p>
                     </CardContent>
                   </Card>
@@ -882,6 +1024,7 @@ export default function FarmingPage() {
                       onWithdraw={handleWithdraw}
                       onHarvest={handleHarvest}
                       onEmergencyWithdraw={handleEmergencyWithdraw}
+                      onViewDetails={handleViewDetails}
                     />
                   ))}
                 </div>
@@ -891,8 +1034,8 @@ export default function FarmingPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Stake Dialog */}
-      <StakeDialog
+      {/* Deposit/Withdraw Dialog */}
+      <DepositWithdrawDialog
         pool={selectedPool}
         isOpen={dialogOpen}
         onClose={() => setDialogOpen(false)}
