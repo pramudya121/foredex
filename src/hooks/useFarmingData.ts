@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
+import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FARMING_ABI } from '@/config/farmingAbi';
 import { ERC20_ABI, PAIR_ABI } from '@/config/abis';
-import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface PoolInfo {
   pid: number;
@@ -32,6 +31,40 @@ export interface FarmingStats {
   isPaused: boolean;
 }
 
+// Helper to create provider with retry
+const createProvider = () => {
+  const network = {
+    chainId: NEXUS_TESTNET.chainId,
+    name: NEXUS_TESTNET.name,
+  };
+  
+  return new ethers.JsonRpcProvider(
+    NEXUS_TESTNET.rpcUrl,
+    network,
+    {
+      staticNetwork: ethers.Network.from(network),
+      batchMaxCount: 1,
+    }
+  );
+};
+
+// Retry wrapper for RPC calls
+const retryCall = async <T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+  }
+  throw new Error('Max retries exceeded');
+};
+
 export function useFarmingData() {
   const { address, signer } = useWeb3();
   const [pools, setPools] = useState<PoolInfo[]>([]);
@@ -39,6 +72,15 @@ export function useFarmingData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const providerRef = useRef<ethers.JsonRpcProvider | null>(null);
+  const cachedPoolsRef = useRef<PoolInfo[]>([]);
+
+  const getProvider = useCallback(() => {
+    if (!providerRef.current) {
+      providerRef.current = createProvider();
+    }
+    return providerRef.current;
+  }, []);
 
   const getTokenSymbol = (tokenAddress: string): string => {
     const token = TOKEN_LIST.find(
@@ -52,12 +94,12 @@ export function useFarmingData() {
       setLoading(true);
       setError(null);
 
-      const provider = rpcProvider.getProvider();
+      const provider = getProvider();
       const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, provider);
 
-      // Fetch basic stats
+      // Fetch basic stats with retry
       const [rewardToken, rewardPerBlock, totalAllocPoint, startBlock, isPaused, poolLength, owner] = 
-        await Promise.all([
+        await retryCall(() => Promise.all([
           farmingContract.rewardToken(),
           farmingContract.rewardPerBlock(),
           farmingContract.totalAllocPoint(),
@@ -65,7 +107,7 @@ export function useFarmingData() {
           farmingContract.paused(),
           farmingContract.poolLength(),
           farmingContract.owner(),
-        ]);
+        ]));
 
       // Check if current user is owner
       if (address) {
@@ -76,7 +118,7 @@ export function useFarmingData() {
       let rewardTokenSymbol = 'FRDX';
       try {
         const rewardTokenContract = new ethers.Contract(rewardToken, ERC20_ABI, provider);
-        rewardTokenSymbol = await rewardTokenContract.symbol();
+        rewardTokenSymbol = await retryCall(() => rewardTokenContract.symbol());
       } catch {
         // Use default
       }
@@ -96,7 +138,7 @@ export function useFarmingData() {
 
       for (let pid = 0; pid < poolCount; pid++) {
         try {
-          const poolInfo = await farmingContract.poolInfo(pid);
+          const poolInfo = await retryCall(() => farmingContract.poolInfo(pid));
           const lpToken = poolInfo.lpToken;
 
           // Get LP token info
@@ -106,21 +148,30 @@ export function useFarmingData() {
           let totalStaked = '0';
 
           try {
-            [token0Address, token1Address] = await Promise.all([
+            const [t0, t1] = await retryCall(() => Promise.all([
               lpContract.token0(),
               lpContract.token1(),
-            ]);
+            ]));
+            token0Address = t0;
+            token1Address = t1;
             token0Symbol = getTokenSymbol(token0Address);
             token1Symbol = getTokenSymbol(token1Address);
             
-            const stakedBalance = await lpContract.balanceOf(CONTRACTS.FARMING);
+            const stakedBalance = await retryCall(() => lpContract.balanceOf(CONTRACTS.FARMING));
             totalStaked = ethers.formatEther(stakedBalance);
           } catch {
-            // Single token staking
+            // Single token staking - try to get symbol
             try {
-              token0Symbol = await lpContract.symbol();
+              token0Symbol = await retryCall(() => lpContract.symbol());
             } catch {
-              token0Symbol = 'LP';
+              // Check cached data for this pool
+              const cachedPool = cachedPoolsRef.current.find(p => p.pid === pid);
+              if (cachedPool) {
+                token0Symbol = cachedPool.token0Symbol;
+                token1Symbol = cachedPool.token1Symbol;
+                token0Address = cachedPool.token0Address;
+                token1Address = cachedPool.token1Address;
+              }
             }
           }
 
@@ -131,11 +182,11 @@ export function useFarmingData() {
 
           if (address) {
             try {
-              const [userInfo, pending, balance] = await Promise.all([
+              const [userInfo, pending, balance] = await retryCall(() => Promise.all([
                 farmingContract.userInfo(pid, address),
                 farmingContract.pendingReward(pid, address),
                 lpContract.balanceOf(address),
-              ]);
+              ]));
               userStaked = ethers.formatEther(userInfo.amount);
               pendingReward = ethers.formatEther(pending);
               lpBalance = ethers.formatEther(balance);
@@ -173,20 +224,31 @@ export function useFarmingData() {
           });
 
           // Small delay between pools to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err) {
           console.error(`Error fetching pool ${pid}:`, err);
+          // Use cached pool data if available
+          const cachedPool = cachedPoolsRef.current.find(p => p.pid === pid);
+          if (cachedPool) {
+            poolsData.push(cachedPool);
+          }
         }
       }
 
+      // Update cache
+      cachedPoolsRef.current = poolsData;
       setPools(poolsData);
     } catch (err) {
       console.error('Error fetching farming data:', err);
-      setError('Failed to load farming data');
+      setError('Failed to load farming data. Please try again.');
+      // Use cached data if available
+      if (cachedPoolsRef.current.length > 0) {
+        setPools(cachedPoolsRef.current);
+      }
     } finally {
       setLoading(false);
     }
-  }, [address]);
+  }, [address, getProvider]);
 
   // Contract write functions - using contract's actual function names
   const deposit = useCallback(async (pid: number, amount: string) => {
