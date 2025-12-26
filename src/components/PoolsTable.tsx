@@ -66,7 +66,12 @@ PoolSkeleton.displayName = 'PoolSkeleton';
 
 // Cache for pools table - persistent across component remounts
 let poolsTableCache: { pools: Pool[]; timestamp: number; isRealData: boolean } | null = null;
-const CACHE_TTL = 90000; // 90 seconds
+const CACHE_TTL = 30000; // 30 seconds - reduced for faster updates
+
+// Export function to clear cache (called after adding liquidity)
+export const clearPoolsTableCache = () => {
+  poolsTableCache = null;
+};
 
 // Static fallback pools with realistic data
 const FALLBACK_POOLS: Pool[] = (() => {

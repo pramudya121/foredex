@@ -21,6 +21,7 @@ import {
 import { addTransaction, updateTransactionStatus } from './TransactionHistory';
 import { useTokenPairBalances } from '@/hooks/useStableBalances';
 import { rpcProvider } from '@/lib/rpcProvider';
+import { clearPoolsTableCache } from './PoolsTable';
 
 export function LiquidityPanel() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -32,6 +33,10 @@ export function LiquidityPanel() {
   const [lpBalance, setLpBalance] = useState('0');
   const [lpToRemove, setLpToRemove] = useState('');
   const [loading, setLoading] = useState(false);
+  const [approvingA, setApprovingA] = useState(false);
+  const [approvingB, setApprovingB] = useState(false);
+  const [approvalA, setApprovalA] = useState(false);
+  const [approvalB, setApprovalB] = useState(false);
   const [pairAddress, setPairAddress] = useState<string | null>(null);
   const [poolShare, setPoolShare] = useState(0);
   const [slippage, setSlippage] = useState(0.5);
@@ -102,6 +107,80 @@ export function LiquidityPanel() {
       console.error('Error fetching pair data:', error);
     }
   }, [provider, address, tokenA, tokenB]);
+
+  // Check token approvals
+  const checkApprovals = useCallback(async () => {
+    if (!provider || !address || !tokenA || !tokenB || !amountA || !amountB) {
+      setApprovalA(false);
+      setApprovalB(false);
+      return;
+    }
+
+    try {
+      const amountAWei = ethers.parseUnits(amountA || '0', tokenA.decimals);
+      const amountBWei = ethers.parseUnits(amountB || '0', tokenB.decimals);
+
+      // Check token A approval (skip if native token)
+      if (!isNativeToken(tokenA) && amountAWei > BigInt(0)) {
+        const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
+        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+        setApprovalA(allowance >= amountAWei);
+      } else {
+        setApprovalA(true);
+      }
+
+      // Check token B approval (skip if native token)
+      if (!isNativeToken(tokenB) && amountBWei > BigInt(0)) {
+        const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
+        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+        setApprovalB(allowance >= amountBWei);
+      } else {
+        setApprovalB(true);
+      }
+    } catch (error) {
+      console.error('Error checking approvals:', error);
+    }
+  }, [provider, address, tokenA, tokenB, amountA, amountB]);
+
+  useEffect(() => {
+    checkApprovals();
+  }, [checkApprovals]);
+
+  const handleApproveTokenA = async () => {
+    if (!signer || !tokenA || isNativeToken(tokenA)) return;
+    
+    setApprovingA(true);
+    try {
+      const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, signer);
+      const tx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+      toast.info(`Approving ${tokenA.symbol}...`);
+      await tx.wait();
+      toast.success(`${tokenA.symbol} approved!`);
+      setApprovalA(true);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to approve token');
+    } finally {
+      setApprovingA(false);
+    }
+  };
+
+  const handleApproveTokenB = async () => {
+    if (!signer || !tokenB || isNativeToken(tokenB)) return;
+    
+    setApprovingB(true);
+    try {
+      const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, signer);
+      const tx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+      toast.info(`Approving ${tokenB.symbol}...`);
+      await tx.wait();
+      toast.success(`${tokenB.symbol} approved!`);
+      setApprovalB(true);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to approve token');
+    } finally {
+      setApprovingB(false);
+    }
+  };
 
   // Auto-calculate amountB when amountA changes (using library quote)
   useEffect(() => {
@@ -176,27 +255,6 @@ export function LiquidityPanel() {
       const amountAMin = amountAWei * BigInt(Math.floor((100 - slippage) * 100)) / BigInt(10000);
       const amountBMin = amountBWei * BigInt(Math.floor((100 - slippage) * 100)) / BigInt(10000);
 
-      // Approve tokens if needed
-      if (!isNativeToken(tokenA)) {
-        const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        if (allowance < amountAWei) {
-          const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-          toast.success(`${tokenA.symbol} approved!`);
-        }
-      }
-
-      if (!isNativeToken(tokenB)) {
-        const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        if (allowance < amountBWei) {
-          const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-          toast.success(`${tokenB.symbol} approved!`);
-        }
-      }
-
       let tx;
       if (isNativeToken(tokenA)) {
         tx = await router.addLiquidityETH(
@@ -244,6 +302,9 @@ export function LiquidityPanel() {
       const receipt = await tx.wait();
       updateTransactionStatus(address, tx.hash, 'confirmed');
       toast.success(`Liquidity added! TX: ${receipt.hash.slice(0, 10)}...`);
+      
+      // Clear pools cache so new pool shows up
+      clearPoolsTableCache();
       
       setAmountA('');
       setAmountB('');
@@ -424,23 +485,64 @@ export function LiquidityPanel() {
           )}
 
           {isConnected ? (
-            <Button
-              onClick={handleAddLiquidity}
-              disabled={loading || !amountA || !amountB}
-              className={cn(
-                'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold btn-glow touch-manipulation',
-                'bg-gradient-wolf hover:opacity-90'
+            <div className="space-y-2">
+              {/* Approve Token A Button */}
+              {!isNativeToken(tokenA) && !approvalA && amountA && parseFloat(amountA) > 0 && (
+                <Button
+                  onClick={handleApproveTokenA}
+                  disabled={approvingA}
+                  className="w-full h-12 sm:h-14 text-base font-semibold"
+                  variant="outline"
+                >
+                  {approvingA ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Approving {tokenA?.symbol}...
+                    </>
+                  ) : (
+                    <>Approve {tokenA?.symbol}</>
+                  )}
+                </Button>
               )}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                'Add Liquidity'
+
+              {/* Approve Token B Button */}
+              {!isNativeToken(tokenB) && !approvalB && amountB && parseFloat(amountB) > 0 && (
+                <Button
+                  onClick={handleApproveTokenB}
+                  disabled={approvingB}
+                  className="w-full h-12 sm:h-14 text-base font-semibold"
+                  variant="outline"
+                >
+                  {approvingB ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Approving {tokenB?.symbol}...
+                    </>
+                  ) : (
+                    <>Approve {tokenB?.symbol}</>
+                  )}
+                </Button>
               )}
-            </Button>
+
+              {/* Add Liquidity Button */}
+              <Button
+                onClick={handleAddLiquidity}
+                disabled={loading || !amountA || !amountB || (!isNativeToken(tokenA) && !approvalA) || (!isNativeToken(tokenB) && !approvalB)}
+                className={cn(
+                  'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold btn-glow touch-manipulation',
+                  'bg-gradient-wolf hover:opacity-90'
+                )}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  'Add Liquidity'
+                )}
+              </Button>
+            </div>
           ) : (
             <Button disabled className="w-full h-12 sm:h-14 touch-manipulation" variant="secondary">
               Connect Wallet
