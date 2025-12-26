@@ -17,6 +17,7 @@ const Index = lazy(() => import("./pages/Index"));
 const Liquidity = lazy(() => import("./pages/Liquidity"));
 const Pools = lazy(() => import("./pages/Pools"));
 const FarmingPage = lazy(() => import("./pages/FarmingPage"));
+const PoolDetailPage = lazy(() => import("./pages/PoolDetailPage"));
 const TokensPage = lazy(() => import("./pages/TokensPage"));
 const TokenDetailPage = lazy(() => import("./pages/TokenDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
