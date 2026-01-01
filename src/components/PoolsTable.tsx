@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import { toast } from 'sonner';
+import { PoolMiniChart } from './pools/PoolMiniChart';
 
 interface Pool {
   address: string;
@@ -37,7 +38,24 @@ interface Pool {
   volume24h: number;
   fees24h: number;
   apr: number;
+  chartData?: number[];
 }
+
+// Generate mini chart data for each pool
+const generateMiniChartData = (tvl: number, seed: number): number[] => {
+  const data: number[] = [];
+  let value = tvl * 0.7;
+  let s = seed;
+  
+  for (let i = 0; i < 14; i++) {
+    s = (s * 9301 + 49297) % 233280;
+    const change = (s / 233280 - 0.5) * 0.1;
+    value = value * (1 + change);
+    data.push(Math.max(0, value));
+  }
+  data.push(tvl); // End with current TVL
+  return data;
+};
 
 const PoolSkeleton = memo(() => (
   <div className="glass-card p-4">
@@ -190,6 +208,10 @@ function PoolsTableInner() {
             const fees24h = volume24h * 0.003;
             const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
 
+            // Generate seed from address for consistent chart data
+            const addressSeed = parseInt(pairAddress.slice(2, 10), 16);
+            const chartData = generateMiniChartData(tvl, addressSeed);
+
             return {
               address: pairAddress,
               token0,
@@ -201,6 +223,7 @@ function PoolsTableInner() {
               volume24h,
               fees24h,
               apr,
+              chartData,
             };
           } catch {
             return null;
@@ -273,9 +296,10 @@ function PoolsTableInner() {
 
       {/* Table Header - Desktop */}
       <div className="glass-card p-4 hidden lg:block">
-        <div className="grid grid-cols-[40px_1.5fr_120px_80px_120px_150px_120px] gap-4 text-sm font-medium text-muted-foreground">
+        <div className="grid grid-cols-[40px_1.5fr_100px_120px_80px_120px_120px_100px] gap-4 text-sm font-medium text-muted-foreground">
           <div></div>
           <div>Pool</div>
+          <div className="text-center">14D Trend</div>
           <div className="text-right">TVL</div>
           <div className="text-right">APR</div>
           <div className="text-right">24h Volume</div>
@@ -323,7 +347,7 @@ function PoolsTableInner() {
               )}
             >
               {/* Desktop View */}
-              <div className="hidden lg:grid grid-cols-[40px_1.5fr_120px_80px_120px_150px_120px] gap-4 items-center">
+              <div className="hidden lg:grid grid-cols-[40px_1.5fr_100px_120px_80px_120px_120px_100px] gap-4 items-center">
                 {/* Favorite Button */}
                 <div className="flex-shrink-0">
                   <Button
@@ -366,6 +390,17 @@ function PoolsTableInner() {
                       0.3%
                     </Badge>
                   </div>
+                </div>
+
+                {/* Mini Chart */}
+                <div className="flex justify-center">
+                  {pool.chartData && (
+                    <PoolMiniChart 
+                      data={pool.chartData} 
+                      height={32} 
+                      showTrend={false}
+                    />
+                  )}
                 </div>
 
                 {/* TVL */}
