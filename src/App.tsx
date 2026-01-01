@@ -23,8 +23,6 @@ const TokenDetailPage = lazy(() => import("./pages/TokenDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
 const TradingAnalyticsPage = lazy(() => import("./pages/TradingAnalyticsPage"));
-const TokenComparisonPage = lazy(() => import("./pages/TokenComparisonPage"));
-const TransactionHistoryPage = lazy(() => import("./pages/TransactionHistoryPage"));
 const DocsPage = lazy(() => import("./pages/DocsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -41,9 +39,11 @@ PageLoader.displayName = 'PageLoader';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30000,
-      gcTime: 60000,
+      staleTime: 60000, // 1 minute
+      gcTime: 300000, // 5 minutes
       refetchOnWindowFocus: false,
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
   },
 });
@@ -62,13 +62,12 @@ const AppContent = memo(function AppContent() {
             <Route path="/liquidity" element={<Liquidity />} />
             <Route path="/pools" element={<Pools />} />
             <Route path="/farming" element={<FarmingPage />} />
+            <Route path="/farming/:pid" element={<PoolDetailPage />} />
             <Route path="/tokens" element={<TokensPage />} />
             <Route path="/tokens/:address" element={<TokenDetailPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
-            <Route path="/compare" element={<TokenComparisonPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/history" element={<TransactionHistoryPage />} />
             <Route path="/docs" element={<DocsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />

@@ -10,9 +10,8 @@ import {
   FileText, 
   Settings,
   Coins,
-  GitCompare,
   TrendingUp,
-  History
+  Sprout
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -29,12 +28,11 @@ const NAV_ITEMS = [
   { path: '/', label: 'Swap', icon: ArrowLeftRight },
   { path: '/liquidity', label: 'Liquidity', icon: Droplets },
   { path: '/pools', label: 'Pools', icon: LayoutGrid },
+  { path: '/farming', label: 'Farming', icon: Sprout },
   { path: '/tokens', label: 'Tokens', icon: Coins },
-  { path: '/compare', label: 'Compare', icon: GitCompare },
   { path: '/trading-analytics', label: 'P&L', icon: TrendingUp },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/portfolio', label: 'Portfolio', icon: Wallet },
-  { path: '/history', label: 'History', icon: History },
   { path: '/docs', label: 'Docs', icon: FileText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
