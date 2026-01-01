@@ -73,39 +73,8 @@ export const clearPoolsTableCache = () => {
   poolsTableCache = null;
 };
 
-// Static fallback pools with realistic data
-const FALLBACK_POOLS: Pool[] = (() => {
-  const tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
-  const pools: Pool[] = [];
-  
-  // Realistic testnet data
-  const tvlValues = [152000, 98000, 75000, 62000, 48000, 35000];
-  let idx = 0;
-  
-  for (let i = 0; i < tokens.length - 1; i++) {
-    for (let j = i + 1; j < tokens.length; j++) {
-      const tvl = tvlValues[idx] || 25000;
-      const volume24h = tvl * 0.15;
-      const fees24h = volume24h * 0.003;
-      const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
-      
-      pools.push({
-        address: `0xfallback${i}${j}`,
-        token0: { address: tokens[i].address, symbol: tokens[i].symbol, name: tokens[i].name, logoURI: tokens[i].logoURI },
-        token1: { address: tokens[j].address, symbol: tokens[j].symbol, name: tokens[j].name, logoURI: tokens[j].logoURI },
-        reserve0: String(tvl / 2),
-        reserve1: String(tvl / 2),
-        totalSupply: String(tvl),
-        tvl,
-        volume24h,
-        fees24h,
-        apr,
-      });
-      idx++;
-    }
-  }
-  return pools; // Return all pools, no limit
-})();
+// No fallback pools - only show real on-chain data
+const FALLBACK_POOLS: Pool[] = [];
 
 function PoolsTableInner() {
   // Initialize with cached data if valid, otherwise use fallback
