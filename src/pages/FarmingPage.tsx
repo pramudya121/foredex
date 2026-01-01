@@ -149,12 +149,22 @@ export default function FarmingPage() {
   }, [pools]);
 
   const handleDeposit = (pool: PoolInfo) => {
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      connect();
+      return;
+    }
     setSelectedPool(pool);
     setDialogMode('deposit');
     setDialogOpen(true);
   };
 
   const handleWithdraw = (pool: PoolInfo) => {
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      connect();
+      return;
+    }
     setSelectedPool(pool);
     setDialogMode('withdraw');
     setDialogOpen(true);

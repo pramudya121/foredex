@@ -131,7 +131,7 @@ export function usePoolData(refreshInterval: number = 30000) {
       }
 
       const poolsData: PoolData[] = [];
-      const maxPools = Math.min(Number(pairCount), 10); // Reduced to minimize RPC calls
+      const maxPools = Math.min(Number(pairCount), 50); // Increased limit to show all pools
       
       for (let i = 0; i < maxPools; i++) {
         try {
