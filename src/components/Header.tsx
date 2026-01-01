@@ -27,11 +27,9 @@ const NAV_ITEMS = [
   { path: '/pools', label: 'Pools' },
   { path: '/farming', label: 'Farming' },
   { path: '/tokens', label: 'Tokens' },
-  { path: '/compare', label: 'Compare' },
   { path: '/trading-analytics', label: 'P&L' },
   { path: '/analytics', label: 'Analytics' },
   { path: '/portfolio', label: 'Portfolio' },
-  { path: '/history', label: 'History' },
   { path: '/docs', label: 'Docs' },
 ];
 
