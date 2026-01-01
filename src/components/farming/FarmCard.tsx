@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,12 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Gift,
@@ -21,6 +28,9 @@ import {
   Sparkles,
   Layers,
   Coins,
+  Plus,
+  ExternalLink,
+  Info,
 } from 'lucide-react';
 
 export interface PoolInfo {
@@ -50,7 +60,9 @@ export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWi
   
   const hasDeposit = parseFloat(pool.userStaked) > 0;
   const hasPending = parseFloat(pool.pendingReward) > 0;
-  const pairName = pool.token1Symbol 
+  const hasLpBalance = parseFloat(pool.lpBalance) > 0;
+  const isPair = !!pool.token1Symbol;
+  const pairName = isPair 
     ? `${pool.token0Symbol}-${pool.token1Symbol}` 
     : pool.token0Symbol;
 
@@ -158,15 +170,44 @@ export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWi
             </Button>
           </div>
 
+          {/* Get LP Token Link */}
+          {!hasLpBalance && !hasDeposit && isPair && (
+            <Link to="/liquidity" className="block">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full text-xs border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Get {pairName} LP Tokens
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </Button>
+            </Link>
+          )}
+
           {/* Info & Emergency */}
           <div className="flex items-center justify-between text-xs">
-            {isConnected && parseFloat(pool.lpBalance) > 0 && (
-              <span className="text-muted-foreground">LP Balance: {parseFloat(pool.lpBalance).toFixed(4)}</span>
-            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 text-muted-foreground cursor-help">
+                    <Info className="w-3 h-3" />
+                    {isConnected && hasLpBalance && (
+                      <span>LP Balance: {parseFloat(pool.lpBalance).toFixed(4)}</span>
+                    )}
+                    {!isConnected && <span>Connect wallet</span>}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Your available LP tokens to stake</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
             {hasDeposit && (
               <button
                 onClick={() => setShowEmergency(true)}
-                className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1 ml-auto"
+                className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1"
               >
                 <AlertTriangle className="w-3 h-3" />
                 Emergency
