@@ -23,7 +23,6 @@ const TokensPage = lazy(() => import("./pages/TokensPage"));
 const TokenDetailPage = lazy(() => import("./pages/TokenDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
-const TradingAnalyticsPage = lazy(() => import("./pages/TradingAnalyticsPage"));
 const DocsPage = lazy(() => import("./pages/DocsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -68,7 +67,6 @@ const AppContent = memo(function AppContent() {
             <Route path="/tokens" element={<TokensPage />} />
             <Route path="/tokens/:address" element={<TokenDetailPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/trading-analytics" element={<TradingAnalyticsPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/docs" element={<DocsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
