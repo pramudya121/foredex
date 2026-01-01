@@ -1,20 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useFarmingData } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { FarmCard } from '@/components/farming/FarmCard';
 import { DepositDialog } from '@/components/farming/DepositDialog';
 import { AdminPanel } from '@/components/farming/AdminPanel';
+import { FarmingFilters } from '@/components/farming/FarmingFilters';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { 
   Sprout, 
   TrendingUp, 
@@ -128,17 +122,12 @@ export default function FarmingPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
   const [harvestingAll, setHarvestingAll] = useState(false);
+  const [filteredPools, setFilteredPools] = useState<PoolInfo[]>([]);
 
-  const sortedPools = useMemo(() => {
-    return [...pools].sort((a, b) => {
-      switch (sortBy) {
-        case 'apr': return b.apr - a.apr;
-        case 'tvl': return parseFloat(b.totalStaked) - parseFloat(a.totalStaked);
-        case 'newest': return b.pid - a.pid;
-        default: return 0;
-      }
-    });
-  }, [pools, sortBy]);
+  // Callback for when filters change
+  const handleFilteredPoolsChange = useCallback((filtered: PoolInfo[]) => {
+    setFilteredPools(filtered);
+  }, []);
 
   const totalPendingRewards = useMemo(() => {
     return pools.reduce((sum, p) => sum + parseFloat(p.pendingReward), 0);
@@ -329,33 +318,35 @@ export default function FarmingPage() {
 
           {/* Pools Section */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Active Pools ({pools.length})
-              </h2>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="apr">Highest APR</SelectItem>
-                  <SelectItem value="tvl">Highest TVL</SelectItem>
-                  <SelectItem value="newest">Newest</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-4 mb-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  Active Pools ({filteredPools.length}/{pools.length})
+                </h2>
+              </div>
+              
+              {/* Filters */}
+              <FarmingFilters
+                pools={pools}
+                onFilteredPoolsChange={handleFilteredPoolsChange}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+              />
             </div>
 
-            {sortedPools.length === 0 ? (
+            {filteredPools.length === 0 ? (
               <Card className="border-border/50">
                 <CardContent className="py-12 text-center">
                   <Sprout className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No farming pools available yet.</p>
+                  <p className="text-muted-foreground">
+                    {pools.length === 0 ? 'No farming pools available yet.' : 'No pools match your filters.'}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedPools.map(pool => (
+                {filteredPools.map(pool => (
                   <FarmCard
                     key={pool.pid}
                     pool={pool}
