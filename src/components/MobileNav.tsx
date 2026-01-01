@@ -10,7 +10,6 @@ import {
   FileText, 
   Settings,
   Coins,
-  TrendingUp,
   Sprout
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,7 +29,6 @@ const NAV_ITEMS = [
   { path: '/pools', label: 'Pools', icon: LayoutGrid },
   { path: '/farming', label: 'Farming', icon: Sprout },
   { path: '/tokens', label: 'Tokens', icon: Coins },
-  { path: '/trading-analytics', label: 'P&L', icon: TrendingUp },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/portfolio', label: 'Portfolio', icon: Wallet },
   { path: '/docs', label: 'Docs', icon: FileText },

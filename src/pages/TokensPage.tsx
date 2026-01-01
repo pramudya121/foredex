@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
@@ -50,48 +50,48 @@ interface TokenData {
   priceHistory: { time: number; price: number }[];
 }
 
-function TokenSkeleton() {
-  return (
-    <TableRow>
-      <TableCell><Skeleton className="w-6 h-6" /></TableCell>
-      <TableCell><Skeleton className="w-8 h-4" /></TableCell>
-      <TableCell>
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-10 h-10 rounded-full" />
-          <div className="space-y-1">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-3 w-24" />
-          </div>
+const TokenSkeleton = memo(() => (
+  <TableRow>
+    <TableCell><Skeleton className="w-6 h-6" /></TableCell>
+    <TableCell><Skeleton className="w-8 h-4" /></TableCell>
+    <TableCell>
+      <div className="flex items-center gap-3">
+        <Skeleton className="w-10 h-10 rounded-full" />
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-3 w-24" />
         </div>
-      </TableCell>
-      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-      <TableCell><Skeleton className="h-10 w-24" /></TableCell>
-    </TableRow>
-  );
-}
+      </div>
+    </TableCell>
+    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+    <TableCell><Skeleton className="h-10 w-24" /></TableCell>
+  </TableRow>
+));
 
-function MiniChart({ data, isPositive }: { data: { time: number; price: number }[]; isPositive: boolean }) {
-  return (
-    <div className="w-24 h-10">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Line
-            type="monotone"
-            dataKey="price"
-            stroke={isPositive ? '#22c55e' : '#ef4444'}
-            strokeWidth={1.5}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
+TokenSkeleton.displayName = 'TokenSkeleton';
 
-export default function TokensPage() {
+const MiniChart = memo(({ data, isPositive }: { data: { time: number; price: number }[]; isPositive: boolean }) => (
+  <div className="w-24 h-10">
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data}>
+        <Line
+          type="monotone"
+          dataKey="price"
+          stroke={isPositive ? '#22c55e' : '#ef4444'}
+          strokeWidth={1.5}
+          dot={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+));
+
+MiniChart.displayName = 'MiniChart';
+
+function TokensPageContent() {
   const navigate = useNavigate();
   
   // Generate simulated price history
@@ -268,20 +268,21 @@ export default function TokensPage() {
       return sortDir === 'desc' ? -comparison : comparison;
     });
 
-  const handleSort = (field: typeof sortBy) => {
+
+  const formatNumber = useCallback((num: number) => {
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
+    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
+  }, []);
+
+  const handleSort = useCallback((field: typeof sortBy) => {
     if (sortBy === field) {
       setSortDir(d => d === 'desc' ? 'asc' : 'desc');
     } else {
       setSortBy(field);
       setSortDir('desc');
     }
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-    return `$${num.toFixed(2)}`;
-  };
+  }, [sortBy]);
 
   // Calculate total stats
   const totalTVL = tokens.reduce((acc, t) => acc + t.tvl, 0);
@@ -564,3 +565,5 @@ export default function TokensPage() {
     </main>
   );
 }
+
+export default memo(TokensPageContent);
