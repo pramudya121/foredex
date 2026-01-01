@@ -120,8 +120,8 @@ export default function PoolDetailPage() {
             <div className="flex items-center gap-3">
               <Clock className="w-8 h-8 text-purple-500" />
               <div>
-                <p className="text-xs text-muted-foreground">Last Reward Block</p>
-                <p className="text-xl font-bold">{pool.lastRewardBlock.toString()}</p>
+                <p className="text-xs text-muted-foreground">Pool ID</p>
+                <p className="text-xl font-bold">#{pool.pid}</p>
               </div>
             </div>
           </CardContent>
