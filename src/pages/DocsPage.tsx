@@ -87,68 +87,58 @@ const FEATURES_LIST = [
 
 const TODAYS_UPDATES = [
   {
+    title: 'Liquidity Pool Detail Page',
+    description: 'Halaman detail baru untuk setiap liquidity pool dengan chart historis TVL, APR, dan Volume 30 hari.',
+    type: 'new',
+  },
+  {
+    title: 'All LP Pools Display',
+    description: 'Halaman Pools sekarang menampilkan SEMUA liquidity pools dari Factory contract tanpa limit.',
+    type: 'improved',
+  },
+  {
+    title: 'LP Contract Address Display',
+    description: 'Setiap pool sekarang menampilkan alamat contract LP yang asli dengan fitur copy address.',
+    type: 'new',
+  },
+  {
+    title: 'Farming Page Redesign',
+    description: 'Halaman farming didesain ulang dengan inline stake/unstake, collapsible details, dan harvest rewards.',
+    type: 'improved',
+  },
+  {
+    title: 'Farming Filters',
+    description: 'Filter baru untuk farming pools berdasarkan pasangan token, rentang APR, dan TVL.',
+    type: 'new',
+  },
+  {
+    title: 'Parallel Pool Fetching',
+    description: 'Optimasi performa dengan parallel batch fetching untuk mengambil data pools lebih cepat.',
+    type: 'improved',
+  },
+  {
+    title: 'Pool Stats Cache',
+    description: 'Implementasi caching 20 detik untuk mengurangi beban RPC dan mempercepat loading.',
+    type: 'improved',
+  },
+  {
     title: 'Wolf Spinner Component',
-    description: 'Loading spinner baru dengan animasi logo wolf, breathing effect, glow, dan orbiting particles.',
+    description: 'Loading spinner dengan animasi logo wolf, breathing effect, glow, dan orbiting particles.',
     type: 'new',
   },
   {
     title: 'Page Transition Animations',
-    description: 'Animasi transisi halaman smooth dengan fade, scale, dan slide effects. Termasuk StaggerContainer dan FadeInView.',
-    type: 'new',
-  },
-  {
-    title: 'Enhanced Theme Toggle',
-    description: 'Toggle dark/light theme dengan animasi menarik - stars, clouds, rotation effect, dan glow transitions.',
+    description: 'Animasi transisi halaman smooth dengan fade, scale, dan slide effects.',
     type: 'improved',
-  },
-  {
-    title: 'Transaction History Page',
-    description: 'Halaman baru /history dengan filtering berdasarkan tipe transaksi (All/Swaps/Liquidity/Pending), clear history, dan responsive mobile.',
-    type: 'new',
-  },
-  {
-    title: 'Mobile Navigation Sync',
-    description: 'Sinkronisasi navigasi mobile dengan desktop - menambahkan link Tokens, Compare, P&L, History di mobile menu.',
-    type: 'improved',
-  },
-  {
-    title: 'Enhanced Skeleton Components',
-    description: 'Komponen skeleton loader baru: SkeletonCard, SkeletonTable, SkeletonSwapCard untuk loading states yang lebih baik.',
-    type: 'new',
-  },
-  {
-    title: 'Error State Components',
-    description: 'Komponen ErrorState, LoadingState, EmptyState dengan variant network/timeout/empty untuk error handling.',
-    type: 'new',
   },
   {
     title: 'Mobile UX Enhancement',
-    description: 'Perbaikan responsivitas LiquidityPanel, Swap, Pools dengan touch-manipulation dan inputMode decimal.',
+    description: 'Perbaikan responsivitas di semua halaman dengan touch-friendly interactions.',
     type: 'improved',
   },
   {
     title: 'RPC Provider Optimization',
-    description: 'Toleransi error lebih tinggi (maxErrors 10), cooldown lebih singkat, cache 20 detik untuk performa lebih baik.',
-    type: 'improved',
-  },
-  {
-    title: 'Token Balance Direct Fetch',
-    description: 'Fetch balance token langsung tanpa melalui rpcProvider utama untuk reliabilitas lebih tinggi.',
-    type: 'improved',
-  },
-  {
-    title: 'Pool Stats Fallback Data',
-    description: 'Data fallback realistis untuk pools dengan TVL, volume, fees yang terkalkulasi.',
-    type: 'improved',
-  },
-  {
-    title: 'Lazy Loading Pages',
-    description: 'Semua halaman menggunakan React.lazy dan Suspense untuk bundle splitting dan loading lebih cepat.',
-    type: 'improved',
-  },
-  {
-    title: 'Portfolio Analytics Enhancement',
-    description: 'Perbaikan halaman portfolio dengan statistik P&L, performance metrics, dan visualisasi lebih baik.',
+    description: 'Toleransi error lebih tinggi, cooldown lebih singkat, cache optimized untuk performa lebih baik.',
     type: 'improved',
   },
 ];
