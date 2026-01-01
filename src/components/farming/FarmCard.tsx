@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Link } from 'react-router-dom';
+import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CONTRACTS, NEXUS_TESTNET } from '@/config/contracts';
+import { ERC20_ABI } from '@/config/abis';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { TokenLogo } from '@/components/TokenLogo';
 import { 
   Dialog, 
@@ -14,24 +18,23 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Gift,
   AlertTriangle,
   Flame,
   Sparkles,
-  Layers,
-  Coins,
-  Plus,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
-  Info,
+  RefreshCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export interface PoolInfo {
   pid: number;
@@ -48,15 +51,28 @@ export interface PoolInfo {
 
 interface FarmCardProps {
   pool: PoolInfo;
-  onDeposit: (pool: PoolInfo) => void;
-  onWithdraw: (pool: PoolInfo) => void;
+  onDeposit: (pid: number, amount: string) => Promise<void>;
+  onWithdraw: (pid: number, amount: string) => Promise<void>;
   onHarvest: (pid: number) => void;
   onEmergencyWithdraw: (pid: number) => void;
 }
 
-export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWithdraw }: FarmCardProps) {
-  const { isConnected } = useWeb3();
+export const FarmCard = memo(function FarmCard({ 
+  pool, 
+  onDeposit, 
+  onWithdraw, 
+  onHarvest, 
+  onEmergencyWithdraw 
+}: FarmCardProps) {
+  const { isConnected, signer, address } = useWeb3();
+  const [isOpen, setIsOpen] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
+  const [stakeAmount, setStakeAmount] = useState('');
+  const [unstakeAmount, setUnstakeAmount] = useState('');
+  const [stakeMode, setStakeMode] = useState<'stake' | 'unstake'>('stake');
+  const [loading, setLoading] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
   
   const hasDeposit = parseFloat(pool.userStaked) > 0;
   const hasPending = parseFloat(pool.pendingReward) > 0;
@@ -66,155 +82,374 @@ export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWi
     ? `${pool.token0Symbol}-${pool.token1Symbol}` 
     : pool.token0Symbol;
 
+  const handleApprove = async () => {
+    if (!signer || !pool) {
+      toast.error('Wallet not connected');
+      return;
+    }
+
+    setApproving(true);
+    try {
+      const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, signer);
+      toast.loading('Approving LP token...', { id: 'approve' });
+      
+      const tx = await lpContract.approve(CONTRACTS.FARMING, ethers.MaxUint256);
+      toast.loading('Waiting for confirmation...', { id: 'approve' });
+      await tx.wait();
+      
+      toast.success('LP token approved!', { id: 'approve' });
+      setIsApproved(true);
+    } catch (error: any) {
+      console.error('Approval error:', error);
+      const msg = error?.reason || error?.message || 'Approval failed';
+      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'approve' });
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const checkApproval = async (amount: string) => {
+    if (!address || !signer?.provider || !amount || parseFloat(amount) <= 0) {
+      setIsApproved(false);
+      return;
+    }
+
+    try {
+      const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, signer.provider);
+      const amountWei = ethers.parseEther(amount);
+      const allowance = await lpContract.allowance(address, CONTRACTS.FARMING);
+      setIsApproved(allowance >= amountWei);
+    } catch {
+      setIsApproved(false);
+    }
+  };
+
+  const handleStake = async () => {
+    if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+
+    if (parseFloat(stakeAmount) > parseFloat(pool.lpBalance)) {
+      toast.error('Insufficient LP balance');
+      return;
+    }
+
+    // Check approval first
+    await checkApproval(stakeAmount);
+    if (!isApproved) {
+      await handleApprove();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      toast.loading('Staking LP tokens...', { id: 'stake' });
+      await onDeposit(pool.pid, stakeAmount);
+      toast.success('Staked successfully!', { id: 'stake' });
+      setStakeAmount('');
+    } catch (error: any) {
+      console.error('Stake error:', error);
+      const msg = error?.reason || error?.message || 'Stake failed';
+      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'stake' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnstake = async () => {
+    if (!unstakeAmount || parseFloat(unstakeAmount) <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+
+    if (parseFloat(unstakeAmount) > parseFloat(pool.userStaked)) {
+      toast.error('Insufficient staked amount');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      toast.loading('Unstaking LP tokens...', { id: 'unstake' });
+      await onWithdraw(pool.pid, unstakeAmount);
+      toast.success('Unstaked successfully!', { id: 'unstake' });
+      setUnstakeAmount('');
+    } catch (error: any) {
+      console.error('Unstake error:', error);
+      const msg = error?.reason || error?.message || 'Unstake failed';
+      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'unstake' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
-      <Card className="group relative overflow-hidden border-border/50 bg-gradient-to-br from-card/80 via-card to-card/90 backdrop-blur-sm hover:border-primary/50 transition-all duration-300">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        
-        {/* APR Badge */}
-        <div className="absolute top-4 right-4">
-          <Badge className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border-green-500/30 px-3 py-1">
-            <Flame className="w-3 h-3 mr-1" />
-            {pool.apr > 1000 ? `${(pool.apr / 1000).toFixed(1)}K` : pool.apr.toFixed(0)}% APR
-          </Badge>
-        </div>
-
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex -space-x-2">
-              <TokenLogo symbol={pool.token0Symbol} className="w-10 h-10 rounded-full border-2 border-card z-10" />
-              {pool.token1Symbol && (
-                <TokenLogo symbol={pool.token1Symbol} className="w-10 h-10 rounded-full border-2 border-card" />
-              )}
-              {hasDeposit && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-card z-20" />
-              )}
-            </div>
-            <div>
-              <CardTitle className="text-lg font-bold">{pairName}</CardTitle>
-              <p className="text-xs text-muted-foreground">Pool #{pool.pid} • {Number(pool.allocPoint)}x</p>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Layers className="w-3 h-3" /> TVL
-              </p>
-              <p className="text-sm font-semibold mt-1">
-                {parseFloat(pool.totalStaked).toLocaleString(undefined, { maximumFractionDigits: 2 })} LP
-              </p>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Coins className="w-3 h-3" /> Your Stake
-              </p>
-              <p className="text-sm font-semibold mt-1">
-                {parseFloat(pool.userStaked).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-              </p>
-            </div>
-          </div>
-
-          {/* Pending Rewards */}
-          <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg p-4 border border-primary/20">
-            <div className="flex items-center justify-between">
+      <Card className="overflow-hidden border-border/50 bg-card/95 backdrop-blur-sm hover:border-primary/30 transition-all">
+        {/* Header */}
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative flex -space-x-2">
+                <TokenLogo symbol={pool.token0Symbol} className="w-10 h-10 rounded-full border-2 border-card z-10" />
+                {pool.token1Symbol && (
+                  <TokenLogo symbol={pool.token1Symbol} className="w-10 h-10 rounded-full border-2 border-card" />
+                )}
+              </div>
               <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Gift className="w-3 h-3" /> Pending Rewards
-                </p>
-                <p className="text-xl font-bold text-primary mt-1">
-                  {parseFloat(pool.pendingReward).toFixed(6)} FRDX
+                <h3 className="text-base sm:text-lg font-bold">{pairName} LP</h3>
+                <p className="text-xs text-muted-foreground">
+                  Pool #{pool.pid} • <span className="text-primary">{Number(pool.allocPoint)}x</span>
                 </p>
               </div>
-              <Button 
-                size="sm" 
-                onClick={() => onHarvest(pool.pid)}
-                disabled={!isConnected || !hasPending}
-                className="bg-gradient-to-r from-primary to-primary/80"
-              >
-                <Sparkles className="w-4 h-4 mr-1" />
-                Harvest
-              </Button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {hasDeposit && (
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Farming
+                </Badge>
+              )}
+              <Badge className="bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-400 border-pink-500/30 px-2 py-0.5">
+                <Flame className="w-3 h-3 mr-1" />
+                {pool.apr > 1000 ? `${(pool.apr / 1000).toFixed(1)}K` : pool.apr.toFixed(2)}% APR
+              </Badge>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary/50"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDeposit(pool);
-              }}
-            >
-              <ArrowDownToLine className="w-4 h-4 mr-2" />
-              Deposit
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500/50"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onWithdraw(pool);
-              }}
-              disabled={!hasDeposit}
-            >
-              <ArrowUpFromLine className="w-4 h-4 mr-2" />
-              Withdraw
-            </Button>
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> APR
+              </p>
+              <p className="text-lg font-bold text-primary mt-0.5">
+                {pool.apr.toFixed(2)}%
+              </p>
+            </div>
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Total Staked
+              </p>
+              <p className="text-lg font-bold mt-0.5">
+                {parseFloat(pool.totalStaked).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </p>
+            </div>
           </div>
 
-          {/* Get LP Token Link */}
-          {!hasLpBalance && !hasDeposit && isPair && (
-            <Link to="/liquidity" className="block">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="w-full text-xs border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50"
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Get {pairName} LP Tokens
-                <ExternalLink className="w-3 h-3 ml-1" />
-              </Button>
-            </Link>
+          {/* Your Staked & Earned */}
+          <div className="mt-4 space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Your Staked</span>
+              <span className="font-bold">
+                {parseFloat(pool.userStaked).toFixed(6)} LP
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Earned</span>
+              <span className="font-bold text-primary flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                {parseFloat(pool.pendingReward).toFixed(6)} FRDX
+              </span>
+            </div>
+          </div>
+
+          {/* Harvest Button */}
+          {hasPending && isConnected && (
+            <Button 
+              className="w-full mt-4 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-semibold"
+              onClick={() => onHarvest(pool.pid)}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Harvest {parseFloat(pool.pendingReward).toFixed(4)} FRDX
+            </Button>
           )}
 
-          {/* Info & Emergency */}
-          <div className="flex items-center justify-between text-xs">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 text-muted-foreground cursor-help">
-                    <Info className="w-3 h-3" />
-                    {isConnected && hasLpBalance && (
-                      <span>LP Balance: {parseFloat(pool.lpBalance).toFixed(4)}</span>
-                    )}
-                    {!isConnected && <span>Connect wallet</span>}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Your available LP tokens to stake</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            {hasDeposit && (
-              <button
-                onClick={() => setShowEmergency(true)}
-                className="text-destructive/70 hover:text-destructive transition-colors flex items-center gap-1"
+          {/* Collapsible Details */}
+          <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className="w-full mt-3 border border-border/50 hover:bg-muted/50"
               >
-                <AlertTriangle className="w-3 h-3" />
-                Emergency
-              </button>
-            )}
-          </div>
-        </CardContent>
+                {isOpen ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 mr-2" />
+                    Hide Details
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 mr-2" />
+                    Show Details
+                  </>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            
+            <CollapsibleContent className="pt-4 space-y-4">
+              {/* Stake/Unstake Tabs */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={stakeMode === 'stake' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStakeMode('stake')}
+                  className={cn(
+                    stakeMode === 'stake' 
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600' 
+                      : 'border-border/50'
+                  )}
+                >
+                  <ArrowDownToLine className="w-4 h-4 mr-1.5" />
+                  Stake
+                </Button>
+                <Button
+                  variant={stakeMode === 'unstake' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStakeMode('unstake')}
+                  className={cn(
+                    stakeMode === 'unstake'
+                      ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600'
+                      : 'border-border/50'
+                  )}
+                >
+                  <ArrowUpFromLine className="w-4 h-4 mr-1.5" />
+                  Unstake
+                </Button>
+              </div>
+
+              {/* Stake Section */}
+              {stakeMode === 'stake' && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Available LP</span>
+                    <span className="font-medium">{parseFloat(pool.lpBalance).toFixed(6)}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="0.0"
+                      value={stakeAmount}
+                      onChange={(e) => {
+                        setStakeAmount(e.target.value);
+                        if (e.target.value) checkApproval(e.target.value);
+                      }}
+                      className="flex-1 bg-muted/30 border-border/50"
+                      disabled={!isConnected || loading || approving}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary text-xs font-semibold px-2"
+                      onClick={() => {
+                        setStakeAmount(pool.lpBalance);
+                        checkApproval(pool.lpBalance);
+                      }}
+                      disabled={!isConnected}
+                    >
+                      MAX
+                    </Button>
+                  </div>
+                  
+                  {!hasLpBalance && isPair && (
+                    <Link to="/liquidity" className="block">
+                      <p className="text-xs text-muted-foreground text-center">
+                        No LP tokens? <span className="text-primary hover:underline">Add liquidity first →</span>
+                      </p>
+                    </Link>
+                  )}
+
+                  <Button
+                    className="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600"
+                    onClick={handleStake}
+                    disabled={!isConnected || loading || approving || !stakeAmount || parseFloat(stakeAmount) <= 0}
+                  >
+                    {loading || approving ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        {approving ? 'Approving...' : 'Staking...'}
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDownToLine className="w-4 h-4 mr-2" />
+                        Stake LP
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Unstake Section */}
+              {stakeMode === 'unstake' && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Available LP</span>
+                    <span className="font-medium">{parseFloat(pool.userStaked).toFixed(6)}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="0.0"
+                      value={unstakeAmount}
+                      onChange={(e) => setUnstakeAmount(e.target.value)}
+                      className="flex-1 bg-muted/30 border-border/50"
+                      disabled={!isConnected || loading || !hasDeposit}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary text-xs font-semibold px-2"
+                      onClick={() => setUnstakeAmount(pool.userStaked)}
+                      disabled={!isConnected || !hasDeposit}
+                    >
+                      MAX
+                    </Button>
+                  </div>
+                  <Button
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600"
+                    onClick={handleUnstake}
+                    disabled={!isConnected || loading || !hasDeposit || !unstakeAmount || parseFloat(unstakeAmount) <= 0}
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        Unstaking...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpFromLine className="w-4 h-4 mr-2" />
+                        Unstake LP
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Footer Links */}
+              <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                <a
+                  href={`${NEXUS_TESTNET.blockExplorer}/address/${pool.lpToken}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+                >
+                  View LP Contract
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                
+                {hasDeposit && (
+                  <button
+                    onClick={() => setShowEmergency(true)}
+                    className="text-xs text-destructive/70 hover:text-destructive flex items-center gap-1 transition-colors"
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Emergency
+                  </button>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
       </Card>
 
       {/* Emergency Withdraw Dialog */}
@@ -251,4 +486,4 @@ export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWi
       </Dialog>
     </>
   );
-}
+});
