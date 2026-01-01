@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { useFarmingData } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { FarmCard } from '@/components/farming/FarmCard';
@@ -17,47 +17,68 @@ import {
   Sparkles,
   Shield,
   Wallet,
+  Zap,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PoolInfo } from '@/components/farming/FarmCard';
 
-function StatsCard({ icon: Icon, label, value, subValue }: { 
+// Stats Card Component
+const StatsCard = memo(function StatsCard({ 
+  icon: Icon, 
+  label, 
+  value, 
+  subValue,
+  gradient = false,
+  iconColor = 'text-primary'
+}: { 
   icon: React.ElementType; 
   label: string; 
   value: string;
   subValue?: string;
+  gradient?: boolean;
+  iconColor?: string;
 }) {
   return (
-    <Card className="bg-gradient-to-br from-card/80 to-card/60 border-border/50">
-      <CardContent className="pt-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="w-5 h-5 text-primary" />
+    <Card className={`overflow-hidden border-border/40 transition-all duration-300 hover:border-primary/30 ${
+      gradient 
+        ? 'bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border-primary/30' 
+        : 'bg-gradient-to-br from-card via-card to-card/80'
+    }`}>
+      <CardContent className="p-5">
+        <div className="flex items-center gap-4">
+          <div className={`p-3 rounded-xl ${gradient ? 'bg-primary/20' : 'bg-muted/50'} ring-1 ${gradient ? 'ring-primary/30' : 'ring-border/50'}`}>
+            <Icon className={`w-5 h-5 ${iconColor}`} />
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-xl font-bold">{value}</p>
-            {subValue && <p className="text-xs text-muted-foreground">{subValue}</p>}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground font-medium mb-0.5">{label}</p>
+            <p className={`text-xl font-bold truncate ${gradient ? 'text-primary' : 'text-foreground'}`}>
+              {value}
+            </p>
+            {subValue && (
+              <p className="text-xs text-muted-foreground mt-0.5">{subValue}</p>
+            )}
           </div>
         </div>
       </CardContent>
     </Card>
   );
-}
+});
 
-function LoadingSkeleton() {
+// Loading Skeleton
+const LoadingSkeleton = memo(function LoadingSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in-50 duration-500">
       {/* Stats Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1, 2, 3].map(i => (
-          <Card key={i} className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-10 h-10 rounded-lg" />
-                <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <Card key={i} className="border-border/40 bg-card/80">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <Skeleton className="w-12 h-12 rounded-xl" />
+                <div className="flex-1 space-y-2">
                   <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-6 w-28" />
                 </div>
               </div>
             </CardContent>
@@ -66,33 +87,57 @@ function LoadingSkeleton() {
       </div>
       
       {/* Pools Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[1, 2, 3].map(i => (
-          <Card key={i} className="border-border/50">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <Card key={i} className="border-border/40 bg-card/80">
             <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-10 h-10 rounded-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-3 w-16" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex -space-x-2">
+                    <Skeleton className="w-11 h-11 rounded-full" />
+                    <Skeleton className="w-11 h-11 rounded-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
                 </div>
+                <Skeleton className="h-7 w-16 rounded-full" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Skeleton className="h-16 rounded-lg" />
-                <Skeleton className="h-16 rounded-lg" />
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
               </div>
-              <Skeleton className="h-20 rounded-lg" />
-              <div className="grid grid-cols-2 gap-2">
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-              </div>
+              <Skeleton className="h-16 rounded-xl" />
+              <Skeleton className="h-10 rounded-lg" />
             </CardContent>
           </Card>
         ))}
       </div>
     </div>
   );
-}
+});
+
+// Empty State
+const EmptyState = memo(function EmptyState({ hasFilters }: { hasFilters: boolean }) {
+  return (
+    <Card className="border-border/40 bg-gradient-to-br from-card via-card to-muted/20">
+      <CardContent className="py-16 text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted/50 flex items-center justify-center">
+          <Sprout className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">
+          {hasFilters ? 'No pools match your filters' : 'No farming pools available'}
+        </h3>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          {hasFilters 
+            ? 'Try adjusting your filter settings to see more pools.'
+            : 'Check back later for new farming opportunities.'}
+        </p>
+      </CardContent>
+    </Card>
+  );
+});
 
 export default function FarmingPage() {
   const { isConnected, connect } = useWeb3();
@@ -118,7 +163,6 @@ export default function FarmingPage() {
   const [harvestingAll, setHarvestingAll] = useState(false);
   const [filteredPools, setFilteredPools] = useState<PoolInfo[]>([]);
 
-  // Callback for when filters change
   const handleFilteredPoolsChange = useCallback((filtered: PoolInfo[]) => {
     setFilteredPools(filtered);
   }, []);
@@ -131,9 +175,17 @@ export default function FarmingPage() {
     return pools.reduce((sum, p) => sum + parseFloat(p.userStaked), 0);
   }, [pools]);
 
-  // Deposit and withdraw now handled directly in FarmCard with inline inputs
+  const totalTVL = useMemo(() => {
+    return pools.reduce((sum, p) => sum + parseFloat(p.totalStaked), 0);
+  }, [pools]);
 
-  const handleHarvest = async (pid: number) => {
+  const formatNumber = (num: number, decimals = 4) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
+    return num.toFixed(decimals);
+  };
+
+  const handleHarvest = useCallback(async (pid: number) => {
     try {
       toast.loading('Harvesting rewards...', { id: `harvest-${pid}` });
       await harvest(pid);
@@ -143,9 +195,9 @@ export default function FarmingPage() {
       const msg = err?.reason || err?.message || 'Harvest failed';
       toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: `harvest-${pid}` });
     }
-  };
+  }, [harvest]);
 
-  const handleHarvestAll = async () => {
+  const handleHarvestAll = useCallback(async () => {
     if (totalPendingRewards <= 0) {
       toast.error('No rewards to harvest');
       return;
@@ -163,9 +215,9 @@ export default function FarmingPage() {
     } finally {
       setHarvestingAll(false);
     }
-  };
+  }, [totalPendingRewards, harvestAll]);
 
-  const handleEmergencyWithdraw = async (pid: number) => {
+  const handleEmergencyWithdraw = useCallback(async (pid: number) => {
     try {
       toast.loading('Emergency withdrawing...', { id: `emergency-${pid}` });
       await emergencyWithdraw(pid);
@@ -175,15 +227,20 @@ export default function FarmingPage() {
       const msg = err?.reason || err?.message || 'Emergency withdraw failed';
       toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: `emergency-${pid}` });
     }
-  };
+  }, [emergencyWithdraw]);
 
-  if (error) {
+  // Error State
+  if (error && pools.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Card className="border-destructive/50">
-          <CardContent className="py-8 text-center">
-            <p className="text-destructive mb-4">{error}</p>
-            <Button onClick={refetch} variant="outline">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="py-12 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-destructive/10 flex items-center justify-center">
+              <Shield className="w-8 h-8 text-destructive" />
+            </div>
+            <h3 className="text-lg font-semibold text-destructive mb-2">Failed to load farming data</h3>
+            <p className="text-sm text-muted-foreground mb-6">{error}</p>
+            <Button onClick={() => refetch()} variant="outline" className="border-destructive/30 hover:bg-destructive/10">
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>
@@ -194,82 +251,110 @@ export default function FarmingPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Sprout className="w-8 h-8 text-primary" />
-            Yield Farming
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Stake LP tokens to earn FRDX rewards
-          </p>
-        </div>
+    <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
+      {/* Hero Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/20 p-6 lg:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.15),transparent_50%)]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         
-        <div className="flex items-center gap-3">
-          {stats?.isPaused && (
-            <Badge variant="destructive" className="text-sm px-3 py-1">
-              Farming Paused
-            </Badge>
-          )}
+        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2.5 rounded-xl bg-primary/20 ring-2 ring-primary/30">
+                <Sprout className="w-6 h-6 text-primary" />
+              </div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Yield Farming</h1>
+              {stats?.isPaused && (
+                <Badge variant="destructive" className="text-xs">
+                  Paused
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm lg:text-base max-w-xl">
+              Stake your LP tokens to earn FRDX rewards. Higher APR for longer-term stakers.
+            </p>
+          </div>
           
-          <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          
-          {!isConnected && (
-            <Button onClick={() => connect()}>
-              <Wallet className="w-4 h-4 mr-2" />
-              Connect Wallet
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()} 
+              disabled={loading}
+              className="border-primary/30 hover:bg-primary/10"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
-          )}
+            
+            {!isConnected && (
+              <Button 
+                onClick={() => connect()}
+                className="bg-gradient-to-r from-primary to-rose-500 hover:from-primary/90 hover:to-rose-500/90"
+              >
+                <Wallet className="w-4 h-4 mr-2" />
+                Connect Wallet
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
-      {loading ? (
+      {loading && pools.length === 0 ? (
         <LoadingSkeleton />
       ) : (
         <>
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatsCard 
-              icon={Coins} 
-              label="Total Pools" 
+              icon={BarChart3} 
+              label="Active Pools" 
               value={pools.length.toString()}
               subValue={`${stats?.rewardPerBlock || '0'} FRDX/block`}
+              iconColor="text-blue-400"
+            />
+            <StatsCard 
+              icon={Coins} 
+              label="Total Value Locked" 
+              value={`${formatNumber(totalTVL, 2)} LP`}
+              iconColor="text-green-400"
             />
             <StatsCard 
               icon={TrendingUp} 
-              label="Your Total Staked" 
-              value={`${totalUserStaked.toFixed(4)} LP`}
+              label="Your Stake" 
+              value={`${formatNumber(totalUserStaked, 4)} LP`}
+              iconColor="text-purple-400"
             />
-            <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/30">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/20">
+            
+            {/* Pending Rewards Card with Harvest All */}
+            <Card className="overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-primary/20 ring-1 ring-primary/30">
                       <Gift className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Pending Rewards</p>
-                      <p className="text-xl font-bold text-primary">{totalPendingRewards.toFixed(6)} FRDX</p>
+                      <p className="text-xs text-muted-foreground font-medium mb-0.5">Pending Rewards</p>
+                      <p className="text-xl font-bold text-primary">
+                        {formatNumber(totalPendingRewards, 4)} FRDX
+                      </p>
                     </div>
                   </div>
+                  
                   {isConnected && totalPendingRewards > 0 && (
                     <Button 
                       size="sm" 
                       onClick={handleHarvestAll}
                       disabled={harvestingAll}
-                      className="bg-gradient-to-r from-primary to-primary/80"
+                      className="bg-gradient-to-r from-primary to-rose-500 hover:from-primary/90 hover:to-rose-500/90 shadow-lg shadow-primary/25"
                     >
                       {harvestingAll ? (
                         <RefreshCw className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
-                          <Sparkles className="w-4 h-4 mr-1" />
-                          Harvest All
+                          <Zap className="w-4 h-4 mr-1" />
+                          Claim
                         </>
                       )}
                     </Button>
@@ -291,35 +376,34 @@ export default function FarmingPage() {
           )}
 
           {/* Pools Section */}
-          <div>
-            <div className="flex flex-col gap-4 mb-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Active Pools ({filteredPools.length}/{pools.length})
-                </h2>
-              </div>
-              
-              {/* Filters */}
-              <FarmingFilters
-                pools={pools}
-                onFilteredPoolsChange={handleFilteredPoolsChange}
-                sortBy={sortBy}
-                onSortChange={setSortBy}
-              />
-            </div>
-
-            {filteredPools.length === 0 ? (
-              <Card className="border-border/50">
-                <CardContent className="py-12 text-center">
-                  <Sprout className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {pools.length === 0 ? 'No farming pools available yet.' : 'No pools match your filters.'}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-muted/50">
+                  <Shield className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Active Pools</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {filteredPools.length} of {pools.length} pools shown
                   </p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            </div>
+            
+            {/* Filters */}
+            <FarmingFilters
+              pools={pools}
+              onFilteredPoolsChange={handleFilteredPoolsChange}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+            />
+
+            {/* Pools Grid */}
+            {filteredPools.length === 0 ? (
+              <EmptyState hasFilters={pools.length > 0} />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredPools.map(pool => (
                   <FarmCard
                     key={pool.pid}
@@ -335,7 +419,6 @@ export default function FarmingPage() {
           </div>
         </>
       )}
-
     </div>
   );
 }
