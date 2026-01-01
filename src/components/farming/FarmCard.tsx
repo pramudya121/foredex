@@ -133,18 +133,25 @@ export function FarmCard({ pool, onDeposit, onWithdraw, onHarvest, onEmergencyWi
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
-              className="w-full border-primary/30 hover:bg-primary/10"
-              onClick={() => onDeposit(pool)}
-              disabled={!isConnected}
+              className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary/50"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDeposit(pool);
+              }}
             >
               <ArrowDownToLine className="w-4 h-4 mr-2" />
               Deposit
             </Button>
             <Button
               variant="outline"
-              className="w-full border-orange-500/30 hover:bg-orange-500/10"
-              onClick={() => onWithdraw(pool)}
-              disabled={!isConnected || !hasDeposit}
+              className="w-full border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500/50"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onWithdraw(pool);
+              }}
+              disabled={!hasDeposit}
             >
               <ArrowUpFromLine className="w-4 h-4 mr-2" />
               Withdraw

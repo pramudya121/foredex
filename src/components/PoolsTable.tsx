@@ -104,7 +104,7 @@ const FALLBACK_POOLS: Pool[] = (() => {
       idx++;
     }
   }
-  return pools.slice(0, 6);
+  return pools; // Return all pools, no limit
 })();
 
 function PoolsTableInner() {
@@ -177,7 +177,7 @@ function PoolsTableInner() {
         }
 
         const fetchedPools: Pool[] = [];
-        const maxPools = Math.min(Number(pairCount), 10);
+        const maxPools = Math.min(Number(pairCount), 50); // Increased limit to show all pools
 
         for (let i = 0; i < maxPools; i++) {
           try {
