@@ -2,10 +2,9 @@ import { useState, useMemo, useCallback } from 'react';
 import { useFarmingData } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { FarmCard } from '@/components/farming/FarmCard';
-import { DepositDialog } from '@/components/farming/DepositDialog';
 import { AdminPanel } from '@/components/farming/AdminPanel';
 import { FarmingFilters } from '@/components/farming/FarmingFilters';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,7 +69,7 @@ function LoadingSkeleton() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[1, 2, 3].map(i => (
           <Card key={i} className="border-border/50">
-            <CardHeader>
+            <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-3">
                 <Skeleton className="w-10 h-10 rounded-full" />
                 <div className="space-y-2">
@@ -78,8 +77,6 @@ function LoadingSkeleton() {
                   <Skeleton className="h-3 w-16" />
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <Skeleton className="h-16 rounded-lg" />
                 <Skeleton className="h-16 rounded-lg" />
@@ -117,9 +114,6 @@ export default function FarmingPage() {
     unpause,
   } = useFarmingData();
   
-  const [selectedPool, setSelectedPool] = useState<PoolInfo | null>(null);
-  const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw'>('deposit');
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
   const [harvestingAll, setHarvestingAll] = useState(false);
   const [filteredPools, setFilteredPools] = useState<PoolInfo[]>([]);
@@ -137,27 +131,7 @@ export default function FarmingPage() {
     return pools.reduce((sum, p) => sum + parseFloat(p.userStaked), 0);
   }, [pools]);
 
-  const handleDeposit = (pool: PoolInfo) => {
-    if (!isConnected) {
-      toast.error('Please connect your wallet first');
-      connect();
-      return;
-    }
-    setSelectedPool(pool);
-    setDialogMode('deposit');
-    setDialogOpen(true);
-  };
-
-  const handleWithdraw = (pool: PoolInfo) => {
-    if (!isConnected) {
-      toast.error('Please connect your wallet first');
-      connect();
-      return;
-    }
-    setSelectedPool(pool);
-    setDialogMode('withdraw');
-    setDialogOpen(true);
-  };
+  // Deposit and withdraw now handled directly in FarmCard with inline inputs
 
   const handleHarvest = async (pid: number) => {
     try {
@@ -350,8 +324,8 @@ export default function FarmingPage() {
                   <FarmCard
                     key={pool.pid}
                     pool={pool}
-                    onDeposit={handleDeposit}
-                    onWithdraw={handleWithdraw}
+                    onDeposit={deposit}
+                    onWithdraw={withdraw}
                     onHarvest={handleHarvest}
                     onEmergencyWithdraw={handleEmergencyWithdraw}
                   />
@@ -362,15 +336,6 @@ export default function FarmingPage() {
         </>
       )}
 
-      {/* Deposit/Withdraw Dialog */}
-      <DepositDialog
-        pool={selectedPool}
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        mode={dialogMode}
-        onDeposit={deposit}
-        onWithdraw={withdraw}
-      />
     </div>
   );
 }

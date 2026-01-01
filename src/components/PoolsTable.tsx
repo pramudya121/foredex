@@ -77,14 +77,17 @@ export const clearPoolsTableCache = () => {
 const FALLBACK_POOLS: Pool[] = [];
 
 function PoolsTableInner() {
+  // Check if cache is valid
+  const cacheValid = poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL;
+  
   // Initialize with cached data if valid, otherwise use fallback
   const [pools, setPools] = useState<Pool[]>(() => {
-    if (poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
-      return poolsTableCache.pools;
+    if (cacheValid) {
+      return poolsTableCache!.pools;
     }
     return FALLBACK_POOLS;
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!cacheValid);
   const [hasRealData, setHasRealData] = useState(() => poolsTableCache?.isRealData ?? false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
@@ -118,16 +121,19 @@ function PoolsTableInner() {
           setPools(poolsTableCache.pools);
           setHasRealData(poolsTableCache.isRealData);
         }
+        setLoading(false);
         return;
       }
 
       isFetchingRef.current = true;
+      setLoading(true);
 
       const provider = rpcProvider.getProvider();
       
       // If RPC not available, keep current data (don't switch to fallback if we have real data)
       if (!provider || !rpcProvider.isAvailable()) {
         isFetchingRef.current = false;
+        setLoading(false);
         return; // Keep current state, don't update
       }
 
