@@ -9,36 +9,24 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TokenLogo } from '@/components/TokenLogo';
+import { InteractivePoolChart } from '@/components/pools/InteractivePoolChart';
 import { 
   ArrowLeft, 
   Flame, 
   Layers, 
   TrendingUp, 
-  Activity, 
   ExternalLink,
   Copy,
   Check,
   Percent,
-  BarChart3,
   DollarSign,
-  Clock,
-  Plus
+  Plus,
+  Share2,
+  Star
 } from 'lucide-react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area,
-  ComposedChart,
-  Bar
-} from 'recharts';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 
 interface PoolData {
   address: string;
@@ -55,24 +43,32 @@ interface PoolData {
   price1: number;
 }
 
-// Generate historical data for charts
-const generateHistoricalData = (currentTVL: number, currentAPR: number, days: number = 30) => {
+// Generate historical data for charts (90 days for more interactive range)
+const generateHistoricalData = (currentTVL: number, currentAPR: number, days: number = 90) => {
   const data = [];
   const now = Date.now();
+  
+  // Create a seed for consistent randomness per pool
+  let seed = currentTVL * 1000 + currentAPR * 100;
+  const seededRandom = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
   
   for (let i = days; i >= 0; i--) {
     const timestamp = now - (i * 24 * 60 * 60 * 1000);
     const date = new Date(timestamp);
     const dayStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
-    // Simulate gradual growth with some volatility
+    // Simulate realistic market patterns
     const progress = (days - i) / days;
-    const tvlVariance = (Math.random() - 0.5) * 0.15;
-    const aprVariance = (Math.random() - 0.5) * 0.25;
+    const weekCycle = Math.sin((days - i) / 7 * Math.PI * 2) * 0.05;
+    const trend = progress * 0.3;
+    const noise = (seededRandom() - 0.5) * 0.12;
     
-    const tvl = currentTVL * (0.6 + progress * 0.4) * (1 + tvlVariance);
-    const apr = currentAPR * (0.8 + Math.random() * 0.4) * (1 + aprVariance);
-    const volume = tvl * (0.05 + Math.random() * 0.15);
+    const tvl = currentTVL * (0.5 + trend + weekCycle + noise);
+    const apr = currentAPR * (0.7 + seededRandom() * 0.6);
+    const volume = tvl * (0.08 + seededRandom() * 0.12);
     const fees = volume * 0.003;
     
     data.push({
@@ -94,7 +90,7 @@ export default function LiquidityPoolDetailPage() {
   const [pool, setPool] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedAddress, setCopiedAddress] = useState(false);
-  const [activeChart, setActiveChart] = useState<'tvl' | 'apr' | 'volume'>('tvl');
+  const { isFavorite, toggleFavorite } = useFavoritePoolsStore();
 
   const copyAddress = useCallback(() => {
     if (address) {
@@ -176,7 +172,7 @@ export default function LiquidityPoolDetailPage() {
 
   const historicalData = useMemo(() => {
     if (!pool) return [];
-    return generateHistoricalData(pool.tvl, pool.apr, 30);
+    return generateHistoricalData(pool.tvl, pool.apr, 90);
   }, [pool]);
 
   const formatNumber = (num: number) => {
@@ -335,75 +331,8 @@ export default function LiquidityPoolDetailPage() {
         </Card>
       </div>
 
-      {/* Chart Section */}
-      <Card className="mb-8">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5" />
-              Historical Data (30 Days)
-            </CardTitle>
-            <div className="flex gap-2">
-              {(['tvl', 'apr', 'volume'] as const).map((type) => (
-                <Button
-                  key={type}
-                  variant={activeChart === type ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveChart(type)}
-                >
-                  {type.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              {activeChart === 'tvl' ? (
-                <AreaChart data={historicalData}>
-                  <defs>
-                    <linearGradient id="tvlGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${(v/1000).toFixed(0)}K`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'TVL']}
-                  />
-                  <Area type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" fill="url(#tvlGradient)" strokeWidth={2} />
-                </AreaChart>
-              ) : activeChart === 'apr' ? (
-                <LineChart data={historicalData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v.toFixed(0)}%`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                    formatter={(value: number) => [`${value.toFixed(2)}%`, 'APR']}
-                  />
-                  <Line type="monotone" dataKey="apr" stroke="#22c55e" strokeWidth={2} dot={false} />
-                </LineChart>
-              ) : (
-                <ComposedChart data={historicalData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${(v/1000).toFixed(0)}K`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Volume']}
-                  />
-                  <Bar dataKey="volume" fill="hsl(var(--primary))" opacity={0.6} radius={[4, 4, 0, 0]} />
-                </ComposedChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Interactive Chart Section */}
+      <InteractivePoolChart data={historicalData} className="mb-8" />
 
       {/* Pool Details */}
       <div className="grid md:grid-cols-2 gap-6">
