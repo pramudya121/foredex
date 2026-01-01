@@ -291,7 +291,7 @@ export function useFarmingData() {
     }
   }, [address, pools.length]);
 
-  // Contract write functions
+  // Contract write functions - deposit assumes approval is already done
   const deposit = useCallback(async (pid: number, amount: string) => {
     if (!signer || !address) throw new Error('Wallet not connected');
 
@@ -299,22 +299,15 @@ export function useFarmingData() {
     const pool = pools.find(p => p.pid === pid);
     if (!pool) throw new Error('Pool not found');
 
-    const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, signer);
     const amountWei = ethers.parseEther(amount);
 
-    // Check allowance
-    const allowance = await lpContract.allowance(address, CONTRACTS.FARMING);
-    if (allowance < amountWei) {
-      const approveTx = await lpContract.approve(CONTRACTS.FARMING, ethers.MaxUint256);
-      await approveTx.wait();
-    }
-
-    // Call deposit function on contract
+    // Call deposit function on contract (approval should be done in the UI first)
     const tx = await farmingContract.deposit(pid, amountWei);
     const receipt = await tx.wait();
     
     // Clear cache to refresh data
     farmingDataCache = null;
+    rpcProvider.clearCache();
     
     return receipt;
   }, [signer, address, pools]);
@@ -330,6 +323,7 @@ export function useFarmingData() {
     
     // Clear cache to refresh data
     farmingDataCache = null;
+    rpcProvider.clearCache();
     
     return receipt;
   }, [signer]);
@@ -343,6 +337,7 @@ export function useFarmingData() {
     
     // Clear cache to refresh data
     farmingDataCache = null;
+    rpcProvider.clearCache();
     
     return receipt;
   }, [signer]);
@@ -353,6 +348,10 @@ export function useFarmingData() {
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
     const poolsWithRewards = pools.filter(p => parseFloat(p.pendingReward) > 0);
     
+    if (poolsWithRewards.length === 0) {
+      throw new Error('No rewards to harvest');
+    }
+    
     for (const pool of poolsWithRewards) {
       const tx = await farmingContract.harvest(pool.pid);
       await tx.wait();
@@ -360,6 +359,7 @@ export function useFarmingData() {
     
     // Clear cache to refresh data
     farmingDataCache = null;
+    rpcProvider.clearCache();
   }, [signer, pools]);
 
   const emergencyWithdraw = useCallback(async (pid: number) => {
@@ -371,6 +371,7 @@ export function useFarmingData() {
     
     // Clear cache to refresh data
     farmingDataCache = null;
+    rpcProvider.clearCache();
     
     return receipt;
   }, [signer]);
@@ -385,6 +386,7 @@ export function useFarmingData() {
     const receipt = await tx.wait();
     
     farmingDataCache = null;
+    rpcProvider.clearCache();
     return receipt;
   }, [signer, isOwner]);
 
@@ -397,6 +399,7 @@ export function useFarmingData() {
     const receipt = await tx.wait();
     
     farmingDataCache = null;
+    rpcProvider.clearCache();
     return receipt;
   }, [signer, isOwner]);
 
@@ -409,6 +412,7 @@ export function useFarmingData() {
     const receipt = await tx.wait();
     
     farmingDataCache = null;
+    rpcProvider.clearCache();
     return receipt;
   }, [signer, isOwner]);
 
@@ -421,6 +425,7 @@ export function useFarmingData() {
     const receipt = await tx.wait();
     
     farmingDataCache = null;
+    rpcProvider.clearCache();
     return receipt;
   }, [signer, isOwner]);
 
@@ -433,6 +438,7 @@ export function useFarmingData() {
     const receipt = await tx.wait();
     
     farmingDataCache = null;
+    rpcProvider.clearCache();
     return receipt;
   }, [signer, isOwner]);
 
@@ -442,7 +448,11 @@ export function useFarmingData() {
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
     const tx = await farmingContract.setPendingOwner(newOwner);
-    return tx.wait();
+    const receipt = await tx.wait();
+    
+    farmingDataCache = null;
+    rpcProvider.clearCache();
+    return receipt;
   }, [signer, isOwner]);
 
   const acceptOwnership = useCallback(async () => {
@@ -450,7 +460,11 @@ export function useFarmingData() {
 
     const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
     const tx = await farmingContract.acceptOwnership();
-    return tx.wait();
+    const receipt = await tx.wait();
+    
+    farmingDataCache = null;
+    rpcProvider.clearCache();
+    return receipt;
   }, [signer]);
 
   useEffect(() => {
