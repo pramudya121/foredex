@@ -132,11 +132,12 @@ export const FarmCard = memo(function FarmCard({
       setIsApproved(approved);
       return approved;
     } catch (e) {
+      // Don't block on approval check failure - allow user to try
       console.warn('Error checking approval:', e);
       setIsApproved(false);
       return false;
     }
-  }, [address, signer, pool.lpToken]);
+  }, [address, signer?.provider, pool.lpToken]);
 
   const handleStake = useCallback(async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
@@ -152,14 +153,28 @@ export const FarmCard = memo(function FarmCard({
     setLoading(true);
     try {
       // Check approval first
-      const approved = await checkApproval(stakeAmount);
+      let approved = isApproved;
+      
+      if (!approved) {
+        try {
+          approved = await checkApproval(stakeAmount);
+        } catch {
+          approved = false;
+        }
+      }
       
       if (!approved) {
         // Need to approve first
         await handleApprove();
-        // After approval, re-check and proceed to stake
-        const nowApproved = await checkApproval(stakeAmount);
-        if (!nowApproved) {
+        // Small delay then check approval
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          approved = await checkApproval(stakeAmount);
+        } catch {
+          approved = true; // Assume approved if check fails after approval tx
+        }
+        if (!approved) {
+          toast.error('Approval may not have succeeded. Please try again.');
           setLoading(false);
           return;
         }
@@ -177,7 +192,7 @@ export const FarmCard = memo(function FarmCard({
     } finally {
       setLoading(false);
     }
-  }, [stakeAmount, pool, checkApproval, handleApprove, onDeposit]);
+  }, [stakeAmount, pool, checkApproval, handleApprove, onDeposit, isApproved]);
 
   const handleUnstake = useCallback(async () => {
     if (!unstakeAmount || parseFloat(unstakeAmount) <= 0) {
