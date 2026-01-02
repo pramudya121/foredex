@@ -222,9 +222,9 @@ export const FarmCard = memo(function FarmCard({
 
   return (
     <>
-      <Card className="group overflow-hidden border-border/40 bg-gradient-to-br from-card via-card to-card/80 hover:border-primary/40 transition-all duration-300 hover:shadow-[0_0_30px_hsl(var(--primary)/0.15)]">
-        {/* Glow effect */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <Card className="group relative overflow-hidden border-border/40 bg-gradient-to-br from-card via-card to-card/80 hover:border-primary/40 transition-all duration-300 hover:shadow-[0_0_30px_hsl(var(--primary)/0.15)]">
+        {/* Glow effect - pointer-events-none to prevent blocking clicks */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         
         <CardContent className="relative p-5">
           {/* Header */}
@@ -250,12 +250,16 @@ export const FarmCard = memo(function FarmCard({
                 )}
               </div>
               <div>
-                <h3 className="text-lg font-bold tracking-tight">{pairName}</h3>
+                <Link to={`/farming/${pool.pid}`} className="hover:underline decoration-primary underline-offset-2">
+                  <h3 className="text-lg font-bold tracking-tight">{pairName}</h3>
+                </Link>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium border-primary/30 text-primary">
                     {Number(pool.allocPoint)}x
                   </Badge>
-                  <span className="text-xs text-muted-foreground">Pool #{pool.pid}</span>
+                  <Link to={`/farming/${pool.pid}`} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                    Pool #{pool.pid} →
+                  </Link>
                 </div>
               </div>
             </div>
