@@ -121,18 +121,20 @@ class RPCProviderService {
     }
   }
 
-  // Parse user-friendly error messages
-  parseError(error: any): string {
+  // Parse user-friendly error messages - returns null for transient errors that should be silent
+  parseError(error: any, showTransient = false): string | null {
     const msg = error?.message || error?.reason || String(error);
     
-    if (msg.includes('coalesce')) {
-      return 'Network busy - retrying automatically...';
+    // Transient network errors - return null to suppress toast unless explicitly requested
+    if (msg.includes('coalesce') || msg.includes('CORS') || msg.includes('ERR_FAILED') || msg.includes('Failed to fetch')) {
+      return showTransient ? 'Network busy - please try again' : null;
     }
+    
     if (msg.includes('missing revert data')) {
       return 'Transaction would fail - check inputs or try a smaller amount';
     }
     if (msg.includes('429') || msg.includes('Too Many')) {
-      return 'Network busy - please wait a moment and try again';
+      return 'Rate limited - please wait a moment';
     }
     if (msg.includes('user rejected') || msg.includes('User denied')) {
       return 'Transaction cancelled';
@@ -151,9 +153,6 @@ class RPCProviderService {
     }
     if (msg.includes('INSUFFICIENT_LIQUIDITY')) {
       return 'Not enough liquidity in pool';
-    }
-    if (msg.includes('CORS') || msg.includes('ERR_FAILED') || msg.includes('Failed to fetch')) {
-      return 'Network busy - retrying...';
     }
     
     return error?.reason || 'Transaction failed - please try again';

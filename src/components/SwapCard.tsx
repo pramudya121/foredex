@@ -307,8 +307,10 @@ export function SwapCard() {
       playErrorSound();
       // Use rpcProvider to parse user-friendly error messages
       const { rpcProvider } = await import('@/lib/rpcProvider');
-      const errorMsg = rpcProvider.parseError(error);
-      toast.error(errorMsg);
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }

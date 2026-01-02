@@ -57,12 +57,15 @@ export function SwapConfirmation({
 
   useEffect(() => {
     const estimateGas = async () => {
-      if (!provider || !open) return;
+      if (!provider || !open) {
+        setGasCost('0.001');
+        return;
+      }
       
       setEstimatingGas(true);
       try {
         const feeData = await provider.getFeeData();
-        const gasPrice = feeData.gasPrice || BigInt(0);
+        const gasPrice = feeData.gasPrice || BigInt(1000000000); // Default 1 gwei
         
         // Estimate gas for swap (approximate)
         const estimatedGas = route && route.path.length > 2 
@@ -70,12 +73,12 @@ export function SwapConfirmation({
           : BigInt(150000); // Direct swap
         
         const totalCost = gasPrice * estimatedGas;
+        const costFormatted = ethers.formatEther(totalCost);
         setGasEstimate(estimatedGas.toString());
-        setGasCost(ethers.formatEther(totalCost));
-      } catch (error) {
-        console.error('Gas estimation error:', error);
-        setGasEstimate('~150,000');
-        setGasCost('~0.001');
+        setGasCost(costFormatted || '0.001');
+      } catch {
+        setGasEstimate('150000');
+        setGasCost('0.001');
       } finally {
         setEstimatingGas(false);
       }
@@ -189,7 +192,7 @@ export function SwapConfirmation({
                 {estimatingGas ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  `~${parseFloat(gasCost || '0').toFixed(6)} NEX`
+                  `~${parseFloat(gasCost || '0.001').toFixed(6)} NEX`
                 )}
               </span>
             </div>
