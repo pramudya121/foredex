@@ -118,19 +118,23 @@ export const FarmCard = memo(function FarmCard({
     }
   }, [signer, pool]);
 
-  const checkApproval = useCallback(async (amount: string) => {
+  const checkApproval = useCallback(async (amount: string): Promise<boolean> => {
     if (!address || !signer?.provider || !amount || parseFloat(amount) <= 0) {
       setIsApproved(false);
-      return;
+      return false;
     }
 
     try {
       const lpContract = new ethers.Contract(pool.lpToken, ERC20_ABI, signer.provider);
       const amountWei = ethers.parseEther(amount);
       const allowance = await lpContract.allowance(address, CONTRACTS.FARMING);
-      setIsApproved(allowance >= amountWei);
-    } catch {
+      const approved = allowance >= amountWei;
+      setIsApproved(approved);
+      return approved;
+    } catch (e) {
+      console.warn('Error checking approval:', e);
       setIsApproved(false);
+      return false;
     }
   }, [address, signer, pool.lpToken]);
 
@@ -145,27 +149,35 @@ export const FarmCard = memo(function FarmCard({
       return;
     }
 
-    // Check approval first
-    await checkApproval(stakeAmount);
-    if (!isApproved) {
-      await handleApprove();
-      return;
-    }
-
     setLoading(true);
     try {
-      toast.loading('Staking LP tokens...', { id: 'stake' });
+      // Check approval first
+      const approved = await checkApproval(stakeAmount);
+      
+      if (!approved) {
+        // Need to approve first
+        await handleApprove();
+        // After approval, re-check and proceed to stake
+        const nowApproved = await checkApproval(stakeAmount);
+        if (!nowApproved) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      toast.loading('Staking LP tokens...', { id: `stake-${pool.pid}` });
       await onDeposit(pool.pid, stakeAmount);
-      toast.success('Staked successfully!', { id: 'stake' });
+      toast.success('Staked successfully!', { id: `stake-${pool.pid}` });
       setStakeAmount('');
+      setIsApproved(false); // Reset for next time
     } catch (error: any) {
       console.error('Stake error:', error);
       const msg = error?.reason || error?.message || 'Stake failed';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'stake' });
+      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: `stake-${pool.pid}` });
     } finally {
       setLoading(false);
     }
-  }, [stakeAmount, pool, isApproved, checkApproval, handleApprove, onDeposit]);
+  }, [stakeAmount, pool, checkApproval, handleApprove, onDeposit]);
 
   const handleUnstake = useCallback(async () => {
     if (!unstakeAmount || parseFloat(unstakeAmount) <= 0) {

@@ -110,7 +110,7 @@ export function useFarmingData() {
           farmingContract.owner(),
         ]);
         return { rewardToken, rewardPerBlock, totalAllocPoint, isPaused, poolLength, owner };
-      });
+      }, 3, 2000);
 
       if (!mountedRef.current) return;
 
@@ -137,7 +137,7 @@ export function useFarmingData() {
 
       setStats(newStats);
 
-      // Fetch all pools in parallel with batching
+      // Fetch all pools in parallel with better error handling
       const poolCount = Number(contractInfo.poolLength);
       const poolPromises: Promise<PoolInfo | null>[] = [];
 
@@ -145,7 +145,7 @@ export function useFarmingData() {
         poolPromises.push(
           (async () => {
             try {
-              const poolInfo = await farmingContract.poolInfo(pid);
+              const poolInfo = await retry(() => farmingContract.poolInfo(pid), 2, 1000);
               const lpToken = poolInfo.lpToken;
               const lpContract = new ethers.Contract(lpToken, [...PAIR_ABI, ...ERC20_ABI], provider);
 
@@ -177,23 +177,35 @@ export function useFarmingData() {
                 totalStaked = '0';
               }
 
-              // Get user info if connected
+              // Get user info if connected - with better error handling
               let userStaked = '0';
               let pendingReward = '0';
               let lpBalance = '0';
 
               if (address) {
+                // Fetch user data separately with individual error handling
                 try {
-                  const [userInfo, pending, balance] = await Promise.all([
-                    farmingContract.userInfo(pid, address),
-                    farmingContract.pendingReward(pid, address),
-                    lpContract.balanceOf(address),
-                  ]);
+                  const userInfo = await retry(() => farmingContract.userInfo(pid, address), 2, 500);
                   userStaked = ethers.formatEther(userInfo.amount);
+                } catch (e) {
+                  console.warn(`Could not fetch userInfo for pool ${pid}:`, e);
+                  userStaked = '0';
+                }
+
+                try {
+                  const pending = await retry(() => farmingContract.pendingReward(pid, address), 2, 500);
                   pendingReward = ethers.formatEther(pending);
+                } catch (e) {
+                  console.warn(`Could not fetch pendingReward for pool ${pid}:`, e);
+                  pendingReward = '0';
+                }
+
+                try {
+                  const balance = await lpContract.balanceOf(address);
                   lpBalance = ethers.formatEther(balance);
                 } catch (e) {
-                  console.warn(`Error fetching user info for pool ${pid}:`, e);
+                  console.warn(`Could not fetch LP balance for pool ${pid}:`, e);
+                  lpBalance = '0';
                 }
               }
 
@@ -246,12 +258,19 @@ export function useFarmingData() {
     } catch (err) {
       console.error('Error fetching farming data:', err);
       if (mountedRef.current) {
-        setError('Failed to load farming data. Please try again.');
+        setError('Network connection issue. Retrying...');
         // Keep previous data if available
         if (farmingCache) {
           setPools(farmingCache.pools);
           setStats(farmingCache.stats);
         }
+        // Auto-retry after 5 seconds
+        setTimeout(() => {
+          if (mountedRef.current) {
+            fetchingRef.current = false;
+            fetchData(true);
+          }
+        }, 5000);
       }
     } finally {
       if (mountedRef.current) {
