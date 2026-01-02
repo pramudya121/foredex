@@ -11,7 +11,9 @@ export interface TokenBalance {
 
 // Global cache for balances to reduce RPC calls
 const balanceCache = new Map<string, { balances: Map<string, TokenBalance>; timestamp: number }>();
-const CACHE_TTL = 15000; // 15 seconds
+const CACHE_TTL = 30000; // 30 seconds - increased for stability
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
 
 // Initialize empty balances for all tokens
 function getEmptyBalances(): Map<string, TokenBalance> {
@@ -26,7 +28,7 @@ function getEmptyBalances(): Map<string, TokenBalance> {
   return map;
 }
 
-// Create a direct provider for balance fetching (bypass rpcProvider for simpler flow)
+// Create a direct provider with better error handling
 function createDirectProvider(): ethers.JsonRpcProvider {
   const network = { chainId: NEXUS_TESTNET.chainId, name: NEXUS_TESTNET.name };
   return new ethers.JsonRpcProvider(
@@ -36,11 +38,61 @@ function createDirectProvider(): ethers.JsonRpcProvider {
   );
 }
 
+// Retry helper with exponential backoff
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  retries = MAX_RETRIES,
+  delay = RETRY_DELAY
+): Promise<T | null> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isThrottled = error?.message?.includes('429') || 
+                          error?.code === 429 ||
+                          error?.message?.includes('Too Many Requests');
+      
+      if (i < retries - 1) {
+        // Exponential backoff: longer delay for throttled requests
+        const backoffDelay = isThrottled ? delay * Math.pow(2, i + 1) : delay * (i + 1);
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+      }
+    }
+  }
+  return null;
+}
+
+// Fetch single token balance with retry
+async function fetchTokenBalance(
+  provider: ethers.JsonRpcProvider,
+  token: TokenInfo,
+  address: string
+): Promise<TokenBalance | null> {
+  const result = await fetchWithRetry(async () => {
+    let balance: bigint;
+    
+    if (token.address === '0x0000000000000000000000000000000000000000') {
+      balance = await provider.getBalance(address);
+    } else {
+      const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+      balance = await contract.balanceOf(address);
+    }
+
+    return {
+      token,
+      balance: ethers.formatUnits(balance, token.decimals),
+      balanceRaw: balance,
+    };
+  });
+
+  return result;
+}
+
 export function useTokenBalances(address: string | null) {
   const [balances, setBalances] = useState<Map<string, TokenBalance>>(() => {
     if (address) {
       const cached = balanceCache.get(address.toLowerCase());
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL * 2) {
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL * 3) {
         return cached.balances;
       }
     }
@@ -49,12 +101,13 @@ export function useTokenBalances(address: string | null) {
   const [loading, setLoading] = useState(false);
   const isFetchingRef = useRef(false);
   const addressRef = useRef(address);
+  const lastFetchRef = useRef(0);
 
   useEffect(() => {
     addressRef.current = address;
   }, [address]);
 
-  const fetchBalances = useCallback(async () => {
+  const fetchBalances = useCallback(async (force = false) => {
     const currentAddress = addressRef.current;
     
     if (!currentAddress) {
@@ -63,72 +116,71 @@ export function useTokenBalances(address: string | null) {
       return;
     }
 
+    // Prevent rapid refetching
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < 5000) {
+      return;
+    }
+
     if (isFetchingRef.current) return;
 
     // Check cache first
     const cacheKey = currentAddress.toLowerCase();
     const cached = balanceCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (!force && cached && now - cached.timestamp < CACHE_TTL) {
       setBalances(cached.balances);
       setLoading(false);
       return;
     }
 
     isFetchingRef.current = true;
+    lastFetchRef.current = now;
     setLoading(true);
 
-    const newBalances = getEmptyBalances();
+    // Start with cached balances if available (optimistic)
+    const newBalances = cached ? new Map(cached.balances) : getEmptyBalances();
     let fetchedAny = false;
 
     try {
-      // Use direct provider for balance fetching
       const provider = createDirectProvider();
 
-      // Fetch all balances in parallel with individual error handling
-      const balancePromises = TOKEN_LIST.map(async (token) => {
-        try {
-          let balance: bigint;
-          
-          if (token.address === '0x0000000000000000000000000000000000000000') {
-            // Native token (NEX)
-            balance = await provider.getBalance(currentAddress);
-          } else {
-            // ERC20 token
-            const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-            balance = await contract.balanceOf(currentAddress);
+      // Batch tokens into groups to avoid overwhelming RPC
+      const batchSize = 4;
+      const tokenBatches: TokenInfo[][] = [];
+      for (let i = 0; i < TOKEN_LIST.length; i += batchSize) {
+        tokenBatches.push(TOKEN_LIST.slice(i, i + batchSize));
+      }
+
+      for (const batch of tokenBatches) {
+        // Add small delay between batches to avoid throttling
+        if (tokenBatches.indexOf(batch) > 0) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        const results = await Promise.all(
+          batch.map(token => fetchTokenBalance(provider, token, currentAddress))
+        );
+
+        results.forEach((result) => {
+          if (result) {
+            fetchedAny = true;
+            newBalances.set(result.token.address.toLowerCase(), result);
           }
+        });
 
-          return {
-            address: token.address.toLowerCase(),
-            data: {
-              token,
-              balance: ethers.formatUnits(balance, token.decimals),
-              balanceRaw: balance,
-            }
-          };
-        } catch {
-          return null;
-        }
-      });
-
-      const results = await Promise.allSettled(balancePromises);
-      
-      results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value) {
-          fetchedAny = true;
-          newBalances.set(result.value.address, result.value.data);
-        }
-      });
-
-      if (addressRef.current === currentAddress) {
-        if (fetchedAny) {
-          balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
-          setBalances(newBalances);
-        } else if (cached) {
-          setBalances(cached.balances);
+        // Update state incrementally for better UX
+        if (addressRef.current === currentAddress && fetchedAny) {
+          setBalances(new Map(newBalances));
         }
       }
-    } catch {
+
+      if (addressRef.current === currentAddress && fetchedAny) {
+        balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
+        setBalances(newBalances);
+      }
+    } catch (error) {
+      console.warn('Balance fetch error:', error);
+      // Keep showing cached data on error
       if (cached && addressRef.current === currentAddress) {
         setBalances(cached.balances);
       }
@@ -141,19 +193,19 @@ export function useTokenBalances(address: string | null) {
   // Fetch when address changes
   useEffect(() => {
     if (address) {
-      fetchBalances();
+      fetchBalances(true);
     } else {
       setBalances(getEmptyBalances());
     }
   }, [address, fetchBalances]);
 
-  // Auto-refresh every 20 seconds
+  // Auto-refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (addressRef.current) {
-        fetchBalances();
+        fetchBalances(false);
       }
-    }, 20000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchBalances]);
 
@@ -167,5 +219,5 @@ export function useTokenBalances(address: string | null) {
     return balance?.balanceRaw || BigInt(0);
   }, [balances]);
 
-  return { balances, loading, refetch: fetchBalances, getBalance, getBalanceRaw };
+  return { balances, loading, refetch: () => fetchBalances(true), getBalance, getBalanceRaw };
 }
