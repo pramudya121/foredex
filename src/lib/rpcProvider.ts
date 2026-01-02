@@ -6,14 +6,15 @@ class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 1000; // Start with 1s between requests
+  private minRequestInterval = 300; // Start with 300ms between requests (faster)
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 60000; // Cache for 60 seconds (longer cache)
+  private cacheTTL = 45000; // Cache for 45 seconds
   private errorCount = 0;
-  private maxErrors = 10; // More lenient
+  private maxErrors = 20; // More lenient
   private cooldownUntil = 0;
   private isInitializing = false;
   private consecutiveErrors = 0;
+  private pendingRequests = new Map<string, Promise<any>>();
 
   private constructor() {
     this.initProvider();
@@ -40,7 +41,7 @@ class RPCProviderService {
       );
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 30000;
+      this.cooldownUntil = Date.now() + 10000; // Shorter cooldown on init fail
     } finally {
       this.isInitializing = false;
     }
@@ -66,7 +67,8 @@ class RPCProviderService {
     if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
       this.consecutiveErrors = 0;
-      this.minRequestInterval = Math.max(500, this.minRequestInterval * 0.8); // Gradually reduce delay
+      this.errorCount = Math.max(0, this.errorCount - 5); // Reduce error count faster
+      this.minRequestInterval = Math.max(200, this.minRequestInterval * 0.5); // Faster recovery
     }
     return this.provider !== null && this.errorCount < this.maxErrors && now >= this.cooldownUntil;
   }
@@ -83,7 +85,7 @@ class RPCProviderService {
     this.cache.set(key, { data, timestamp: Date.now() });
     
     // Clean old cache entries periodically
-    if (this.cache.size > 100) {
+    if (this.cache.size > 150) {
       const now = Date.now();
       for (const [k, v] of this.cache.entries()) {
         if (now - v.timestamp > this.cacheTTL * 2) {
@@ -95,25 +97,26 @@ class RPCProviderService {
 
   private handleError(error: any): void {
     const errorMessage = error?.message || String(error);
-    this.errorCount++;
     this.consecutiveErrors++;
     
-    // Adaptive throttling - increase delay on errors
-    this.minRequestInterval = Math.min(5000, this.minRequestInterval * 1.5);
+    // Only increment global error count for severe errors
+    if (this.consecutiveErrors > 2) {
+      this.errorCount++;
+    }
     
-    // Set cooldown based on error type
+    // Gentler adaptive throttling
+    this.minRequestInterval = Math.min(3000, this.minRequestInterval * 1.3);
+    
+    // Set shorter cooldowns
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      // Long cooldown for rate limiting
-      this.cooldownUntil = Date.now() + 60000; // 60s cooldown
-    } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED')) {
-      // Medium cooldown for network/CORS errors
-      this.cooldownUntil = Date.now() + 30000; // 30s
+      this.cooldownUntil = Date.now() + 15000; // 15s cooldown (was 60s)
+    } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED') || errorMessage.includes('Failed to fetch')) {
+      this.cooldownUntil = Date.now() + 5000; // 5s (was 30s)
     } else if (errorMessage.includes('coalesce') || errorMessage.includes('Timeout')) {
-      // Connection issue cooldown
-      this.cooldownUntil = Date.now() + 20000; // 20s
+      this.cooldownUntil = Date.now() + 3000; // 3s (was 20s)
     } else {
-      // Exponential backoff for other errors
-      const backoff = Math.min(60000, 5000 * Math.pow(1.5, this.consecutiveErrors));
+      // Shorter exponential backoff
+      const backoff = Math.min(10000, 1000 * Math.pow(1.3, Math.min(this.consecutiveErrors, 5)));
       this.cooldownUntil = Date.now() + backoff;
     }
   }
@@ -123,13 +126,13 @@ class RPCProviderService {
     const msg = error?.message || error?.reason || String(error);
     
     if (msg.includes('coalesce')) {
-      return 'Network temporarily unavailable. Please try again in a moment.';
+      return 'Network busy - retrying automatically...';
     }
     if (msg.includes('missing revert data')) {
       return 'Transaction would fail - check inputs or try a smaller amount';
     }
     if (msg.includes('429') || msg.includes('Too Many')) {
-      return 'Too many requests - please wait 30 seconds and try again';
+      return 'Network busy - please wait a moment and try again';
     }
     if (msg.includes('user rejected') || msg.includes('User denied')) {
       return 'Transaction cancelled';
@@ -149,35 +152,44 @@ class RPCProviderService {
     if (msg.includes('INSUFFICIENT_LIQUIDITY')) {
       return 'Not enough liquidity in pool';
     }
-    if (msg.includes('CORS') || msg.includes('ERR_FAILED')) {
-      return 'Network connection issue - please wait and try again';
+    if (msg.includes('CORS') || msg.includes('ERR_FAILED') || msg.includes('Failed to fetch')) {
+      return 'Network busy - retrying...';
     }
     
-    // Return cleaned message
     return error?.reason || 'Transaction failed - please try again';
   }
 
   async call<T>(
     contractCall: () => Promise<T>,
     cacheKey?: string,
-    options?: { skipCache?: boolean; timeout?: number }
+    options?: { skipCache?: boolean; timeout?: number; retries?: number }
   ): Promise<T | null> {
-    // Check cache first - always return cached value if available
+    // Check cache first
     if (cacheKey && !options?.skipCache) {
       const cached = this.getFromCache(cacheKey);
       if (cached !== null) return cached;
     }
 
-    // Check cooldown but still allow cached values
+    // Dedupe identical pending requests
+    if (cacheKey && this.pendingRequests.has(cacheKey)) {
+      try {
+        return await this.pendingRequests.get(cacheKey);
+      } catch {
+        // Fall through to retry
+      }
+    }
+
+    // If in cooldown, return cached value or null (don't throw error)
     if (!this.isAvailable()) {
       if (cacheKey) {
         const cached = this.cache.get(cacheKey);
         if (cached) return cached.data;
       }
+      // Return null silently instead of showing error
       return null;
     }
 
-    // Throttle requests with adaptive delay
+    // Throttle requests
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
     if (timeSinceLastRequest < this.minRequestInterval) {
@@ -185,59 +197,74 @@ class RPCProviderService {
     }
     this.lastRequestTime = Date.now();
 
-    const timeout = options?.timeout || 20000; // 20s default timeout
+    const timeout = options?.timeout || 15000; // 15s default timeout
+    const maxRetries = options?.retries ?? 2;
 
-    try {
-      const result = await Promise.race([
-        contractCall(),
-        new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), timeout)
-        )
-      ]);
-      
-      if (cacheKey && result !== null) {
-        this.setCache(cacheKey, result);
+    const executeCall = async (attempt: number): Promise<T | null> => {
+      try {
+        const result = await Promise.race([
+          contractCall(),
+          new Promise<null>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), timeout)
+          )
+        ]);
+        
+        if (cacheKey && result !== null) {
+          this.setCache(cacheKey, result);
+        }
+        
+        // Reset on success
+        this.consecutiveErrors = 0;
+        this.errorCount = Math.max(0, this.errorCount - 2);
+        this.minRequestInterval = Math.max(200, this.minRequestInterval * 0.8);
+        
+        return result as T;
+      } catch (error) {
+        // Retry on transient errors
+        if (attempt < maxRetries) {
+          const delay = 500 * Math.pow(1.5, attempt);
+          await new Promise(r => setTimeout(r, delay));
+          return executeCall(attempt + 1);
+        }
+        
+        this.handleError(error);
+        
+        // Return cached data if available
+        if (cacheKey) {
+          const cached = this.cache.get(cacheKey);
+          if (cached) return cached.data;
+        }
+        return null;
       }
-      
-      // Reset consecutive errors on success
-      this.consecutiveErrors = 0;
-      // Gradually reduce error count
-      this.errorCount = Math.max(0, this.errorCount - 1);
-      // Gradually reduce delay on success
-      this.minRequestInterval = Math.max(500, this.minRequestInterval * 0.9);
-      
-      return result as T;
-    } catch (error) {
-      // Handle error and return cached data if available
-      this.handleError(error);
-      
-      if (cacheKey) {
-        const cached = this.cache.get(cacheKey);
-        if (cached) return cached.data;
-      }
-      return null;
+    };
+
+    const promise = executeCall(0);
+    
+    if (cacheKey) {
+      this.pendingRequests.set(cacheKey, promise);
+      promise.finally(() => this.pendingRequests.delete(cacheKey));
     }
+
+    return promise;
   }
 
-  // Reset error state
+  // Force reset all state
   reset() {
     this.errorCount = 0;
     this.consecutiveErrors = 0;
     this.cooldownUntil = 0;
-    this.minRequestInterval = 1000;
+    this.minRequestInterval = 300;
+    this.pendingRequests.clear();
   }
 
-  // Clear cache
   clearCache() {
     this.cache.clear();
   }
 
-  // Get cooldown remaining time
   getCooldownRemaining(): number {
     return Math.max(0, this.cooldownUntil - Date.now());
   }
 
-  // Get current request interval
   getRequestInterval(): number {
     return this.minRequestInterval;
   }
