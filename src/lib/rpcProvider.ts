@@ -1,20 +1,19 @@
 import { ethers } from 'ethers';
 import { NEXUS_TESTNET } from '@/config/contracts';
 
-// Singleton RPC provider with request throttling and caching
+// Singleton RPC provider with robust error handling and adaptive throttling
 class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 500; // 500ms between requests (more conservative)
+  private minRequestInterval = 1000; // Start with 1s between requests
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 30000; // Cache for 30 seconds
+  private cacheTTL = 60000; // Cache for 60 seconds (longer cache)
   private errorCount = 0;
-  private maxErrors = 5; // More strict error tolerance
+  private maxErrors = 10; // More lenient
   private cooldownUntil = 0;
   private isInitializing = false;
-  private requestQueue: Array<() => void> = [];
-  private isProcessingQueue = false;
+  private consecutiveErrors = 0;
 
   private constructor() {
     this.initProvider();
@@ -41,7 +40,7 @@ class RPCProviderService {
       );
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 10000;
+      this.cooldownUntil = Date.now() + 30000;
     } finally {
       this.isInitializing = false;
     }
@@ -62,12 +61,14 @@ class RPCProviderService {
   }
 
   isAvailable(): boolean {
+    const now = Date.now();
     // Auto-reset cooldown after it expires
-    if (Date.now() >= this.cooldownUntil && this.cooldownUntil > 0) {
+    if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
-      this.errorCount = Math.max(0, this.errorCount - 2); // Gradually reduce error count
+      this.consecutiveErrors = 0;
+      this.minRequestInterval = Math.max(500, this.minRequestInterval * 0.8); // Gradually reduce delay
     }
-    return this.provider !== null && this.errorCount < this.maxErrors && Date.now() >= this.cooldownUntil;
+    return this.provider !== null && this.errorCount < this.maxErrors && now >= this.cooldownUntil;
   }
 
   private getFromCache(key: string): any | null {
@@ -82,7 +83,7 @@ class RPCProviderService {
     this.cache.set(key, { data, timestamp: Date.now() });
     
     // Clean old cache entries periodically
-    if (this.cache.size > 50) {
+    if (this.cache.size > 100) {
       const now = Date.now();
       for (const [k, v] of this.cache.entries()) {
         if (now - v.timestamp > this.cacheTTL * 2) {
@@ -92,26 +93,28 @@ class RPCProviderService {
     }
   }
 
-  private handleError(error: any): string {
+  private handleError(error: any): void {
     const errorMessage = error?.message || String(error);
     this.errorCount++;
+    this.consecutiveErrors++;
     
-    // Longer cooldowns to prevent rate limiting
+    // Adaptive throttling - increase delay on errors
+    this.minRequestInterval = Math.min(5000, this.minRequestInterval * 1.5);
+    
+    // Set cooldown based on error type
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      this.cooldownUntil = Date.now() + 30000; // 30s cooldown for 429
-      return 'RPC rate limited. Retrying soon...';
+      // Long cooldown for rate limiting
+      this.cooldownUntil = Date.now() + 60000; // 60s cooldown
     } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED')) {
-      this.cooldownUntil = Date.now() + 15000; // 15s for network errors
-      return 'Network connection issue. Retrying...';
+      // Medium cooldown for network/CORS errors
+      this.cooldownUntil = Date.now() + 30000; // 30s
     } else if (errorMessage.includes('coalesce') || errorMessage.includes('Timeout')) {
-      this.cooldownUntil = Date.now() + 10000; // 10s for timeout/coalesce
-      return 'Connection timeout. Please try again.';
-    } else if (errorMessage.includes('missing revert data')) {
-      // This is a contract-level error, not RPC
-      return 'Transaction would fail. Check your inputs.';
+      // Connection issue cooldown
+      this.cooldownUntil = Date.now() + 20000; // 20s
     } else {
-      this.cooldownUntil = Date.now() + 5000; // 5s for general errors
-      return 'Connection error. Retrying...';
+      // Exponential backoff for other errors
+      const backoff = Math.min(60000, 5000 * Math.pow(1.5, this.consecutiveErrors));
+      this.cooldownUntil = Date.now() + backoff;
     }
   }
 
@@ -120,13 +123,13 @@ class RPCProviderService {
     const msg = error?.message || error?.reason || String(error);
     
     if (msg.includes('coalesce')) {
-      return 'Network temporarily unavailable';
+      return 'Network temporarily unavailable. Please try again in a moment.';
     }
     if (msg.includes('missing revert data')) {
       return 'Transaction would fail - check inputs or try a smaller amount';
     }
     if (msg.includes('429') || msg.includes('Too Many')) {
-      return 'Too many requests - please wait a moment';
+      return 'Too many requests - please wait 30 seconds and try again';
     }
     if (msg.includes('user rejected') || msg.includes('User denied')) {
       return 'Transaction cancelled';
@@ -138,7 +141,7 @@ class RPCProviderService {
       return 'Token transfer failed - check approval';
     }
     if (msg.includes('EXPIRED')) {
-      return 'Transaction deadline expired';
+      return 'Transaction deadline expired - try again';
     }
     if (msg.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
       return 'Price moved too much - try increasing slippage';
@@ -146,17 +149,21 @@ class RPCProviderService {
     if (msg.includes('INSUFFICIENT_LIQUIDITY')) {
       return 'Not enough liquidity in pool';
     }
+    if (msg.includes('CORS') || msg.includes('ERR_FAILED')) {
+      return 'Network connection issue - please wait and try again';
+    }
     
     // Return cleaned message
-    return error?.reason || 'Transaction failed';
+    return error?.reason || 'Transaction failed - please try again';
   }
 
   async call<T>(
     contractCall: () => Promise<T>,
-    cacheKey?: string
+    cacheKey?: string,
+    options?: { skipCache?: boolean; timeout?: number }
   ): Promise<T | null> {
     // Check cache first - always return cached value if available
-    if (cacheKey) {
+    if (cacheKey && !options?.skipCache) {
       const cached = this.getFromCache(cacheKey);
       if (cached !== null) return cached;
     }
@@ -170,7 +177,7 @@ class RPCProviderService {
       return null;
     }
 
-    // Throttle requests
+    // Throttle requests with adaptive delay
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
     if (timeSinceLastRequest < this.minRequestInterval) {
@@ -178,11 +185,13 @@ class RPCProviderService {
     }
     this.lastRequestTime = Date.now();
 
+    const timeout = options?.timeout || 20000; // 20s default timeout
+
     try {
       const result = await Promise.race([
         contractCall(),
         new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 15000) // 15s timeout
+          setTimeout(() => reject(new Error('Timeout')), timeout)
         )
       ]);
       
@@ -190,12 +199,16 @@ class RPCProviderService {
         this.setCache(cacheKey, result);
       }
       
-      // Reset error count on successful call
-      this.errorCount = 0;
+      // Reset consecutive errors on success
+      this.consecutiveErrors = 0;
+      // Gradually reduce error count
+      this.errorCount = Math.max(0, this.errorCount - 1);
+      // Gradually reduce delay on success
+      this.minRequestInterval = Math.max(500, this.minRequestInterval * 0.9);
       
       return result as T;
     } catch (error) {
-      // Silently handle and return cached data if available
+      // Handle error and return cached data if available
       this.handleError(error);
       
       if (cacheKey) {
@@ -209,7 +222,9 @@ class RPCProviderService {
   // Reset error state
   reset() {
     this.errorCount = 0;
+    this.consecutiveErrors = 0;
     this.cooldownUntil = 0;
+    this.minRequestInterval = 1000;
   }
 
   // Clear cache
@@ -220,6 +235,11 @@ class RPCProviderService {
   // Get cooldown remaining time
   getCooldownRemaining(): number {
     return Math.max(0, this.cooldownUntil - Date.now());
+  }
+
+  // Get current request interval
+  getRequestInterval(): number {
+    return this.minRequestInterval;
   }
 }
 

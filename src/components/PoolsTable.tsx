@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
+import { useWeb3 } from '@/contexts/Web3Context';
 import { 
   ExternalLink, 
   TrendingUp, 
@@ -16,7 +17,8 @@ import {
   RefreshCw,
   ChevronRight,
   Copy,
-  Check
+  Check,
+  Wallet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
@@ -39,6 +41,8 @@ interface Pool {
   fees24h: number;
   apr: number;
   chartData?: number[];
+  userLpBalance?: string; // User's LP token balance
+  userShare?: number; // User's pool share percentage
 }
 
 // Generate mini chart data for each pool
@@ -89,12 +93,14 @@ export const clearPoolsTableCache = () => {
 };
 
 function PoolsTableInner() {
+  const { address: userAddress, isConnected } = useWeb3();
   const cacheValid = poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL;
   
   const [pools, setPools] = useState<Pool[]>(() => cacheValid ? poolsTableCache!.pools : []);
   const [loading, setLoading] = useState(!cacheValid);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [showMyPositions, setShowMyPositions] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
   const isFetchingRef = useRef(false);
@@ -110,10 +116,15 @@ function PoolsTableInner() {
   }, [pools, isFavorite]);
 
   const displayedPools = useMemo(() => {
-    return showFavoritesOnly 
-      ? sortedPools.filter(p => isFavorite(p.address))
-      : sortedPools;
-  }, [sortedPools, showFavoritesOnly, isFavorite]);
+    let filtered = sortedPools;
+    if (showFavoritesOnly) {
+      filtered = filtered.filter(p => isFavorite(p.address));
+    }
+    if (showMyPositions && isConnected) {
+      filtered = filtered.filter(p => p.userLpBalance && parseFloat(p.userLpBalance) > 0);
+    }
+    return filtered;
+  }, [sortedPools, showFavoritesOnly, showMyPositions, isFavorite, isConnected]);
 
   const copyAddress = useCallback((address: string) => {
     navigator.clipboard.writeText(address);
@@ -125,9 +136,14 @@ function PoolsTableInner() {
   const fetchPools = useCallback(async (force: boolean = false) => {
     if (isFetchingRef.current) return;
     
-    // Use cache if valid and not forced
+    // Use cache if valid and not forced (but still update LP balances if connected)
     if (!force && poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
-      setPools(poolsTableCache.pools);
+      // If user is connected, update LP balances on cached pools
+      if (userAddress && isConnected) {
+        await updateUserLpBalances(poolsTableCache.pools);
+      } else {
+        setPools(poolsTableCache.pools);
+      }
       setLoading(false);
       return;
     }
@@ -174,7 +190,7 @@ function PoolsTableInner() {
       const pairAddresses = await Promise.all(pairPromises);
 
       // Fetch pair data in parallel batches
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = 3; // Smaller batch size to avoid rate limiting
       for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
         const batch = pairAddresses.slice(i, i + BATCH_SIZE);
         const batchPromises = batch.map(async (pairAddress) => {
@@ -183,12 +199,24 @@ function PoolsTableInner() {
           try {
             const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
 
-            const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+            // Build promises array with optional user balance
+            const dataPromises: Promise<any>[] = [
               rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
               rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
               rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`),
               rpcProvider.call(() => pair.totalSupply(), `supply_${pairAddress}`),
-            ]);
+            ];
+
+            // Add user balance fetch if connected
+            if (userAddress && isConnected) {
+              dataPromises.push(
+                rpcProvider.call(() => pair.balanceOf(userAddress), `userLp_${pairAddress}_${userAddress}`)
+              );
+            }
+
+            const results = await Promise.all(dataPromises);
+            const [token0Addr, token1Addr, reserves, totalSupply] = results;
+            const userLpBalanceRaw = results[4];
 
             if (!token0Addr || !token1Addr || !reserves || !totalSupply) return null;
 
@@ -208,6 +236,17 @@ function PoolsTableInner() {
             const fees24h = volume24h * 0.003;
             const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
 
+            // Calculate user LP balance and share
+            const totalSupplyNum = parseFloat(ethers.formatEther(totalSupply));
+            let userLpBalance = '0';
+            let userShare = 0;
+            
+            if (userLpBalanceRaw) {
+              userLpBalance = ethers.formatEther(userLpBalanceRaw);
+              const userLpNum = parseFloat(userLpBalance);
+              userShare = totalSupplyNum > 0 ? (userLpNum / totalSupplyNum) * 100 : 0;
+            }
+
             // Generate seed from address for consistent chart data
             const addressSeed = parseInt(pairAddress.slice(2, 10), 16);
             const chartData = generateMiniChartData(tvl, addressSeed);
@@ -224,6 +263,8 @@ function PoolsTableInner() {
               fees24h,
               apr,
               chartData,
+              userLpBalance,
+              userShare,
             };
           } catch {
             return null;
@@ -234,6 +275,11 @@ function PoolsTableInner() {
         batchResults.forEach(result => {
           if (result) fetchedPools.push(result);
         });
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + BATCH_SIZE < pairAddresses.length) {
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
 
       if (fetchedPools.length > 0) {
@@ -247,7 +293,49 @@ function PoolsTableInner() {
       setIsRefreshing(false);
       isFetchingRef.current = false;
     }
-  }, [pools.length]);
+  }, [pools.length, userAddress, isConnected]);
+
+  // Helper function to update user LP balances on cached pools
+  const updateUserLpBalances = useCallback(async (cachedPools: Pool[]) => {
+    if (!userAddress || !isConnected) {
+      setPools(cachedPools);
+      return;
+    }
+
+    const provider = rpcProvider.getProvider();
+    if (!provider || !rpcProvider.isAvailable()) {
+      setPools(cachedPools);
+      return;
+    }
+
+    try {
+      const updatedPools = await Promise.all(
+        cachedPools.map(async (pool) => {
+          try {
+            const pair = new ethers.Contract(pool.address, PAIR_ABI, provider);
+            const userLpBalanceRaw = await rpcProvider.call(
+              () => pair.balanceOf(userAddress),
+              `userLp_${pool.address}_${userAddress}`
+            );
+            
+            if (userLpBalanceRaw) {
+              const userLpBalance = ethers.formatEther(userLpBalanceRaw);
+              const totalSupplyNum = parseFloat(pool.totalSupply);
+              const userLpNum = parseFloat(userLpBalance);
+              const userShare = totalSupplyNum > 0 ? (userLpNum / totalSupplyNum) * 100 : 0;
+              return { ...pool, userLpBalance, userShare };
+            }
+            return pool;
+          } catch {
+            return pool;
+          }
+        })
+      );
+      setPools(updatedPools);
+    } catch {
+      setPools(cachedPools);
+    }
+  }, [userAddress, isConnected]);
 
   useEffect(() => {
     fetchPools();
@@ -267,16 +355,33 @@ function PoolsTableInner() {
     <div className="space-y-4">
       {/* Filter Bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Button
             variant={showFavoritesOnly ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+            onClick={() => {
+              setShowFavoritesOnly(!showFavoritesOnly);
+              if (!showFavoritesOnly) setShowMyPositions(false);
+            }}
             className="flex items-center gap-2"
           >
             <Star className={cn('w-4 h-4', showFavoritesOnly && 'fill-current')} />
-            Favorites ({favorites.length})
+            <span className="hidden sm:inline">Favorites</span> ({favorites.length})
           </Button>
+          {isConnected && (
+            <Button
+              variant={showMyPositions ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setShowMyPositions(!showMyPositions);
+                if (!showMyPositions) setShowFavoritesOnly(false);
+              }}
+              className="flex items-center gap-2"
+            >
+              <Wallet className={cn('w-4 h-4', showMyPositions && 'fill-current')} />
+              <span className="hidden sm:inline">My Positions</span>
+            </Button>
+          )}
           <Badge variant="secondary" className="px-3 py-1">
             <Droplets className="w-3 h-3 mr-1" />
             {pools.length} Pools
@@ -290,20 +395,21 @@ function PoolsTableInner() {
           className="flex items-center gap-2"
         >
           <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
 
       {/* Table Header - Desktop */}
       <div className="glass-card p-4 hidden lg:block">
-        <div className="grid grid-cols-[40px_1.5fr_100px_120px_80px_120px_120px_100px] gap-4 text-sm font-medium text-muted-foreground">
+        <div className="grid grid-cols-[40px_1.2fr_80px_100px_70px_90px_100px_100px_90px] gap-3 text-sm font-medium text-muted-foreground">
           <div></div>
           <div>Pool</div>
-          <div className="text-center">14D Trend</div>
+          <div className="text-center">Trend</div>
           <div className="text-right">TVL</div>
           <div className="text-right">APR</div>
-          <div className="text-right">24h Volume</div>
-          <div className="text-center">LP Address</div>
+          <div className="text-right">Volume</div>
+          <div className="text-center">Your LP</div>
+          <div className="text-center">Address</div>
           <div className="text-right">Actions</div>
         </div>
       </div>
@@ -347,7 +453,7 @@ function PoolsTableInner() {
               )}
             >
               {/* Desktop View */}
-              <div className="hidden lg:grid grid-cols-[40px_1.5fr_100px_120px_80px_120px_120px_100px] gap-4 items-center">
+              <div className="hidden lg:grid grid-cols-[40px_1.2fr_80px_100px_70px_90px_100px_100px_90px] gap-3 items-center">
                 {/* Favorite Button */}
                 <div className="flex-shrink-0">
                   <Button
@@ -382,7 +488,7 @@ function PoolsTableInner() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold group-hover:text-primary transition-colors truncate">
+                    <h3 className="font-bold group-hover:text-primary transition-colors truncate text-sm">
                       {pool.token0.symbol}/{pool.token1.symbol}
                     </h3>
                     <Badge variant="secondary" className="text-xs px-1.5 py-0">
@@ -397,7 +503,7 @@ function PoolsTableInner() {
                   {pool.chartData && (
                     <PoolMiniChart 
                       data={pool.chartData} 
-                      height={32} 
+                      height={28} 
                       showTrend={false}
                     />
                   )}
@@ -405,14 +511,13 @@ function PoolsTableInner() {
 
                 {/* TVL */}
                 <div className="text-right">
-                  <p className="font-bold">{formatNumber(pool.tvl)}</p>
-                  <p className="text-xs text-muted-foreground">TVL</p>
+                  <p className="font-bold text-sm">{formatNumber(pool.tvl)}</p>
                 </div>
 
                 {/* APR */}
                 <div className="text-right">
                   <p className={cn(
-                    'font-bold flex items-center justify-end gap-1',
+                    'font-bold text-sm flex items-center justify-end gap-1',
                     pool.apr > 50 ? 'text-green-500' : pool.apr > 20 ? 'text-primary' : 'text-foreground'
                   )}>
                     {pool.apr > 50 && <Flame className="w-3 h-3" />}
@@ -423,6 +528,22 @@ function PoolsTableInner() {
                 {/* 24h Volume */}
                 <div className="text-right">
                   <p className="font-semibold text-sm">{formatNumber(pool.volume24h)}</p>
+                </div>
+
+                {/* User LP Balance */}
+                <div className="text-center">
+                  {isConnected && pool.userLpBalance && parseFloat(pool.userLpBalance) > 0 ? (
+                    <div className="bg-primary/10 rounded-lg px-2 py-1">
+                      <p className="font-bold text-xs text-primary">
+                        {parseFloat(pool.userLpBalance).toFixed(4)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {pool.userShare?.toFixed(2)}% share
+                      </p>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
                 </div>
 
                 {/* LP Contract Address */}
@@ -532,23 +653,36 @@ function PoolsTableInner() {
                 </div>
 
                 {/* Mobile Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-muted/30 rounded-lg p-2.5 text-center">
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="bg-muted/30 rounded-lg p-2 text-center">
                     <p className="text-[10px] text-muted-foreground mb-0.5">TVL</p>
-                    <p className="font-bold text-sm">{formatNumber(pool.tvl)}</p>
+                    <p className="font-bold text-xs">{formatNumber(pool.tvl)}</p>
                   </div>
-                  <div className="bg-muted/30 rounded-lg p-2.5 text-center">
+                  <div className="bg-muted/30 rounded-lg p-2 text-center">
                     <p className="text-[10px] text-muted-foreground mb-0.5">APR</p>
-                    <p className={cn(
-                      'font-bold text-sm',
-                      pool.apr > 50 ? 'text-green-500' : ''
-                    )}>
+                    <p className={cn('font-bold text-xs', pool.apr > 50 ? 'text-green-500' : '')}>
                       {pool.apr.toFixed(1)}%
                     </p>
                   </div>
-                  <div className="bg-muted/30 rounded-lg p-2.5 text-center">
+                  <div className="bg-muted/30 rounded-lg p-2 text-center">
                     <p className="text-[10px] text-muted-foreground mb-0.5">Volume</p>
-                    <p className="font-bold text-sm">{formatNumber(pool.volume24h)}</p>
+                    <p className="font-bold text-xs">{formatNumber(pool.volume24h)}</p>
+                  </div>
+                  <div className={cn(
+                    "rounded-lg p-2 text-center",
+                    isConnected && pool.userLpBalance && parseFloat(pool.userLpBalance) > 0 
+                      ? "bg-primary/10" 
+                      : "bg-muted/30"
+                  )}>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Your LP</p>
+                    <p className={cn(
+                      "font-bold text-xs",
+                      isConnected && pool.userLpBalance && parseFloat(pool.userLpBalance) > 0 && "text-primary"
+                    )}>
+                      {isConnected && pool.userLpBalance && parseFloat(pool.userLpBalance) > 0 
+                        ? parseFloat(pool.userLpBalance).toFixed(2)
+                        : '-'}
+                    </p>
                   </div>
                 </div>
 
