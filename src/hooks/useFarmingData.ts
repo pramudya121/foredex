@@ -74,11 +74,12 @@ export function useFarmingData() {
   const { address, signer } = useWeb3();
   const [pools, setPools] = useState<PoolInfo[]>(() => farmingCache?.pools || []);
   const [stats, setStats] = useState<FarmingStats | null>(() => farmingCache?.stats || null);
-  const [loading, setLoading] = useState(!farmingCache || Date.now() - farmingCache.timestamp > CACHE_TTL);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const fetchingRef = useRef(false);
   const mountedRef = useRef(true);
+  const initialFetchDone = useRef(false);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     // Prevent concurrent fetches
@@ -88,11 +89,15 @@ export function useFarmingData() {
     if (!forceRefresh && farmingCache && Date.now() - farmingCache.timestamp < CACHE_TTL) {
       setPools(farmingCache.pools);
       setStats(farmingCache.stats);
-      setLoading(false);
       return;
     }
 
     fetchingRef.current = true;
+    
+    // Only show loading on initial fetch, not refreshes
+    if (!initialFetchDone.current && pools.length === 0) {
+      setLoading(true);
+    }
     
     try {
       setError(null);
@@ -147,10 +152,30 @@ export function useFarmingData() {
             try {
               const poolInfo = await retry(() => farmingContract.poolInfo(pid), 2, 1000);
               const lpToken = poolInfo.lpToken;
+              
+              // Skip if LP token is zero address
+              if (lpToken === ethers.ZeroAddress || !lpToken) {
+                console.warn(`Pool ${pid} has invalid LP token address`);
+                return null;
+              }
+              
               const lpContract = new ethers.Contract(lpToken, [...PAIR_ABI, ...ERC20_ABI], provider);
 
               let token0Symbol = 'LP', token1Symbol = '';
               let totalStaked = '0';
+              let lpValid = true;
+
+              // Verify LP token contract exists by checking code
+              try {
+                const code = await provider.getCode(lpToken);
+                if (code === '0x' || code === '0x0') {
+                  console.warn(`Pool ${pid} LP token contract doesn't exist at ${lpToken}`);
+                  return null; // Skip this pool
+                }
+              } catch {
+                console.warn(`Could not verify LP token contract for pool ${pid}`);
+                return null;
+              }
 
               // Try to get pair tokens
               try {
@@ -169,12 +194,13 @@ export function useFarmingData() {
                 }
               }
 
-              // Get total staked
+              // Get total staked - if this fails, the LP token is likely invalid
               try {
                 const staked = await lpContract.balanceOf(CONTRACTS.FARMING);
                 totalStaked = ethers.formatEther(staked);
-              } catch {
-                totalStaked = '0';
+              } catch (e) {
+                console.warn(`Could not fetch total staked for pool ${pid}, skipping:`, e);
+                return null; // Skip pools where we can't even get total staked
               }
 
               // Get user info if connected - with better error handling
@@ -185,18 +211,18 @@ export function useFarmingData() {
               if (address) {
                 // Fetch user data separately with individual error handling
                 try {
-                  const userInfo = await retry(() => farmingContract.userInfo(pid, address), 2, 500);
+                  const userInfo = await farmingContract.userInfo(pid, address);
                   userStaked = ethers.formatEther(userInfo.amount);
                 } catch (e) {
-                  console.warn(`Could not fetch userInfo for pool ${pid}:`, e);
+                  // Silent fail - user just has 0 staked
                   userStaked = '0';
                 }
 
                 try {
-                  const pending = await retry(() => farmingContract.pendingReward(pid, address), 2, 500);
+                  const pending = await farmingContract.pendingReward(pid, address);
                   pendingReward = ethers.formatEther(pending);
                 } catch (e) {
-                  console.warn(`Could not fetch pendingReward for pool ${pid}:`, e);
+                  // Silent fail - user just has 0 pending
                   pendingReward = '0';
                 }
 
@@ -204,7 +230,7 @@ export function useFarmingData() {
                   const balance = await lpContract.balanceOf(address);
                   lpBalance = ethers.formatEther(balance);
                 } catch (e) {
-                  console.warn(`Could not fetch LP balance for pool ${pid}:`, e);
+                  // Silent fail - user just has 0 balance
                   lpBalance = '0';
                 }
               }
@@ -275,10 +301,11 @@ export function useFarmingData() {
     } finally {
       if (mountedRef.current) {
         setLoading(false);
+        initialFetchDone.current = true;
       }
       fetchingRef.current = false;
     }
-  }, [address]);
+  }, [address, pools.length]);
 
   // Deposit LP tokens
   const deposit = useCallback(async (pid: number, amount: string) => {
