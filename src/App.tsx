@@ -17,6 +17,7 @@ const Index = lazy(() => import("./pages/Index"));
 const Liquidity = lazy(() => import("./pages/Liquidity"));
 const Pools = lazy(() => import("./pages/Pools"));
 const FarmingPage = lazy(() => import("./pages/FarmingPage"));
+const FarmingAdminPage = lazy(() => import("./pages/FarmingAdminPage"));
 const FarmingPoolDetailPage = lazy(() => import("./pages/PoolDetailPage"));
 const LiquidityPoolDetailPage = lazy(() => import("./pages/LiquidityPoolDetailPage"));
 const TokensPage = lazy(() => import("./pages/TokensPage"));
@@ -63,6 +64,7 @@ const AppContent = memo(function AppContent() {
             <Route path="/pools" element={<Pools />} />
             <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
             <Route path="/farming" element={<FarmingPage />} />
+            <Route path="/farming/admin" element={<FarmingAdminPage />} />
             <Route path="/farming/:pid" element={<FarmingPoolDetailPage />} />
             <Route path="/tokens" element={<TokensPage />} />
             <Route path="/tokens/:address" element={<TokenDetailPage />} />

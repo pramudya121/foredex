@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, memo } from 'react';
+import { Link } from 'react-router-dom';
 import { useFarmingData } from '@/hooks/useFarmingData';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { FarmCard } from '@/components/farming/FarmCard';
-import { AdminPanel } from '@/components/farming/AdminPanel';
 import { FarmingFilters } from '@/components/farming/FarmingFilters';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,11 @@ import {
   Coins, 
   RefreshCw, 
   Gift,
-  Sparkles,
   Shield,
   Wallet,
   Zap,
   BarChart3,
+  Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PoolInfo } from '@/components/farming/FarmCard';
@@ -153,10 +153,6 @@ export default function FarmingPage() {
     harvest, 
     harvestAll, 
     emergencyWithdraw, 
-    addPool, 
-    setPoolAlloc,
-    pause,
-    unpause,
   } = useFarmingData();
   
   const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
@@ -276,6 +272,19 @@ export default function FarmingPage() {
           </div>
           
           <div className="flex items-center gap-3">
+            {isOwner && (
+              <Link to="/farming/admin">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin
+                </Button>
+              </Link>
+            )}
+            
             <Button 
               variant="outline" 
               size="sm" 
@@ -364,16 +373,6 @@ export default function FarmingPage() {
             </Card>
           </div>
 
-          {/* Admin Panel */}
-          {isOwner && (
-            <AdminPanel 
-              isPaused={stats?.isPaused || false}
-              onAddPool={addPool}
-              onSetPoolAlloc={setPoolAlloc}
-              onPause={pause}
-              onUnpause={unpause}
-            />
-          )}
 
           {/* Pools Section */}
           <div className="space-y-4">
