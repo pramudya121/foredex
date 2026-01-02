@@ -13,8 +13,10 @@ interface BalanceCache {
 
 // Global balance cache shared across all hook instances
 const globalBalanceCache: BalanceCache = {};
-const BALANCE_CACHE_TTL = 30000; // 30 seconds
+const BALANCE_CACHE_TTL = 45000; // 45 seconds (increased from 30)
 const pendingRequests = new Map<string, Promise<string>>();
+const lastFetchTime = new Map<string, number>();
+const MIN_FETCH_INTERVAL = 5000; // Minimum 5 seconds between fetches for same token
 
 export function useStableBalances(address: string | null) {
   const [balances, setBalances] = useState<Map<string, string>>(new Map());
@@ -41,9 +43,19 @@ export function useStableBalances(address: string | null) {
       return cached.balance;
     }
 
+    // Prevent too frequent fetches for the same token
+    const lastFetch = lastFetchTime.get(cacheKey) || 0;
+    if (Date.now() - lastFetch < MIN_FETCH_INTERVAL) {
+      return cached?.balance || '0';
+    }
+
     // Check if already fetching
     if (pendingRequests.has(cacheKey)) {
-      return pendingRequests.get(cacheKey)!;
+      try {
+        return await pendingRequests.get(cacheKey)!;
+      } catch {
+        return cached?.balance || '0';
+      }
     }
 
     const provider = rpcProvider.getProvider();
@@ -51,28 +63,29 @@ export function useStableBalances(address: string | null) {
       return cached?.balance || '0';
     }
 
+    lastFetchTime.set(cacheKey, Date.now());
+
     const fetchPromise = (async () => {
       try {
         let balance: string;
         
         if (tokenAddress === '0x0000000000000000000000000000000000000000') {
-          // Native token
           const result = await rpcProvider.call(
             () => provider.getBalance(walletAddress),
-            `balance_native_${walletAddress}`
+            `balance_native_${walletAddress}`,
+            { retries: 2 }
           );
           balance = result ? ethers.formatEther(result) : '0';
         } else {
-          // ERC20 token
           const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
           const result = await rpcProvider.call(
             () => contract.balanceOf(walletAddress),
-            `balance_${tokenAddress}_${walletAddress}`
+            `balance_${tokenAddress}_${walletAddress}`,
+            { retries: 2 }
           );
           balance = result ? ethers.formatUnits(result, decimals) : '0';
         }
 
-        // Update cache
         globalBalanceCache[cacheKey] = {
           balance,
           timestamp: Date.now(),
@@ -265,16 +278,14 @@ export function useTokenPairBalances(
     };
 
     try {
-      // Fetch both balances with small delay between
-      const balA = await fetchTokenBalance(tokenA);
+      // Fetch both balances in parallel when possible
+      const [balA, balB] = await Promise.all([
+        fetchTokenBalance(tokenA),
+        fetchTokenBalance(tokenB),
+      ]);
+      
       if (!mountedRef.current || currentFetch !== fetchCountRef.current) return;
       setBalanceA(balA);
-      
-      // Small delay to prevent rate limiting
-      await new Promise(r => setTimeout(r, 300));
-      
-      const balB = await fetchTokenBalance(tokenB);
-      if (!mountedRef.current || currentFetch !== fetchCountRef.current) return;
       setBalanceB(balB);
     } finally {
       if (mountedRef.current && currentFetch === fetchCountRef.current) {
@@ -293,13 +304,13 @@ export function useTokenPairBalances(
     };
   }, [address, tokenA?.address, tokenB?.address]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 45 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (address) {
         fetchBalances();
       }
-    }, 30000);
+    }, 45000);
     
     return () => clearInterval(interval);
   }, [address, fetchBalances]);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
+import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
 import { FARMING_ABI } from '@/config/farmingAbi';
 import { ERC20_ABI, PAIR_ABI } from '@/config/abis';
 
@@ -32,19 +32,14 @@ interface FarmingCache {
   timestamp: number;
 }
 
-const CACHE_TTL = 30000; // 30 seconds
+const CACHE_TTL = 45000; // 45 seconds
 let farmingCache: FarmingCache | null = null;
 
-// Singleton provider with connection reuse
-let providerInstance: ethers.JsonRpcProvider | null = null;
+// Use centralized RPC provider
+import { rpcProvider } from '@/lib/rpcProvider';
+
 const getProvider = () => {
-  if (!providerInstance) {
-    providerInstance = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl, undefined, {
-      staticNetwork: true,
-      batchMaxCount: 10,
-    });
-  }
-  return providerInstance;
+  return rpcProvider.getProvider();
 };
 
 const getTokenSymbol = (tokenAddress: string): string => {
@@ -102,6 +97,10 @@ export function useFarmingData() {
     try {
       setError(null);
       const provider = getProvider();
+      if (!provider) {
+        setError('RPC provider not available');
+        return;
+      }
       const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, provider);
 
       // Fetch basic contract info with retry
