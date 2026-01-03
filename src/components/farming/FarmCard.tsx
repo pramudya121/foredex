@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface PoolInfo {
   pid: number;
@@ -186,9 +187,10 @@ export const FarmCard = memo(function FarmCard({
       setStakeAmount('');
       setIsApproved(false); // Reset for next time
     } catch (error: any) {
-      console.error('Stake error:', error);
-      const msg = error?.reason || error?.message || 'Stake failed';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: `stake-${pool.pid}` });
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: `stake-${pool.pid}` });
+      }
     } finally {
       setLoading(false);
     }
@@ -212,9 +214,10 @@ export const FarmCard = memo(function FarmCard({
       toast.success('Unstaked successfully!', { id: 'unstake' });
       setUnstakeAmount('');
     } catch (error: any) {
-      console.error('Unstake error:', error);
-      const msg = error?.reason || error?.message || 'Unstake failed';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'unstake' });
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'unstake' });
+      }
     } finally {
       setLoading(false);
     }

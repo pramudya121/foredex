@@ -108,7 +108,7 @@ export function LiquidityPanel() {
     }
   }, [provider, address, tokenA, tokenB]);
 
-  // Check token approvals
+  // Check token approvals - with silent error handling
   const checkApprovals = useCallback(async () => {
     if (!provider || !address || !tokenA || !tokenB || !amountA || !amountB) {
       setApprovalA(false);
@@ -122,23 +122,33 @@ export function LiquidityPanel() {
 
       // Check token A approval (skip if native token)
       if (!isNativeToken(tokenA) && amountAWei > BigInt(0)) {
-        const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        setApprovalA(allowance >= amountAWei);
+        try {
+          const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          setApprovalA(allowance >= amountAWei);
+        } catch {
+          // Silent fail - assume not approved, will check again before tx
+          setApprovalA(false);
+        }
       } else {
         setApprovalA(true);
       }
 
       // Check token B approval (skip if native token)
       if (!isNativeToken(tokenB) && amountBWei > BigInt(0)) {
-        const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        setApprovalB(allowance >= amountBWei);
+        try {
+          const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          setApprovalB(allowance >= amountBWei);
+        } catch {
+          // Silent fail - assume not approved
+          setApprovalB(false);
+        }
       } else {
         setApprovalB(true);
       }
-    } catch (error) {
-      console.error('Error checking approvals:', error);
+    } catch {
+      // Silent fail on parse errors
     }
   }, [provider, address, tokenA, tokenB, amountA, amountB]);
 
@@ -310,8 +320,11 @@ export function LiquidityPanel() {
       setAmountB('');
       fetchPairData();
     } catch (error: any) {
-      console.error('Add liquidity error:', error);
-      toast.error(error.reason || error.message || 'Failed to add liquidity');
+      // Use rpcProvider to parse user-friendly error messages
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }

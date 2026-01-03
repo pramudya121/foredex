@@ -6,15 +6,17 @@ class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 300; // Start with 300ms between requests (faster)
+  private minRequestInterval = 500; // Start with 500ms between requests
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 45000; // Cache for 45 seconds
+  private cacheTTL = 60000; // Cache for 60 seconds
   private errorCount = 0;
-  private maxErrors = 20; // More lenient
+  private maxErrors = 50; // Very lenient
   private cooldownUntil = 0;
   private isInitializing = false;
   private consecutiveErrors = 0;
   private pendingRequests = new Map<string, Promise<any>>();
+  private requestQueue: Array<() => void> = [];
+  private isProcessingQueue = false;
 
   private constructor() {
     this.initProvider();
@@ -30,6 +32,7 @@ class RPCProviderService {
         name: NEXUS_TESTNET.name,
       };
       
+      // Create provider with EIP-1559 disabled (network doesn't support it)
       this.provider = new ethers.JsonRpcProvider(
         NEXUS_TESTNET.rpcUrl,
         network,
@@ -39,9 +42,30 @@ class RPCProviderService {
           polling: false,
         }
       );
+
+      // Override getFeeData to avoid eth_maxPriorityFeePerGas calls
+      const originalGetFeeData = this.provider.getFeeData.bind(this.provider);
+      this.provider.getFeeData = async () => {
+        try {
+          // Only fetch gas price, skip EIP-1559 fields
+          const gasPrice = await this.provider!.send('eth_gasPrice', []);
+          return new ethers.FeeData(
+            BigInt(gasPrice), // gasPrice
+            null, // maxFeePerGas - null means not EIP-1559
+            null  // maxPriorityFeePerGas - null means not EIP-1559
+          );
+        } catch {
+          // Return default gas price if RPC fails
+          return new ethers.FeeData(
+            BigInt(1000000000), // 1 gwei default
+            null,
+            null
+          );
+        }
+      };
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 10000; // Shorter cooldown on init fail
+      this.cooldownUntil = Date.now() + 5000;
     } finally {
       this.isInitializing = false;
     }
@@ -67,8 +91,8 @@ class RPCProviderService {
     if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
       this.consecutiveErrors = 0;
-      this.errorCount = Math.max(0, this.errorCount - 5); // Reduce error count faster
-      this.minRequestInterval = Math.max(200, this.minRequestInterval * 0.5); // Faster recovery
+      this.errorCount = Math.max(0, this.errorCount - 10);
+      this.minRequestInterval = Math.max(300, this.minRequestInterval * 0.5);
     }
     return this.provider !== null && this.errorCount < this.maxErrors && now >= this.cooldownUntil;
   }
@@ -85,7 +109,7 @@ class RPCProviderService {
     this.cache.set(key, { data, timestamp: Date.now() });
     
     // Clean old cache entries periodically
-    if (this.cache.size > 150) {
+    if (this.cache.size > 200) {
       const now = Date.now();
       for (const [k, v] of this.cache.entries()) {
         if (now - v.timestamp > this.cacheTTL * 2) {
@@ -99,42 +123,44 @@ class RPCProviderService {
     const errorMessage = error?.message || String(error);
     this.consecutiveErrors++;
     
-    // Only increment global error count for severe errors
-    if (this.consecutiveErrors > 2) {
+    // Only count as error for severe repeated failures
+    if (this.consecutiveErrors > 3) {
       this.errorCount++;
     }
     
-    // Gentler adaptive throttling
-    this.minRequestInterval = Math.min(3000, this.minRequestInterval * 1.3);
+    // Gentle adaptive throttling
+    this.minRequestInterval = Math.min(5000, this.minRequestInterval * 1.2);
     
-    // Set shorter cooldowns
-    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      this.cooldownUntil = Date.now() + 15000; // 15s cooldown (was 60s)
+    // Set cooldowns based on error type
+    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
+      this.cooldownUntil = Date.now() + 10000; // 10s cooldown for rate limit
+      console.warn('[RPC] Rate limited, cooling down for 10s');
     } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED') || errorMessage.includes('Failed to fetch')) {
-      this.cooldownUntil = Date.now() + 5000; // 5s (was 30s)
+      // Network errors - very short cooldown, these often resolve quickly
+      this.cooldownUntil = Date.now() + 2000;
     } else if (errorMessage.includes('coalesce') || errorMessage.includes('Timeout')) {
-      this.cooldownUntil = Date.now() + 3000; // 3s (was 20s)
-    } else {
-      // Shorter exponential backoff
-      const backoff = Math.min(10000, 1000 * Math.pow(1.3, Math.min(this.consecutiveErrors, 5)));
-      this.cooldownUntil = Date.now() + backoff;
+      this.cooldownUntil = Date.now() + 1000;
     }
+    // For other errors, don't set cooldown - just slow down requests
   }
 
   // Parse user-friendly error messages - returns null for transient errors that should be silent
   parseError(error: any, showTransient = false): string | null {
     const msg = error?.message || error?.reason || String(error);
     
-    // Transient network errors - return null to suppress toast unless explicitly requested
-    if (msg.includes('coalesce') || msg.includes('CORS') || msg.includes('ERR_FAILED') || msg.includes('Failed to fetch')) {
+    // Transient network errors - return null to suppress toast
+    if (msg.includes('coalesce') || 
+        msg.includes('CORS') || 
+        msg.includes('ERR_FAILED') || 
+        msg.includes('Failed to fetch') ||
+        msg.includes('eth_maxPriorityFeePerGas') ||
+        msg.includes('rate limit') ||
+        msg.includes('429')) {
       return showTransient ? 'Network busy - please try again' : null;
     }
     
     if (msg.includes('missing revert data')) {
       return 'Transaction would fail - check inputs or try a smaller amount';
-    }
-    if (msg.includes('429') || msg.includes('Too Many')) {
-      return 'Rate limited - please wait a moment';
     }
     if (msg.includes('user rejected') || msg.includes('User denied')) {
       return 'Transaction cancelled';
@@ -154,8 +180,46 @@ class RPCProviderService {
     if (msg.includes('INSUFFICIENT_LIQUIDITY')) {
       return 'Not enough liquidity in pool';
     }
+    if (msg.includes('execution reverted')) {
+      return 'Transaction would fail - check amounts and approvals';
+    }
     
-    return error?.reason || 'Transaction failed - please try again';
+    // For user-initiated actions, show generic error only when showTransient is true
+    if (showTransient) {
+      return error?.reason || 'Transaction failed - please try again';
+    }
+    
+    return null;
+  }
+
+  // Process request queue with rate limiting
+  private async processQueue() {
+    if (this.isProcessingQueue || this.requestQueue.length === 0) return;
+    this.isProcessingQueue = true;
+
+    while (this.requestQueue.length > 0) {
+      if (!this.isAvailable()) {
+        // Wait for cooldown to end
+        const wait = Math.max(1000, this.getCooldownRemaining());
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      if (timeSinceLastRequest < this.minRequestInterval) {
+        await new Promise(r => setTimeout(r, this.minRequestInterval - timeSinceLastRequest));
+      }
+      
+      this.lastRequestTime = Date.now();
+      const nextRequest = this.requestQueue.shift();
+      if (nextRequest) nextRequest();
+      
+      // Small delay between queue items
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    this.isProcessingQueue = false;
   }
 
   async call<T>(
@@ -178,13 +242,12 @@ class RPCProviderService {
       }
     }
 
-    // If in cooldown, return cached value or null (don't throw error)
+    // If in cooldown, return cached value or null silently
     if (!this.isAvailable()) {
       if (cacheKey) {
         const cached = this.cache.get(cacheKey);
         if (cached) return cached.data;
       }
-      // Return null silently instead of showing error
       return null;
     }
 
@@ -196,8 +259,8 @@ class RPCProviderService {
     }
     this.lastRequestTime = Date.now();
 
-    const timeout = options?.timeout || 15000; // 15s default timeout
-    const maxRetries = options?.retries ?? 2;
+    const timeout = options?.timeout || 20000; // 20s default timeout
+    const maxRetries = options?.retries ?? 3;
 
     const executeCall = async (attempt: number): Promise<T | null> => {
       try {
@@ -214,16 +277,31 @@ class RPCProviderService {
         
         // Reset on success
         this.consecutiveErrors = 0;
-        this.errorCount = Math.max(0, this.errorCount - 2);
-        this.minRequestInterval = Math.max(200, this.minRequestInterval * 0.8);
+        this.errorCount = Math.max(0, this.errorCount - 3);
+        this.minRequestInterval = Math.max(300, this.minRequestInterval * 0.7);
         
         return result as T;
-      } catch (error) {
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error);
+        
+        // Don't log expected/transient errors
+        const isTransient = errorMsg.includes('coalesce') || 
+                           errorMsg.includes('CORS') || 
+                           errorMsg.includes('429') ||
+                           errorMsg.includes('rate limit') ||
+                           errorMsg.includes('Timeout') ||
+                           errorMsg.includes('eth_maxPriorityFeePerGas');
+        
         // Retry on transient errors
-        if (attempt < maxRetries) {
-          const delay = 500 * Math.pow(1.5, attempt);
+        if (attempt < maxRetries && isTransient) {
+          const delay = 1000 * Math.pow(1.5, attempt); // Exponential backoff
           await new Promise(r => setTimeout(r, delay));
           return executeCall(attempt + 1);
+        }
+        
+        // Only log non-transient errors
+        if (!isTransient) {
+          console.warn('[RPC] Call failed:', errorMsg.slice(0, 100));
         }
         
         this.handleError(error);
@@ -252,8 +330,9 @@ class RPCProviderService {
     this.errorCount = 0;
     this.consecutiveErrors = 0;
     this.cooldownUntil = 0;
-    this.minRequestInterval = 300;
+    this.minRequestInterval = 500;
     this.pendingRequests.clear();
+    this.requestQueue = [];
   }
 
   clearCache() {
@@ -266,6 +345,10 @@ class RPCProviderService {
 
   getRequestInterval(): number {
     return this.minRequestInterval;
+  }
+
+  getErrorCount(): number {
+    return this.errorCount;
   }
 }
 

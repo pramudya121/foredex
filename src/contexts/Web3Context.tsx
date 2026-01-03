@@ -161,9 +161,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }, 2000); // Wait 2 seconds before fetching balance
       
     } catch (error: any) {
-      // Parse user-friendly error message
-      const errorMsg = rpcProvider.parseError(error);
-      toast.error(errorMsg);
+      // Parse user-friendly error message - only show if it's an actionable error
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      }
     } finally {
       setIsConnecting(false);
     }
