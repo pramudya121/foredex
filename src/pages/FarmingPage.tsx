@@ -176,9 +176,22 @@ export default function FarmingPage() {
   }, [pools]);
 
   const formatNumber = (num: number, decimals = 4) => {
+    if (isNaN(num) || !isFinite(num)) return '0';
     if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
+    if (num < 0.0001 && num > 0) return '<0.0001';
     return num.toFixed(decimals);
+  };
+  
+  // Format reward per block nicely
+  const formatRewardPerBlock = (val: string | undefined) => {
+    if (!val) return '0';
+    const num = parseFloat(val);
+    if (isNaN(num)) return '0';
+    if (num >= 1) return num.toFixed(4);
+    if (num >= 0.0001) return num.toFixed(6);
+    if (num > 0) return num.toExponential(2);
+    return '0';
   };
 
   const handleHarvest = useCallback(async (pid: number) => {
@@ -319,7 +332,7 @@ export default function FarmingPage() {
               icon={BarChart3} 
               label="Active Pools" 
               value={pools.length.toString()}
-              subValue={`${stats?.rewardPerBlock || '0'} FRDX/block`}
+              subValue={`${formatRewardPerBlock(stats?.rewardPerBlock)} FRDX/block`}
               iconColor="text-blue-400"
             />
             <StatsCard 

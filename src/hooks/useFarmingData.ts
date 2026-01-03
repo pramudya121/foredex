@@ -234,14 +234,22 @@ export function useFarmingData() {
                 }
               }
 
-              // Calculate APR
+              // Calculate APR with better handling
               const rewardPerBlockNum = parseFloat(ethers.formatEther(contractInfo.rewardPerBlock));
-              const totalStakedNum = parseFloat(totalStaked) || 1;
+              const totalStakedNum = parseFloat(totalStaked) || 0.001; // Avoid division by 0
               const allocPointNum = Number(poolInfo.allocPoint);
               const totalAllocNum = Number(contractInfo.totalAllocPoint) || 1;
               const blocksPerYear = 15768000; // ~2 sec blocks
-              const poolRewardPerYear = (rewardPerBlockNum * blocksPerYear * allocPointNum) / totalAllocNum;
-              const apr = totalStakedNum > 0 ? (poolRewardPerYear / totalStakedNum) * 100 : 0;
+              
+              // Calculate pool's share of rewards
+              const poolShareOfRewards = totalAllocNum > 0 ? allocPointNum / totalAllocNum : 0;
+              const poolRewardPerYear = rewardPerBlockNum * blocksPerYear * poolShareOfRewards;
+              
+              // APR = (rewards per year / total staked) * 100
+              // If total staked is very low, cap APR to prevent absurd numbers
+              let apr = totalStakedNum > 0.001 
+                ? (poolRewardPerYear / totalStakedNum) * 100 
+                : poolRewardPerYear > 0 ? 9999 : 0;
 
               return {
                 pid,
