@@ -57,7 +57,7 @@ export function LiquidityPanel() {
   const getTokenAddress = (token: TokenInfo) =>
     isNativeToken(token) ? CONTRACTS.WETH : token.address;
 
-  // Fetch pair info and LP balance (separate from token balances)
+  // Fetch pair info and LP balance with better error handling
   const fetchPairData = useCallback(async () => {
     if (!provider || !address || !tokenA || !tokenB) return;
 
@@ -65,36 +65,57 @@ export function LiquidityPanel() {
       const tokenAAddr = getTokenAddress(tokenA);
       const tokenBAddr = getTokenAddress(tokenB);
       
-      const { reserveA, reserveB, pairAddress: pair } = await getReserves(provider, tokenAAddr, tokenBAddr);
+      let reserveData;
+      try {
+        reserveData = await getReserves(provider, tokenAAddr, tokenBAddr);
+      } catch {
+        // Silent fail - pool may not exist
+        setPairAddress(null);
+        setLpBalance('0');
+        setPoolShare(0);
+        setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
+        setTotalSupply(BigInt(0));
+        return;
+      }
       
-      if (pair !== ethers.ZeroAddress) {
+      const { reserveA, reserveB, pairAddress: pair } = reserveData;
+      
+      if (pair && pair !== ethers.ZeroAddress) {
         setPairAddress(pair);
         setReserves({ reserveA, reserveB });
         
         // Use rpcProvider for LP balance fetch
         const rpc = rpcProvider.getProvider();
         if (rpc && rpcProvider.isAvailable()) {
-          const pairContract = new ethers.Contract(pair, PAIR_ABI, rpc);
-          
-          const lpBal = await rpcProvider.call(
-            () => pairContract.balanceOf(address),
-            `lp_balance_${pair}_${address}`
-          );
-          
-          const supply = await rpcProvider.call(
-            () => pairContract.totalSupply(),
-            `lp_supply_${pair}`
-          );
-          
-          if (lpBal !== null) {
-            setLpBalance(ethers.formatEther(lpBal));
-          }
-          if (supply !== null) {
-            setTotalSupply(BigInt(supply));
+          try {
+            const pairContract = new ethers.Contract(pair, PAIR_ABI, rpc);
+            
+            const lpBal = await rpcProvider.call(
+              () => pairContract.balanceOf(address),
+              `lp_balance_${pair}_${address}`
+            );
+            
+            const supply = await rpcProvider.call(
+              () => pairContract.totalSupply(),
+              `lp_supply_${pair}`
+            );
+            
             if (lpBal !== null) {
-              const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
-              setPoolShare(share);
+              const formatted = ethers.formatEther(lpBal);
+              const parsed = parseFloat(formatted);
+              setLpBalance(isNaN(parsed) ? '0' : formatted);
             }
+            if (supply !== null) {
+              setTotalSupply(BigInt(supply));
+              if (lpBal !== null) {
+                const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
+                setPoolShare(isNaN(share) ? 0 : share);
+              }
+            }
+          } catch {
+            // Silent fail on LP balance fetch
+            setLpBalance('0');
+            setPoolShare(0);
           }
         }
       } else {
@@ -106,6 +127,10 @@ export function LiquidityPanel() {
       }
     } catch (error) {
       console.error('Error fetching pair data:', error);
+      // Reset state on error
+      setPairAddress(null);
+      setLpBalance('0');
+      setPoolShare(0);
     }
   }, [provider, address, tokenA, tokenB]);
 
@@ -193,31 +218,56 @@ export function LiquidityPanel() {
     }
   };
 
-  // Auto-calculate amountB when amountA changes (using library quote)
+  // Auto-calculate amountB when amountA changes (using library quote) with debounce
   useEffect(() => {
-    if (!amountA || !tokenA || !tokenB) {
+    // Validate input first
+    if (!amountA || amountA.trim() === '') {
       setEstimatedShare(0);
+      setAmountB('');
+      return;
+    }
+    
+    const amountNum = parseFloat(amountA);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setEstimatedShare(0);
+      setAmountB('');
+      return;
+    }
+
+    if (!tokenA || !tokenB) {
       return;
     }
     
     if (reserves.reserveA === BigInt(0) || reserves.reserveB === BigInt(0)) {
-      // New pool - 100% share
+      // New pool - 100% share, allow user to set both amounts
       setEstimatedShare(100);
       return;
     }
     
-    try {
-      const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
-      const amountBWei = quote(amountAWei, reserves.reserveA, reserves.reserveB);
-      setAmountB(ethers.formatUnits(amountBWei, tokenB.decimals));
-      
-      // Estimate pool share after adding liquidity
-      const newTotalA = reserves.reserveA + amountAWei;
-      const share = Number(amountAWei * BigInt(100)) / Number(newTotalA);
-      setEstimatedShare(share);
-    } catch {
-      setEstimatedShare(0);
-    }
+    // Debounce the calculation
+    const timeout = setTimeout(() => {
+      try {
+        const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
+        const amountBWei = quote(amountAWei, reserves.reserveA, reserves.reserveB);
+        const formattedB = ethers.formatUnits(amountBWei, tokenB.decimals);
+        const parsedB = parseFloat(formattedB);
+        
+        if (!isNaN(parsedB) && parsedB > 0) {
+          setAmountB(parsedB.toFixed(6));
+        } else {
+          setAmountB('');
+        }
+        
+        // Estimate pool share after adding liquidity
+        const newTotalA = reserves.reserveA + amountAWei;
+        const share = Number(amountAWei * BigInt(100)) / Number(newTotalA);
+        setEstimatedShare(isNaN(share) ? 0 : share);
+      } catch {
+        setEstimatedShare(0);
+      }
+    }, 300);
+    
+    return () => clearTimeout(timeout);
   }, [amountA, reserves, tokenA, tokenB]);
 
   // Calculate expected amounts when removing liquidity

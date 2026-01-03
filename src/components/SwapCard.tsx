@@ -72,14 +72,29 @@ export function SwapCard() {
     // Balances are auto-fetched by useTokenPairBalances hook
   }, []);
 
-  // Get quote using multi-hop router
+  // Get quote using multi-hop router with better error handling
   const getQuote = useCallback(async (inputAmount: string) => {
-    if (!provider || !tokenIn || !tokenOut || !inputAmount || parseFloat(inputAmount) === 0) {
+    // Validate input first
+    if (!inputAmount || inputAmount.trim() === '') {
       setAmountOut('');
       setPriceImpact(0);
       setBestRoute(null);
       setAllRoutes([]);
       setAutoSlippageResult(null);
+      return;
+    }
+
+    const inputNum = parseFloat(inputAmount);
+    if (isNaN(inputNum) || inputNum <= 0) {
+      setAmountOut('');
+      setPriceImpact(0);
+      setBestRoute(null);
+      setAllRoutes([]);
+      setAutoSlippageResult(null);
+      return;
+    }
+
+    if (!provider || !tokenIn || !tokenOut) {
       return;
     }
 
@@ -96,32 +111,40 @@ export function SwapCard() {
         const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
         const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
         
-        const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
-        setReserves({ reserveA, reserveB });
-        
-        if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+        try {
+          const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
+          setReserves({ reserveA, reserveB });
+          
+          if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+            setAmountOut('');
+            setPriceImpact(0);
+            setBestRoute(null);
+            setAutoSlippageResult(null);
+            return;
+          }
+
+          const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
+          const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
+          const formattedOut = parseFloat(outAmount);
+          setAmountOut(isNaN(formattedOut) ? '' : formattedOut.toFixed(6));
+          
+          const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
+          setPriceImpact(isNaN(impact) ? 0 : impact);
+          setBestRoute(null);
+          
+          // Calculate auto slippage
+          const autoSlip = calculateAutoSlippage(amountInWei, reserveA, reserveB, slippage);
+          setAutoSlippageResult(autoSlip);
+          
+          // Apply auto slippage if enabled
+          if (isAutoSlippage && autoSlip.recommendedSlippage !== slippage) {
+            setSlippage(autoSlip.recommendedSlippage);
+          }
+        } catch {
+          // Silent fail on reserve fetch
           setAmountOut('');
           setPriceImpact(0);
           setBestRoute(null);
-          setAutoSlippageResult(null);
-          return;
-        }
-
-        const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
-        const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
-        setAmountOut(parseFloat(outAmount).toFixed(6));
-        
-        const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
-        setPriceImpact(impact);
-        setBestRoute(null);
-        
-        // Calculate auto slippage
-        const autoSlip = calculateAutoSlippage(amountInWei, reserveA, reserveB, slippage);
-        setAutoSlippageResult(autoSlip);
-        
-        // Apply auto slippage if enabled
-        if (isAutoSlippage && autoSlip.recommendedSlippage !== slippage) {
-          setSlippage(autoSlip.recommendedSlippage);
         }
         
         return;
@@ -132,8 +155,9 @@ export function SwapCard() {
       setBestRoute(best);
       
       const outAmount = ethers.formatUnits(best.amountOut, tokenOut.decimals);
-      setAmountOut(parseFloat(outAmount).toFixed(6));
-      setPriceImpact(best.priceImpact);
+      const formattedOut = parseFloat(outAmount);
+      setAmountOut(isNaN(formattedOut) ? '' : formattedOut.toFixed(6));
+      setPriceImpact(isNaN(best.priceImpact) ? 0 : best.priceImpact);
       
       // Calculate auto slippage based on price impact
       const autoSlip = calculateAutoSlippage(
@@ -169,7 +193,8 @@ export function SwapCard() {
         
         const amounts = await router.getAmountsOut(amountInWei, path);
         const outAmountFallback = ethers.formatUnits(amounts[1], tokenOut.decimals);
-        setAmountOut(parseFloat(outAmountFallback).toFixed(6));
+        const formattedOut = parseFloat(outAmountFallback);
+        setAmountOut(isNaN(formattedOut) ? '' : formattedOut.toFixed(6));
         setPriceImpact(0);
         setBestRoute(null);
         setAutoSlippageResult(null);
@@ -184,10 +209,11 @@ export function SwapCard() {
     }
   }, [provider, tokenIn, tokenOut, slippage, isAutoSlippage, reserves]);
 
+  // Debounced quote with longer delay to reduce RPC calls
   useEffect(() => {
     const timeout = setTimeout(() => {
       getQuote(amountIn);
-    }, 500);
+    }, 600);
     return () => clearTimeout(timeout);
   }, [amountIn, getQuote]);
 
