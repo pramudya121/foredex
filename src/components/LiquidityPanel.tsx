@@ -1,3 +1,4 @@
+// LiquidityPanel - Manages add/remove liquidity for DEX pools
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
