@@ -80,6 +80,25 @@ export const FACTORY_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  // Admin functions
+  {
+    constant: false,
+    inputs: [{ internalType: 'address', name: '_feeTo', type: 'address' }],
+    name: 'setFeeTo',
+    outputs: [],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    constant: false,
+    inputs: [{ internalType: 'address', name: '_feeToSetter', type: 'address' }],
+    name: 'setFeeToSetter',
+    outputs: [],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
 ] as const;
 
 // WETH9 ABI
@@ -429,7 +448,7 @@ export const ERC20_ABI = [
   },
 ] as const;
 
-// Pair ABI
+// Pair ABI (Extended with all functions)
 export const PAIR_ABI = [
   {
     constant: true,
@@ -479,6 +498,173 @@ export const PAIR_ABI = [
     payable: false,
     stateMutability: 'view',
     type: 'function',
+  },
+  // mint - called when adding liquidity directly
+  {
+    constant: false,
+    inputs: [{ internalType: 'address', name: 'to', type: 'address' }],
+    name: 'mint',
+    outputs: [{ internalType: 'uint256', name: 'liquidity', type: 'uint256' }],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // burn - called when removing liquidity directly
+  {
+    constant: false,
+    inputs: [{ internalType: 'address', name: 'to', type: 'address' }],
+    name: 'burn',
+    outputs: [
+      { internalType: 'uint256', name: 'amount0', type: 'uint256' },
+      { internalType: 'uint256', name: 'amount1', type: 'uint256' },
+    ],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // swap - low-level swap function
+  {
+    constant: false,
+    inputs: [
+      { internalType: 'uint256', name: 'amount0Out', type: 'uint256' },
+      { internalType: 'uint256', name: 'amount1Out', type: 'uint256' },
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'bytes', name: 'data', type: 'bytes' },
+    ],
+    name: 'swap',
+    outputs: [],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // sync - force reserves to match balances
+  {
+    constant: false,
+    inputs: [],
+    name: 'sync',
+    outputs: [],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // skim - force balances to match reserves
+  {
+    constant: false,
+    inputs: [{ internalType: 'address', name: 'to', type: 'address' }],
+    name: 'skim',
+    outputs: [],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // price accumulators
+  {
+    constant: true,
+    inputs: [],
+    name: 'price0CumulativeLast',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    payable: false,
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    constant: true,
+    inputs: [],
+    name: 'price1CumulativeLast',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    payable: false,
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    constant: true,
+    inputs: [],
+    name: 'kLast',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    payable: false,
+    stateMutability: 'view',
+    type: 'function',
+  },
+  // ERC20 functions
+  {
+    constant: false,
+    inputs: [
+      { internalType: 'address', name: 'spender', type: 'address' },
+      { internalType: 'uint256', name: 'value', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    constant: false,
+    inputs: [
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'value', type: 'uint256' },
+    ],
+    name: 'transfer',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    payable: false,
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    constant: true,
+    inputs: [
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'spender', type: 'address' },
+    ],
+    name: 'allowance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    payable: false,
+    stateMutability: 'view',
+    type: 'function',
+  },
+  // Events
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'sender', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'amount0', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'amount1', type: 'uint256' },
+    ],
+    name: 'Mint',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'sender', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'amount0', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'amount1', type: 'uint256' },
+      { indexed: true, internalType: 'address', name: 'to', type: 'address' },
+    ],
+    name: 'Burn',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'sender', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'amount0In', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'amount1In', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'amount0Out', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'amount1Out', type: 'uint256' },
+      { indexed: true, internalType: 'address', name: 'to', type: 'address' },
+    ],
+    name: 'Swap',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: false, internalType: 'uint112', name: 'reserve0', type: 'uint112' },
+      { indexed: false, internalType: 'uint112', name: 'reserve1', type: 'uint112' },
+    ],
+    name: 'Sync',
+    type: 'event',
   },
 ] as const;
 
