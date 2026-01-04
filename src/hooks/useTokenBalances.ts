@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
-import { TOKEN_LIST, TokenInfo, NEXUS_TESTNET } from '@/config/contracts';
-import { ERC20_ABI } from '@/config/abis';
+import { TOKEN_LIST, TokenInfo, CONTRACTS } from '@/config/contracts';
+import { MULTICALL_ABI, ERC20_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface TokenBalance {
   token: TokenInfo;
@@ -11,9 +12,8 @@ export interface TokenBalance {
 
 // Global cache for balances to reduce RPC calls
 const balanceCache = new Map<string, { balances: Map<string, TokenBalance>; timestamp: number }>();
-const CACHE_TTL = 30000; // 30 seconds - increased for stability
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
+const CACHE_TTL = 30000; // 30 seconds
+const MAX_RETRIES = 2;
 
 // Initialize empty balances for all tokens
 function getEmptyBalances(): Map<string, TokenBalance> {
@@ -28,64 +28,131 @@ function getEmptyBalances(): Map<string, TokenBalance> {
   return map;
 }
 
-// Create a direct provider with better error handling
-function createDirectProvider(): ethers.JsonRpcProvider {
-  const network = { chainId: NEXUS_TESTNET.chainId, name: NEXUS_TESTNET.name };
-  return new ethers.JsonRpcProvider(
-    NEXUS_TESTNET.rpcUrl,
-    network,
-    { staticNetwork: ethers.Network.from(network), batchMaxCount: 1 }
-  );
+// Encode balanceOf call data
+function encodeBalanceOfCall(userAddress: string): string {
+  const iface = new ethers.Interface(ERC20_ABI);
+  return iface.encodeFunctionData('balanceOf', [userAddress]);
 }
 
-// Retry helper with exponential backoff
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  retries = MAX_RETRIES,
-  delay = RETRY_DELAY
-): Promise<T | null> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (error: any) {
-      const isThrottled = error?.message?.includes('429') || 
-                          error?.code === 429 ||
-                          error?.message?.includes('Too Many Requests');
-      
-      if (i < retries - 1) {
-        // Exponential backoff: longer delay for throttled requests
-        const backoffDelay = isThrottled ? delay * Math.pow(2, i + 1) : delay * (i + 1);
-        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+// Decode balanceOf result
+function decodeBalanceOfResult(data: string): bigint {
+  try {
+    const iface = new ethers.Interface(ERC20_ABI);
+    const result = iface.decodeFunctionResult('balanceOf', data);
+    return result[0];
+  } catch {
+    return BigInt(0);
+  }
+}
+
+// Fetch all balances using multicall for efficiency
+async function fetchBalancesWithMulticall(
+  userAddress: string
+): Promise<Map<string, TokenBalance>> {
+  const provider = rpcProvider.getProvider();
+  if (!provider) {
+    return getEmptyBalances();
+  }
+
+  const newBalances = getEmptyBalances();
+  
+  try {
+    // Get native balance first (not via multicall)
+    const nativeToken = TOKEN_LIST.find(t => t.address === '0x0000000000000000000000000000000000000000');
+    if (nativeToken) {
+      try {
+        const nativeBalance = await provider.getBalance(userAddress);
+        newBalances.set(nativeToken.address.toLowerCase(), {
+          token: nativeToken,
+          balance: ethers.formatUnits(nativeBalance, nativeToken.decimals),
+          balanceRaw: nativeBalance,
+        });
+      } catch {
+        // Keep default 0 balance
       }
     }
-  }
-  return null;
-}
 
-// Fetch single token balance with retry
-async function fetchTokenBalance(
-  provider: ethers.JsonRpcProvider,
-  token: TokenInfo,
-  address: string
-): Promise<TokenBalance | null> {
-  const result = await fetchWithRetry(async () => {
-    let balance: bigint;
+    // Get ERC20 tokens via multicall
+    const erc20Tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
     
-    if (token.address === '0x0000000000000000000000000000000000000000') {
-      balance = await provider.getBalance(address);
-    } else {
-      const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-      balance = await contract.balanceOf(address);
+    if (erc20Tokens.length === 0) {
+      return newBalances;
     }
 
-    return {
-      token,
-      balance: ethers.formatUnits(balance, token.decimals),
-      balanceRaw: balance,
-    };
-  });
+    const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+    
+    // Prepare multicall calls
+    const calls = erc20Tokens.map(token => ({
+      target: token.address,
+      callData: encodeBalanceOfCall(userAddress),
+    }));
 
-  return result;
+    // Execute multicall
+    const [, returnData] = await multicall.aggregate(calls);
+    
+    // Decode results
+    (returnData as string[]).forEach((data, index) => {
+      const token = erc20Tokens[index];
+      try {
+        const balance = decodeBalanceOfResult(data);
+        newBalances.set(token.address.toLowerCase(), {
+          token,
+          balance: ethers.formatUnits(balance, token.decimals),
+          balanceRaw: balance,
+        });
+      } catch {
+        // Keep default 0 balance on decode error
+      }
+    });
+  } catch (error) {
+    console.warn('Multicall balance fetch failed, using fallback:', error);
+    // Fallback to individual calls if multicall fails
+    return await fetchBalancesFallback(userAddress);
+  }
+
+  return newBalances;
+}
+
+// Fallback to individual calls if multicall not available
+async function fetchBalancesFallback(userAddress: string): Promise<Map<string, TokenBalance>> {
+  const provider = rpcProvider.getProvider();
+  if (!provider) {
+    return getEmptyBalances();
+  }
+
+  const newBalances = getEmptyBalances();
+
+  // Batch tokens into groups
+  const batchSize = 4;
+  for (let i = 0; i < TOKEN_LIST.length; i += batchSize) {
+    const batch = TOKEN_LIST.slice(i, i + batchSize);
+    
+    await Promise.all(batch.map(async (token) => {
+      try {
+        let balance: bigint;
+        if (token.address === '0x0000000000000000000000000000000000000000') {
+          balance = await provider.getBalance(userAddress);
+        } else {
+          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+          balance = await contract.balanceOf(userAddress);
+        }
+        newBalances.set(token.address.toLowerCase(), {
+          token,
+          balance: ethers.formatUnits(balance, token.decimals),
+          balanceRaw: balance,
+        });
+      } catch {
+        // Keep default 0 balance
+      }
+    }));
+
+    // Small delay between batches
+    if (i + batchSize < TOKEN_LIST.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  return newBalances;
 }
 
 export function useTokenBalances(address: string | null) {
@@ -137,57 +204,34 @@ export function useTokenBalances(address: string | null) {
     lastFetchRef.current = now;
     setLoading(true);
 
-    // Start with cached balances if available (optimistic)
-    const newBalances = cached ? new Map(cached.balances) : getEmptyBalances();
-    let fetchedAny = false;
+    let retries = 0;
+    let success = false;
 
-    try {
-      const provider = createDirectProvider();
-
-      // Batch tokens into groups to avoid overwhelming RPC
-      const batchSize = 4;
-      const tokenBatches: TokenInfo[][] = [];
-      for (let i = 0; i < TOKEN_LIST.length; i += batchSize) {
-        tokenBatches.push(TOKEN_LIST.slice(i, i + batchSize));
-      }
-
-      for (const batch of tokenBatches) {
-        // Add small delay between batches to avoid throttling
-        if (tokenBatches.indexOf(batch) > 0) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+    while (retries < MAX_RETRIES && !success) {
+      try {
+        const newBalances = await fetchBalancesWithMulticall(currentAddress);
+        
+        if (addressRef.current === currentAddress) {
+          balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
+          setBalances(newBalances);
+          success = true;
         }
-
-        const results = await Promise.all(
-          batch.map(token => fetchTokenBalance(provider, token, currentAddress))
-        );
-
-        results.forEach((result) => {
-          if (result) {
-            fetchedAny = true;
-            newBalances.set(result.token.address.toLowerCase(), result);
-          }
-        });
-
-        // Update state incrementally for better UX
-        if (addressRef.current === currentAddress && fetchedAny) {
-          setBalances(new Map(newBalances));
+      } catch (error) {
+        console.warn(`Balance fetch attempt ${retries + 1} failed:`, error);
+        retries++;
+        if (retries < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * retries));
         }
       }
-
-      if (addressRef.current === currentAddress && fetchedAny) {
-        balanceCache.set(cacheKey, { balances: newBalances, timestamp: Date.now() });
-        setBalances(newBalances);
-      }
-    } catch (error) {
-      console.warn('Balance fetch error:', error);
-      // Keep showing cached data on error
-      if (cached && addressRef.current === currentAddress) {
-        setBalances(cached.balances);
-      }
-    } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
     }
+
+    // Keep showing cached data on complete failure
+    if (!success && cached && addressRef.current === currentAddress) {
+      setBalances(cached.balances);
+    }
+
+    setLoading(false);
+    isFetchingRef.current = false;
   }, []);
 
   // Fetch when address changes
