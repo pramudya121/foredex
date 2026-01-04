@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { FACTORY_ABI, PAIR_ABI, MULTICALL_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface PoolData {
@@ -62,6 +62,84 @@ const generateHistoricalData = (currentValue: number, days: number = 7): Histori
 // Cache for pool data
 let poolDataCache: { pools: PoolData[]; analytics: AnalyticsData; historical: HistoricalDataPoint[]; timestamp: number } | null = null;
 const CACHE_TTL = 30000; // 30 seconds
+
+// Encode function calls for multicall
+function encodeFunctionCall(iface: ethers.Interface, functionName: string, params: any[] = []): string {
+  return iface.encodeFunctionData(functionName, params);
+}
+
+// Batch fetch pair data using multicall
+async function fetchPairDataWithMulticall(
+  pairAddresses: string[],
+  provider: ethers.Provider
+): Promise<Map<string, { token0: string; token1: string; reserves: [bigint, bigint]; totalSupply: bigint }>> {
+  const results = new Map();
+  
+  if (pairAddresses.length === 0) return results;
+
+  try {
+    const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+    const pairInterface = new ethers.Interface(PAIR_ABI);
+    
+    // Prepare calls for each pair: token0, token1, getReserves, totalSupply
+    const calls: { target: string; callData: string }[] = [];
+    
+    pairAddresses.forEach(pairAddress => {
+      calls.push({ target: pairAddress, callData: encodeFunctionCall(pairInterface, 'token0') });
+      calls.push({ target: pairAddress, callData: encodeFunctionCall(pairInterface, 'token1') });
+      calls.push({ target: pairAddress, callData: encodeFunctionCall(pairInterface, 'getReserves') });
+      calls.push({ target: pairAddress, callData: encodeFunctionCall(pairInterface, 'totalSupply') });
+    });
+
+    const [, returnData] = await multicall.aggregate(calls);
+    
+    // Decode results (4 calls per pair)
+    for (let i = 0; i < pairAddresses.length; i++) {
+      const pairAddress = pairAddresses[i];
+      const baseIdx = i * 4;
+      
+      try {
+        const token0 = pairInterface.decodeFunctionResult('token0', returnData[baseIdx])[0];
+        const token1 = pairInterface.decodeFunctionResult('token1', returnData[baseIdx + 1])[0];
+        const reservesResult = pairInterface.decodeFunctionResult('getReserves', returnData[baseIdx + 2]);
+        const totalSupply = pairInterface.decodeFunctionResult('totalSupply', returnData[baseIdx + 3])[0];
+        
+        results.set(pairAddress.toLowerCase(), {
+          token0,
+          token1,
+          reserves: [reservesResult[0], reservesResult[1]] as [bigint, bigint],
+          totalSupply,
+        });
+      } catch {
+        // Skip pairs that fail to decode
+      }
+    }
+  } catch (error) {
+    console.warn('Multicall failed for pair data, falling back to individual calls:', error);
+    // Fallback to individual calls if multicall fails
+    for (const pairAddress of pairAddresses) {
+      try {
+        const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+        const [token0, token1, reserves, totalSupply] = await Promise.all([
+          pair.token0(),
+          pair.token1(),
+          pair.getReserves(),
+          pair.totalSupply(),
+        ]);
+        results.set(pairAddress.toLowerCase(), {
+          token0,
+          token1,
+          reserves: [reserves[0], reserves[1]] as [bigint, bigint],
+          totalSupply,
+        });
+      } catch {
+        // Skip failed pairs
+      }
+    }
+  }
+
+  return results;
+}
 
 export function usePoolData(refreshInterval: number = 30000) {
   const [pools, setPools] = useState<PoolData[]>([]);
@@ -130,61 +208,65 @@ export function usePoolData(refreshInterval: number = 30000) {
         return;
       }
 
-      const poolsData: PoolData[] = [];
-      const maxPools = Math.min(Number(pairCount), 50); // Increased limit to show all pools
+      const maxPools = Math.min(Number(pairCount), 50);
       
+      // Fetch all pair addresses first
+      const pairAddresses: string[] = [];
       for (let i = 0; i < maxPools; i++) {
         try {
           const pairAddress = await rpcProvider.call(
             () => factory.allPairs(i),
             `poolData_pair_${i}`
           );
-          
-          if (!pairAddress) continue;
-
-          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-          
-          const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-            rpcProvider.call(() => pair.token0(), `poolData_token0_${pairAddress}`),
-            rpcProvider.call(() => pair.token1(), `poolData_token1_${pairAddress}`),
-            rpcProvider.call(() => pair.getReserves(), `poolData_reserves_${pairAddress}`),
-            rpcProvider.call(() => pair.totalSupply(), `poolData_supply_${pairAddress}`),
-          ]);
-
-          if (!token0Addr || !token1Addr || !reserves || !totalSupply) continue;
-
-          const getTokenInfo = (addr: string) => {
-            const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-            return known || { symbol: 'UNKNOWN', address: addr, logoURI: undefined };
-          };
-
-          const token0Info = getTokenInfo(token0Addr);
-          const token1Info = getTokenInfo(token1Addr);
-
-          const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-          const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-          const tvl = reserve0 + reserve1;
-          const volume24h = tvl * 0.05;
-          const priceToken0 = reserve1 > 0 ? reserve1 / reserve0 : 0;
-          const priceToken1 = reserve0 > 0 ? reserve0 / reserve1 : 0;
-          const apr = tvl > 0 ? (volume24h * 365 * 0.003 / tvl) * 100 : 0;
-
-          poolsData.push({
-            pairAddress,
-            token0: { symbol: token0Info.symbol, address: token0Addr, logoURI: token0Info.logoURI },
-            token1: { symbol: token1Info.symbol, address: token1Addr, logoURI: token1Info.logoURI },
-            reserve0: reserve0.toFixed(4),
-            reserve1: reserve1.toFixed(4),
-            totalSupply: ethers.formatEther(totalSupply),
-            tvl,
-            volume24h,
-            priceToken0,
-            priceToken1,
-            apr,
-          });
+          if (pairAddress) {
+            pairAddresses.push(pairAddress);
+          }
         } catch {
           continue;
         }
+      }
+
+      // Batch fetch all pair data using multicall
+      const pairDataMap = await fetchPairDataWithMulticall(pairAddresses, provider);
+      
+      // Process results
+      const poolsData: PoolData[] = [];
+      
+      for (const pairAddress of pairAddresses) {
+        const pairData = pairDataMap.get(pairAddress.toLowerCase());
+        if (!pairData) continue;
+
+        const { token0: token0Addr, token1: token1Addr, reserves, totalSupply } = pairData;
+
+        const getTokenInfo = (addr: string) => {
+          const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+          return known || { symbol: 'UNKNOWN', address: addr, logoURI: undefined };
+        };
+
+        const token0Info = getTokenInfo(token0Addr);
+        const token1Info = getTokenInfo(token1Addr);
+
+        const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+        const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+        const tvl = reserve0 + reserve1;
+        const volume24h = tvl * 0.05;
+        const priceToken0 = reserve1 > 0 ? reserve1 / reserve0 : 0;
+        const priceToken1 = reserve0 > 0 ? reserve0 / reserve1 : 0;
+        const apr = tvl > 0 ? (volume24h * 365 * 0.003 / tvl) * 100 : 0;
+
+        poolsData.push({
+          pairAddress,
+          token0: { symbol: token0Info.symbol, address: token0Addr, logoURI: token0Info.logoURI },
+          token1: { symbol: token1Info.symbol, address: token1Addr, logoURI: token1Info.logoURI },
+          reserve0: reserve0.toFixed(4),
+          reserve1: reserve1.toFixed(4),
+          totalSupply: ethers.formatEther(totalSupply),
+          tvl,
+          volume24h,
+          priceToken0,
+          priceToken1,
+          apr,
+        });
       }
 
       setPools(poolsData);
