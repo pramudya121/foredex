@@ -1,11 +1,13 @@
 import { memo, useMemo, useCallback, useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
 import { FactoryInfo } from '@/components/FactoryInfo';
-import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2 } from 'lucide-react';
+import { FactoryAdminPanel } from '@/components/FactoryAdminPanel';
+import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2, Shield } from 'lucide-react';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Collapsible,
   CollapsibleContent,
@@ -113,7 +115,24 @@ const Pools = () => {
       {/* Factory Info Collapsible */}
       <Collapsible open={showFactoryInfo} onOpenChange={setShowFactoryInfo}>
         <CollapsibleContent className="mb-4 sm:mb-6 animate-in slide-in-from-top-2 duration-200">
-          <FactoryInfo />
+          <Tabs defaultValue="info" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="info" className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4" />
+                Factory Info
+              </TabsTrigger>
+              <TabsTrigger value="admin" className="flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                Admin
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="info">
+              <FactoryInfo />
+            </TabsContent>
+            <TabsContent value="admin">
+              <FactoryAdminPanel />
+            </TabsContent>
+          </Tabs>
         </CollapsibleContent>
       </Collapsible>
 

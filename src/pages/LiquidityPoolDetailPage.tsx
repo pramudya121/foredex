@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TokenLogo } from '@/components/TokenLogo';
 import { InteractivePoolChart } from '@/components/pools/InteractivePoolChart';
+import { PairMaintenance } from '@/components/PairMaintenance';
 import { 
   ArrowLeft, 
   Flame, 
@@ -22,7 +23,8 @@ import {
   DollarSign,
   Plus,
   Share2,
-  Star
+  Star,
+  Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -90,6 +92,7 @@ export default function LiquidityPoolDetailPage() {
   const [pool, setPool] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
   const { isFavorite, toggleFavorite } = useFavoritePoolsStore();
 
   const copyAddress = useCallback(() => {
@@ -255,6 +258,14 @@ export default function LiquidityPoolDetailPage() {
               Add Liquidity
             </Button>
           </Link>
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => setShowMaintenance(!showMaintenance)}
+            className={showMaintenance ? 'bg-muted' : ''}
+          >
+            <Wrench className="w-4 h-4" />
+          </Button>
           <a
             href={`${NEXUS_TESTNET.blockExplorer}/address/${pool.address}`}
             target="_blank"
@@ -333,6 +344,17 @@ export default function LiquidityPoolDetailPage() {
 
       {/* Interactive Chart Section */}
       <InteractivePoolChart data={historicalData} className="mb-8" />
+
+      {/* Pool Maintenance Panel */}
+      {showMaintenance && (
+        <div className="mb-8">
+          <PairMaintenance 
+            pairAddress={pool.address}
+            token0Symbol={pool.token0.symbol}
+            token1Symbol={pool.token1.symbol}
+          />
+        </div>
+      )}
 
       {/* Pool Details */}
       <div className="grid md:grid-cols-2 gap-6">
