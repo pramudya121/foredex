@@ -1,13 +1,15 @@
-import { useState, forwardRef } from 'react';
+import { useState, forwardRef, useMemo } from 'react';
 import { TOKEN_LIST, TokenInfo } from '@/config/contracts';
 import { Button } from '@/components/ui/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Search, X, Wallet, Loader2, Star } from 'lucide-react';
+import { ChevronDown, Search, X, Wallet, Loader2, Star, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { useTokenBalances } from '@/hooks/useTokenBalances';
 import { useWatchlistStore } from '@/stores/watchlistStore';
+import { useCustomTokenStore } from '@/stores/customTokenStore';
+import { ImportTokenDialog } from './ImportTokenDialog';
 
 interface TokenSelectProps {
   selected: TokenInfo | null;
@@ -23,13 +25,26 @@ export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(
     const { address, isConnected } = useWeb3();
     const { getBalance, loading: balancesLoading, refetch } = useTokenBalances(address);
     const { addToken, removeToken, isWatched } = useWatchlistStore();
+    const { customTokens } = useCustomTokenStore();
 
-    const filteredTokens = TOKEN_LIST.filter((token) => {
+    // Combine default tokens with custom tokens
+    const allTokens = useMemo(() => {
+      const combined = [...TOKEN_LIST];
+      customTokens.forEach(customToken => {
+        if (!combined.some(t => t.address.toLowerCase() === customToken.address.toLowerCase())) {
+          combined.push(customToken);
+        }
+      });
+      return combined;
+    }, [customTokens]);
+
+    const filteredTokens = allTokens.filter((token) => {
       if (excludeToken && token.address === excludeToken.address) return false;
       if (!search) return true;
       return (
         token.symbol.toLowerCase().includes(search.toLowerCase()) ||
-        token.name.toLowerCase().includes(search.toLowerCase())
+        token.name.toLowerCase().includes(search.toLowerCase()) ||
+        token.address.toLowerCase().includes(search.toLowerCase())
       );
     });
 
@@ -113,12 +128,26 @@ export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or symbol"
+                  placeholder="Search by name, symbol, or address"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10 bg-muted/50 border-border/50"
                 />
               </div>
+              
+              {/* Import Token Button */}
+              <div className="flex justify-end">
+                <ImportTokenDialog
+                  trigger={
+                    <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                      <Plus className="w-3 h-3" />
+                      Import Token
+                    </Button>
+                  }
+                  onTokenImported={(token) => handleSelect(token)}
+                />
+              </div>
+              
               <div className="space-y-1 max-h-[50vh] sm:max-h-[300px] overflow-y-auto">
                 {filteredTokens.map((token) => {
                   const balance = isConnected ? getBalance(token.address) : '0';

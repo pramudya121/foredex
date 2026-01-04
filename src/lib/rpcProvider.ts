@@ -6,11 +6,11 @@ class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 500; // Start with 500ms between requests
+  private minRequestInterval = 100; // Start with 100ms (much faster)
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 60000; // Cache for 60 seconds
+  private cacheTTL = 30000; // Cache for 30 seconds
   private errorCount = 0;
-  private maxErrors = 50; // Very lenient
+  private maxErrors = 100; // Very lenient
   private cooldownUntil = 0;
   private isInitializing = false;
   private consecutiveErrors = 0;
@@ -124,24 +124,24 @@ class RPCProviderService {
     this.consecutiveErrors++;
     
     // Only count as error for severe repeated failures
-    if (this.consecutiveErrors > 3) {
+    if (this.consecutiveErrors > 5) {
       this.errorCount++;
     }
     
-    // Gentle adaptive throttling
-    this.minRequestInterval = Math.min(5000, this.minRequestInterval * 1.2);
+    // Very gentle adaptive throttling
+    this.minRequestInterval = Math.min(2000, this.minRequestInterval * 1.1);
     
-    // Set cooldowns based on error type
+    // Set cooldowns based on error type - but much shorter
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
-      this.cooldownUntil = Date.now() + 10000; // 10s cooldown for rate limit
-      console.warn('[RPC] Rate limited, cooling down for 10s');
+      this.cooldownUntil = Date.now() + 3000; // 3s cooldown for rate limit
+      console.warn('[RPC] Rate limited, cooling down for 3s');
     } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED') || errorMessage.includes('Failed to fetch')) {
-      // Network errors - very short cooldown, these often resolve quickly
-      this.cooldownUntil = Date.now() + 2000;
+      // Network errors - very short cooldown
+      this.cooldownUntil = Date.now() + 500;
     } else if (errorMessage.includes('coalesce') || errorMessage.includes('Timeout')) {
-      this.cooldownUntil = Date.now() + 1000;
+      this.cooldownUntil = Date.now() + 300;
     }
-    // For other errors, don't set cooldown - just slow down requests
+    // For other errors, don't set cooldown
   }
 
   // Parse user-friendly error messages - returns null for transient errors that should be silent
@@ -356,7 +356,7 @@ class RPCProviderService {
     this.errorCount = 0;
     this.consecutiveErrors = 0;
     this.cooldownUntil = 0;
-    this.minRequestInterval = 500;
+    this.minRequestInterval = 100;
     this.pendingRequests.clear();
     this.requestQueue = [];
   }
