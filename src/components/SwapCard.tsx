@@ -328,7 +328,11 @@ export function SwapCard() {
       setShowConfirmation(false);
       setAmountIn('');
       setAmountOut('');
-      refetchBalances();
+      
+      // Force refresh balances after transaction
+      setTimeout(() => {
+        refetchBalances();
+      }, 2000);
     } catch (error: any) {
       playErrorSound();
       // Use rpcProvider to parse user-friendly error messages
@@ -469,17 +473,19 @@ export function SwapCard() {
           </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex-1 flex items-center">
-            {quoting ? (
-              <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-muted-foreground" />
-            ) : (
-              <Input
-                type="text"
-                placeholder="0.0"
-                value={amountOut}
-                readOnly
-                className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
-              />
+          <div className="flex-1 flex items-center gap-2">
+            <Input
+              type="text"
+              placeholder="0.0"
+              value={quoting ? '' : amountOut}
+              readOnly
+              className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+            />
+            {quoting && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Calculating...</span>
+              </div>
             )}
           </div>
           <TokenSelect selected={tokenOut} onSelect={setTokenOut} excludeToken={tokenIn} />

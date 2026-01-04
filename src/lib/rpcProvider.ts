@@ -156,32 +156,58 @@ class RPCProviderService {
         msg.includes('eth_maxPriorityFeePerGas') ||
         msg.includes('rate limit') ||
         msg.includes('429')) {
-      return showTransient ? 'Network busy - please try again' : null;
+      return showTransient ? 'Network busy - please try again in a moment' : null;
     }
     
     if (msg.includes('missing revert data')) {
-      return 'Transaction would fail - check inputs or try a smaller amount';
+      return 'Transaction would fail - check your inputs or try a smaller amount';
     }
-    if (msg.includes('user rejected') || msg.includes('User denied')) {
-      return 'Transaction cancelled';
+    if (msg.includes('user rejected') || msg.includes('User denied') || msg.includes('ACTION_REJECTED')) {
+      return 'Transaction cancelled by user';
     }
-    if (msg.includes('insufficient funds')) {
-      return 'Insufficient balance for transaction';
+    if (msg.includes('insufficient funds') || msg.includes('INSUFFICIENT_FUNDS')) {
+      return 'Insufficient balance for this transaction';
     }
     if (msg.includes('TRANSFER_FAILED')) {
-      return 'Token transfer failed - check approval';
+      return 'Token transfer failed - please check approval and balance';
     }
-    if (msg.includes('EXPIRED')) {
-      return 'Transaction deadline expired - try again';
+    if (msg.includes('EXPIRED') || msg.includes('Transaction too old')) {
+      return 'Transaction deadline expired - please try again';
     }
-    if (msg.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
-      return 'Price moved too much - try increasing slippage';
+    if (msg.includes('INSUFFICIENT_OUTPUT_AMOUNT') || msg.includes('too little received')) {
+      return 'Price moved too much - try increasing slippage tolerance';
     }
-    if (msg.includes('INSUFFICIENT_LIQUIDITY')) {
-      return 'Not enough liquidity in pool';
+    if (msg.includes('INSUFFICIENT_LIQUIDITY') || msg.includes('INSUFFICIENT_A_AMOUNT') || msg.includes('INSUFFICIENT_B_AMOUNT')) {
+      return 'Not enough liquidity in pool for this trade';
+    }
+    if (msg.includes('IDENTICAL_ADDRESSES')) {
+      return 'Cannot swap token to itself';
+    }
+    if (msg.includes('ZERO_ADDRESS')) {
+      return 'Invalid token address';
+    }
+    if (msg.includes('PAIR_EXISTS')) {
+      return 'This pool already exists';
+    }
+    if (msg.includes('K') && msg.includes('INVARIANT')) {
+      return 'Pool invariant error - try a different amount';
+    }
+    if (msg.includes('OVERFLOW')) {
+      return 'Amount too large - try a smaller value';
     }
     if (msg.includes('execution reverted')) {
-      return 'Transaction would fail - check amounts and approvals';
+      // Try to extract reason from reverted message
+      const reasonMatch = msg.match(/reason="([^"]+)"/);
+      if (reasonMatch) {
+        return `Transaction failed: ${reasonMatch[1]}`;
+      }
+      return 'Transaction would fail - please check amounts and approvals';
+    }
+    if (msg.includes('nonce') && msg.includes('too low')) {
+      return 'Transaction nonce conflict - please wait and try again';
+    }
+    if (msg.includes('replacement fee too low') || msg.includes('underpriced')) {
+      return 'Gas price too low - please wait for pending transaction';
     }
     
     // For user-initiated actions, show generic error only when showTransient is true
