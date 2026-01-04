@@ -1,11 +1,16 @@
-import { memo, useMemo, useCallback } from 'react';
+import { memo, useMemo, useCallback, useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
-import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame } from 'lucide-react';
+import { FactoryInfo } from '@/components/FactoryInfo';
+import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2 } from 'lucide-react';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 const StatCard = memo(({ 
   icon: Icon, 
   iconColor, 
@@ -44,6 +49,7 @@ StatCard.displayName = 'StatCard';
 
 const Pools = () => {
   const { stats, refetch, isRefreshing } = usePoolStats();
+  const [showFactoryInfo, setShowFactoryInfo] = useState(false);
 
   const formatNumber = useCallback((num: number) => {
     if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
@@ -81,17 +87,35 @@ const Pools = () => {
             Provide liquidity to earn trading fees. APR calculated from real on-chain data.
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={refetch}
-          disabled={isRefreshing}
-          className="flex items-center gap-2 self-start"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowFactoryInfo(!showFactoryInfo)}
+            className="flex items-center gap-2"
+          >
+            <Settings2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Factory</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refetch}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Factory Info Collapsible */}
+      <Collapsible open={showFactoryInfo} onOpenChange={setShowFactoryInfo}>
+        <CollapsibleContent className="mb-4 sm:mb-6 animate-in slide-in-from-top-2 duration-200">
+          <FactoryInfo />
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
