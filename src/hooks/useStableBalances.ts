@@ -304,21 +304,39 @@ export function useTokenPairBalances(
     };
   }, [address, tokenA?.address, tokenB?.address]);
 
-  // Auto-refresh every 45 seconds
+  // Auto-refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (address) {
         fetchBalances();
       }
-    }, 45000);
+    }, 30000);
     
     return () => clearInterval(interval);
   }, [address, fetchBalances]);
+
+  // Force refresh after transaction
+  const forceRefresh = useCallback(async () => {
+    // Clear cache for these tokens
+    if (tokenA) {
+      const cacheKeyA = `balance_${tokenA.address === '0x0000000000000000000000000000000000000000' ? 'native' : tokenA.address}_${address}`;
+      delete globalBalanceCache[cacheKeyA];
+    }
+    if (tokenB) {
+      const cacheKeyB = `balance_${tokenB.address === '0x0000000000000000000000000000000000000000' ? 'native' : tokenB.address}_${address}`;
+      delete globalBalanceCache[cacheKeyB];
+    }
+    
+    // Wait a bit for blockchain to update
+    await new Promise(r => setTimeout(r, 2000));
+    await fetchBalances(true);
+  }, [address, tokenA, tokenB, fetchBalances]);
 
   return {
     balanceA,
     balanceB,
     loading,
     refetch: () => fetchBalances(true),
+    forceRefresh,
   };
 }

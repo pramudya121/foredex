@@ -34,6 +34,7 @@ export function LiquidityPanel() {
   const [lpBalance, setLpBalance] = useState('0');
   const [lpToRemove, setLpToRemove] = useState('');
   const [loading, setLoading] = useState(false);
+  const [calculating, setCalculating] = useState(false);
   const [approvingA, setApprovingA] = useState(false);
   const [approvingB, setApprovingB] = useState(false);
   const [approvalA, setApprovalA] = useState(false);
@@ -224,6 +225,7 @@ export function LiquidityPanel() {
     if (!amountA || amountA.trim() === '') {
       setEstimatedShare(0);
       setAmountB('');
+      setCalculating(false);
       return;
     }
     
@@ -231,18 +233,24 @@ export function LiquidityPanel() {
     if (isNaN(amountNum) || amountNum <= 0) {
       setEstimatedShare(0);
       setAmountB('');
+      setCalculating(false);
       return;
     }
 
     if (!tokenA || !tokenB) {
+      setCalculating(false);
       return;
     }
     
     if (reserves.reserveA === BigInt(0) || reserves.reserveB === BigInt(0)) {
       // New pool - 100% share, allow user to set both amounts
       setEstimatedShare(100);
+      setCalculating(false);
       return;
     }
+    
+    // Show calculating state
+    setCalculating(true);
     
     // Debounce the calculation
     const timeout = setTimeout(() => {
@@ -264,6 +272,8 @@ export function LiquidityPanel() {
         setEstimatedShare(isNaN(share) ? 0 : share);
       } catch {
         setEstimatedShare(0);
+      } finally {
+        setCalculating(false);
       }
     }, 300);
     
@@ -369,7 +379,12 @@ export function LiquidityPanel() {
       
       setAmountA('');
       setAmountB('');
-      fetchPairData();
+      
+      // Force refresh balances after transaction
+      setTimeout(() => {
+        refetchBalances();
+        fetchPairData();
+      }, 2000);
     } catch (error: any) {
       // Use rpcProvider to parse user-friendly error messages
       const errorMsg = rpcProvider.parseError(error, true);
@@ -505,14 +520,23 @@ export function LiquidityPanel() {
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              <Input
-                type="number"
-                inputMode="decimal"
-                placeholder="0.0"
-                value={amountB}
-                onChange={(e) => setAmountB(e.target.value)}
-                className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
-              />
+              <div className="flex-1 flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0.0"
+                  value={calculating ? '' : amountB}
+                  onChange={(e) => setAmountB(e.target.value)}
+                  className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                  readOnly={reserves.reserveA > BigInt(0)}
+                />
+                {calculating && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">Calculating...</span>
+                  </div>
+                )}
+              </div>
               <TokenSelect selected={tokenB} onSelect={setTokenB} excludeToken={tokenA} />
             </div>
           </div>
