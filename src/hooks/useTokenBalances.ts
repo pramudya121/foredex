@@ -87,8 +87,8 @@ async function fetchBalancesWithMulticall(
       callData: encodeBalanceOfCall(userAddress),
     }));
 
-    // Execute multicall
-    const [, returnData] = await multicall.aggregate(calls);
+    // Execute multicall with staticCall (read-only, not a transaction)
+    const [, returnData] = await multicall.aggregate.staticCall(calls);
     
     // Decode results
     (returnData as string[]).forEach((data, index) => {

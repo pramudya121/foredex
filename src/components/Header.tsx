@@ -18,6 +18,7 @@ import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
 import { RpcStatusIndicator } from './RpcStatusIndicator';
+import { ContractEventNotifications } from './ContractEventNotifications';
 
 const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 
@@ -102,6 +103,9 @@ export function Header() {
 
         {/* Wallet & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Contract Event Notifications */}
+          <ContractEventNotifications />
+          
           {/* Price Alerts */}
           <Suspense fallback={null}>
             <PriceAlertManager />

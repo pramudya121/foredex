@@ -31,7 +31,8 @@ export async function multicall(calls: Call[]): Promise<MulticallResult[]> {
   );
 
   try {
-    const [, returnData] = await multicallContract.aggregate(calls);
+    // Use staticCall to make a read-only call (not a transaction)
+    const [, returnData] = await multicallContract.aggregate.staticCall(calls);
     
     return (returnData as string[]).map((data) => ({
       success: true,

@@ -91,7 +91,8 @@ async function fetchPairDataWithMulticall(
       calls.push({ target: pairAddress, callData: encodeFunctionCall(pairInterface, 'totalSupply') });
     });
 
-    const [, returnData] = await multicall.aggregate(calls);
+    // Use staticCall for read-only multicall
+    const [, returnData] = await multicall.aggregate.staticCall(calls);
     
     // Decode results (4 calls per pair)
     for (let i = 0; i < pairAddresses.length; i++) {
