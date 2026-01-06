@@ -483,43 +483,63 @@ export function LiquidityPanel() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="add" className="space-y-3 sm:space-y-4">
+        <TabsContent value="add" className="space-y-4">
           {/* Token A */}
-          <div className="token-input">
-            <div className="flex justify-between mb-2 flex-wrap gap-1">
-              <span className="text-xs sm:text-sm text-muted-foreground">Token A</span>
-              <span className="text-xs sm:text-sm text-muted-foreground">
-                Balance: {parseFloat(balanceA).toFixed(4)}
+          <div className="token-input p-4">
+            <div className="flex justify-between mb-3 items-center">
+              <span className="text-sm text-muted-foreground font-medium">Token A</span>
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <span className="hidden sm:inline">Balance:</span>
+                <span className="sm:hidden">Bal:</span>
+                {loadingBalances ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  <span className="font-medium text-foreground">{parseFloat(balanceA || '0').toFixed(4)}</span>
+                )}
+                {parseFloat(balanceA || '0') > 0 && (
+                  <button
+                    onClick={() => setAmountA(balanceA)}
+                    className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
+                  >
+                    MAX
+                  </button>
+                )}
               </span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-3">
               <Input
                 type="number"
                 inputMode="decimal"
                 placeholder="0.0"
                 value={amountA}
                 onChange={(e) => setAmountA(e.target.value)}
-                className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                className="flex-1 text-xl sm:text-2xl font-bold bg-transparent border-none p-0 h-10 focus-visible:ring-0"
               />
               <TokenSelect selected={tokenA} onSelect={setTokenA} excludeToken={tokenB} />
             </div>
           </div>
 
           <div className="flex justify-center">
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-              <Plus className="w-4 h-4 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border-2 border-border">
+              <Plus className="w-5 h-5 text-muted-foreground" />
             </div>
           </div>
 
           {/* Token B */}
-          <div className="token-input">
-            <div className="flex justify-between mb-2 flex-wrap gap-1">
-              <span className="text-xs sm:text-sm text-muted-foreground">Token B</span>
-              <span className="text-xs sm:text-sm text-muted-foreground">
-                Balance: {parseFloat(balanceB).toFixed(4)}
+          <div className="token-input p-4">
+            <div className="flex justify-between mb-3 items-center">
+              <span className="text-sm text-muted-foreground font-medium">Token B</span>
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <span className="hidden sm:inline">Balance:</span>
+                <span className="sm:hidden">Bal:</span>
+                {loadingBalances ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  <span className="font-medium text-foreground">{parseFloat(balanceB || '0').toFixed(4)}</span>
+                )}
               </span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-3">
               <div className="flex-1 flex items-center gap-2">
                 <Input
                   type="number"
@@ -527,13 +547,13 @@ export function LiquidityPanel() {
                   placeholder="0.0"
                   value={calculating ? '' : amountB}
                   onChange={(e) => setAmountB(e.target.value)}
-                  className="flex-1 text-lg sm:text-xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+                  className="flex-1 text-xl sm:text-2xl font-bold bg-transparent border-none p-0 h-10 focus-visible:ring-0"
                   readOnly={reserves.reserveA > BigInt(0)}
                 />
                 {calculating && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-xs">Calculating...</span>
+                    <span className="text-xs hidden sm:inline">Calculating...</span>
                   </div>
                 )}
               </div>
