@@ -6,17 +6,18 @@ class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private lastRequestTime = 0;
-  private minRequestInterval = 100; // Start with 100ms (much faster)
+  private minRequestInterval = 50; // Very fast - 50ms
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 30000; // Cache for 30 seconds
+  private cacheTTL = 60000; // Cache for 60 seconds (increased)
   private errorCount = 0;
-  private maxErrors = 100; // Very lenient
+  private maxErrors = 200; // Very lenient
   private cooldownUntil = 0;
   private isInitializing = false;
   private consecutiveErrors = 0;
   private pendingRequests = new Map<string, Promise<any>>();
   private requestQueue: Array<() => void> = [];
   private isProcessingQueue = false;
+  private lastSuccessTime = Date.now();
 
   private constructor() {
     this.initProvider();
@@ -63,9 +64,11 @@ class RPCProviderService {
           );
         }
       };
+      
+      this.lastSuccessTime = Date.now();
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 5000;
+      this.cooldownUntil = Date.now() + 2000;
     } finally {
       this.isInitializing = false;
     }
@@ -91,10 +94,12 @@ class RPCProviderService {
     if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
       this.consecutiveErrors = 0;
-      this.errorCount = Math.max(0, this.errorCount - 10);
-      this.minRequestInterval = Math.max(300, this.minRequestInterval * 0.5);
+      this.errorCount = Math.max(0, this.errorCount - 20);
+      this.minRequestInterval = 50;
     }
-    return this.provider !== null && this.errorCount < this.maxErrors && now >= this.cooldownUntil;
+    
+    // Always return true if provider exists - let individual calls handle errors
+    return this.provider !== null;
   }
 
   private getFromCache(key: string): any | null {
@@ -124,24 +129,16 @@ class RPCProviderService {
     this.consecutiveErrors++;
     
     // Only count as error for severe repeated failures
-    if (this.consecutiveErrors > 5) {
+    if (this.consecutiveErrors > 10) {
       this.errorCount++;
     }
     
-    // Very gentle adaptive throttling
-    this.minRequestInterval = Math.min(2000, this.minRequestInterval * 1.1);
-    
-    // Set cooldowns based on error type - but much shorter
+    // Minimal throttling - only for rate limits
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
-      this.cooldownUntil = Date.now() + 3000; // 3s cooldown for rate limit
-      console.warn('[RPC] Rate limited, cooling down for 3s');
-    } else if (errorMessage.includes('CORS') || errorMessage.includes('ERR_FAILED') || errorMessage.includes('Failed to fetch')) {
-      // Network errors - very short cooldown
-      this.cooldownUntil = Date.now() + 500;
-    } else if (errorMessage.includes('coalesce') || errorMessage.includes('Timeout')) {
-      this.cooldownUntil = Date.now() + 300;
+      this.cooldownUntil = Date.now() + 1000; // 1s cooldown for rate limit
+      this.minRequestInterval = Math.min(500, this.minRequestInterval * 1.2);
     }
-    // For other errors, don't set cooldown
+    // Don't set cooldown for network errors - just use cache
   }
 
   // Parse user-friendly error messages - returns null for transient errors that should be silent
@@ -277,16 +274,11 @@ class RPCProviderService {
       return null;
     }
 
-    // Throttle requests
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      await new Promise(r => setTimeout(r, this.minRequestInterval - timeSinceLastRequest));
-    }
+    // Don't throttle - let requests go through faster
     this.lastRequestTime = Date.now();
 
-    const timeout = options?.timeout || 20000; // 20s default timeout
-    const maxRetries = options?.retries ?? 3;
+    const timeout = options?.timeout || 15000; // 15s default timeout
+    const maxRetries = options?.retries ?? 2;
 
     const executeCall = async (attempt: number): Promise<T | null> => {
       try {
@@ -303,31 +295,28 @@ class RPCProviderService {
         
         // Reset on success
         this.consecutiveErrors = 0;
-        this.errorCount = Math.max(0, this.errorCount - 3);
-        this.minRequestInterval = Math.max(300, this.minRequestInterval * 0.7);
+        this.errorCount = Math.max(0, this.errorCount - 5);
+        this.minRequestInterval = 50;
+        this.lastSuccessTime = Date.now();
         
         return result as T;
       } catch (error: any) {
         const errorMsg = error?.message || String(error);
         
-        // Don't log expected/transient errors
+        // Don't log transient errors
         const isTransient = errorMsg.includes('coalesce') || 
                            errorMsg.includes('CORS') || 
                            errorMsg.includes('429') ||
                            errorMsg.includes('rate limit') ||
                            errorMsg.includes('Timeout') ||
+                           errorMsg.includes('Failed to fetch') ||
                            errorMsg.includes('eth_maxPriorityFeePerGas');
         
-        // Retry on transient errors
+        // Retry once on transient errors
         if (attempt < maxRetries && isTransient) {
-          const delay = 1000 * Math.pow(1.5, attempt); // Exponential backoff
+          const delay = 500 * (attempt + 1);
           await new Promise(r => setTimeout(r, delay));
           return executeCall(attempt + 1);
-        }
-        
-        // Only log non-transient errors
-        if (!isTransient) {
-          console.warn('[RPC] Call failed:', errorMsg.slice(0, 100));
         }
         
         this.handleError(error);

@@ -417,74 +417,79 @@ export function SwapCard() {
       )}
 
       {/* Token In */}
-      <div className="token-input mb-2 p-3 sm:p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs sm:text-sm text-muted-foreground">You pay</span>
-          <span className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
-            Balance: {loadingBalances ? (
-              <Skeleton className="h-3 sm:h-4 w-12 sm:w-16 inline-block" />
+      <div className="token-input mb-2 p-4 sm:p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm text-muted-foreground font-medium">You pay</span>
+          <span className="text-sm text-muted-foreground flex items-center gap-2">
+            <span className="hidden sm:inline">Balance:</span>
+            <span className="sm:hidden">Bal:</span>
+            {loadingBalances ? (
+              <Skeleton className="h-4 w-16 inline-block" />
             ) : (
-              <>
-                {parseFloat(balanceIn).toFixed(4)}
-                <button
-                  onClick={() => setAmountIn(balanceIn)}
-                  className="ml-1 text-primary hover:underline font-medium"
-                >
-                  MAX
-                </button>
-              </>
+              <span className="font-medium text-foreground">{parseFloat(balanceIn || '0').toFixed(4)}</span>
+            )}
+            {parseFloat(balanceIn || '0') > 0 && (
+              <button
+                onClick={() => setAmountIn(balanceIn)}
+                className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
+              >
+                MAX
+              </button>
             )}
           </span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-3">
           <Input
             type="number"
+            inputMode="decimal"
             placeholder="0.0"
             value={amountIn}
             onChange={(e) => setAmountIn(e.target.value)}
-            className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+            className="flex-1 text-2xl sm:text-3xl font-bold bg-transparent border-none p-0 h-12 focus-visible:ring-0 placeholder:text-muted-foreground/50"
           />
           <TokenSelect selected={tokenIn} onSelect={setTokenIn} excludeToken={tokenOut} />
         </div>
       </div>
 
       {/* Switch Button */}
-      <div className="flex justify-center -my-3 relative z-10">
+      <div className="flex justify-center -my-4 relative z-10">
         <Button
           variant="outline"
           size="icon"
           onClick={switchTokens}
-          className="rounded-full border-border bg-card hover:bg-primary/10 hover:border-primary/50 transition-all"
+          className="rounded-full border-2 border-border bg-card hover:bg-primary/10 hover:border-primary/50 transition-all w-10 h-10 shadow-lg"
         >
-          <ArrowDown className="w-4 h-4" />
+          <ArrowDown className="w-5 h-5" />
         </Button>
       </div>
 
       {/* Token Out */}
-      <div className="token-input mt-2 mb-4 sm:mb-6 p-3 sm:p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs sm:text-sm text-muted-foreground">You receive</span>
-          <span className="text-xs sm:text-sm text-muted-foreground">
-            Balance: {loadingBalances ? (
-              <Skeleton className="h-3 sm:h-4 w-12 sm:w-16 inline-block" />
+      <div className="token-input mt-2 mb-5 p-4 sm:p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm text-muted-foreground font-medium">You receive</span>
+          <span className="text-sm text-muted-foreground flex items-center gap-2">
+            <span className="hidden sm:inline">Balance:</span>
+            <span className="sm:hidden">Bal:</span>
+            {loadingBalances ? (
+              <Skeleton className="h-4 w-16 inline-block" />
             ) : (
-              parseFloat(balanceOut).toFixed(4)
+              <span className="font-medium text-foreground">{parseFloat(balanceOut || '0').toFixed(4)}</span>
             )}
           </span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2">
             <Input
               type="text"
               placeholder="0.0"
               value={quoting ? '' : amountOut}
               readOnly
-              className="flex-1 text-xl sm:text-2xl font-medium bg-transparent border-none p-0 focus-visible:ring-0"
+              className="flex-1 text-2xl sm:text-3xl font-bold bg-transparent border-none p-0 h-12 focus-visible:ring-0 placeholder:text-muted-foreground/50"
             />
             {quoting && (
               <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">Calculating...</span>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm hidden sm:inline">Calculating...</span>
               </div>
             )}
           </div>
