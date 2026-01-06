@@ -6,17 +6,15 @@ import { ArrowLeftRight, Target, Zap, Shield, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
-import { PriceChart } from '@/components/PriceChart';
 import wolfLogo from '@/assets/wolf-logo.png';
 
 // Lazy load components for better performance
 const LimitOrderPanel = lazy(() => 
   import('@/components/LimitOrderPanel').then(m => ({ default: m.LimitOrderPanel }))
 );
-const RecentTrades = lazy(() => import('@/components/RecentTrades'));
 
 const LimitOrderLoading = memo(() => (
-  <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto">
+  <div className="glass-card p-4 sm:p-6 w-full">
     <div className="space-y-4">
       <Skeleton className="h-10 w-full" />
       <Skeleton className="h-24 w-full" />
@@ -26,19 +24,6 @@ const LimitOrderLoading = memo(() => (
 ));
 
 LimitOrderLoading.displayName = 'LimitOrderLoading';
-
-const WidgetLoading = memo(() => (
-  <div className="glass-card p-4">
-    <Skeleton className="h-6 w-32 mb-4" />
-    <div className="space-y-2">
-      {Array(3).fill(0).map((_, i) => (
-        <Skeleton key={i} className="h-12 w-full" />
-      ))}
-    </div>
-  </div>
-));
-
-WidgetLoading.displayName = 'WidgetLoading';
 
 const FeatureBadge = memo(({ icon: Icon, text }: { icon: React.ElementType; text: string }) => (
   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm">
@@ -90,9 +75,9 @@ const Index = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 sm:gap-8 max-w-6xl mx-auto justify-center">
-        {/* Main Trading Area */}
-        <div className="w-full max-w-md mx-auto lg:mx-0">
+      {/* Main Trading Area - Centered */}
+      <div className="flex justify-center">
+        <div className="w-full max-w-md">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 glass-card p-1.5 mb-4 sm:mb-6 h-12">
               <TabsTrigger 
@@ -122,30 +107,10 @@ const Index = () => {
             </TabsContent>
           </Tabs>
         </div>
-
-        {/* Right Sidebar - Price Chart + Recent Trades */}
-        <div className="hidden lg:flex flex-col gap-5 w-full max-w-sm">
-          {/* Price Chart */}
-          <div className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card/90 to-card/60 backdrop-blur-sm shadow-xl hover:border-primary/30 transition-colors">
-            <PriceChart 
-              token0Symbol="NEX" 
-              token1Symbol="FRDX" 
-              currentPrice={0.9976}
-              className="border-0 bg-transparent"
-            />
-          </div>
-          
-          {/* Recent Trades */}
-          <div className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card/90 to-card/60 backdrop-blur-sm shadow-xl hover:border-primary/30 transition-colors">
-            <Suspense fallback={<WidgetLoading />}>
-              <RecentTrades />
-            </Suspense>
-          </div>
-        </div>
       </div>
 
-      {/* Stats Section - Mobile Only */}
-      <div className="lg:hidden mt-8 grid grid-cols-3 gap-3 max-w-md mx-auto">
+      {/* Stats Section */}
+      <div className="mt-8 grid grid-cols-3 gap-3 max-w-md mx-auto">
         <div className="glass-card p-4 text-center">
           <p className="text-xl sm:text-2xl font-bold text-primary">$12M+</p>
           <p className="text-xs text-muted-foreground">TVL</p>
