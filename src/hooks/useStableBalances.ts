@@ -13,44 +13,68 @@ interface BalanceCache {
 
 // Global balance cache shared across all hook instances
 const globalBalanceCache: BalanceCache = {};
-const BALANCE_CACHE_TTL = 60000; // 60 seconds (increased)
+const BALANCE_CACHE_TTL = 30000; // 30 seconds - shorter for faster updates
 const pendingRequests = new Map<string, Promise<string>>();
+
+// Consistent cache key format
+const getCacheKey = (walletAddress: string, tokenAddress: string): string => {
+  const isNative = tokenAddress === '0x0000000000000000000000000000000000000000';
+  return `bal_${walletAddress.toLowerCase()}_${isNative ? 'native' : tokenAddress.toLowerCase()}`;
+};
+
+// Get cached balance immediately
+const getCachedBalance = (walletAddress: string | null, tokenAddress: string): string => {
+  if (!walletAddress) return '0';
+  const cacheKey = getCacheKey(walletAddress, tokenAddress);
+  const cached = globalBalanceCache[cacheKey];
+  return cached?.balance || '0';
+};
+
+// Clear cache for a token
+export const clearBalanceCache = (walletAddress: string, tokenAddress: string) => {
+  const cacheKey = getCacheKey(walletAddress, tokenAddress);
+  delete globalBalanceCache[cacheKey];
+};
+
+// Clear all cache
+export const clearAllBalanceCache = () => {
+  Object.keys(globalBalanceCache).forEach(key => delete globalBalanceCache[key]);
+};
 
 export function useStableBalances(address: string | null) {
   const [balances, setBalances] = useState<Map<string, string>>(() => {
-    // Initialize from cache
     const initial = new Map<string, string>();
     if (address) {
       Object.entries(globalBalanceCache).forEach(([key, value]) => {
-        if (key.startsWith(address.toLowerCase())) {
-          const tokenAddr = key.split('-')[1];
-          initial.set(tokenAddr, value.balance);
+        if (key.includes(address.toLowerCase())) {
+          initial.set(key, value.balance);
         }
       });
     }
     return initial;
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
 
   const isNativeToken = (token: TokenInfo | null) =>
     token?.address === '0x0000000000000000000000000000000000000000';
 
-  const getCacheKey = (walletAddress: string, tokenAddress: string) =>
-    `${walletAddress.toLowerCase()}-${tokenAddress.toLowerCase()}`;
-
   const fetchSingleBalance = useCallback(async (
     tokenAddress: string,
     decimals: number,
-    walletAddress: string
+    walletAddress: string,
+    force = false
   ): Promise<string> => {
     const cacheKey = getCacheKey(walletAddress, tokenAddress);
     
-    // Check cache first - return immediately if valid
-    const cached = globalBalanceCache[cacheKey];
-    if (cached && Date.now() - cached.timestamp < BALANCE_CACHE_TTL) {
-      return cached.balance;
+    // Check cache first - return immediately if valid and not forcing
+    if (!force) {
+      const cached = globalBalanceCache[cacheKey];
+      if (cached && Date.now() - cached.timestamp < BALANCE_CACHE_TTL) {
+        return cached.balance;
+      }
     }
 
     // Check if already fetching
@@ -58,46 +82,49 @@ export function useStableBalances(address: string | null) {
       try {
         return await pendingRequests.get(cacheKey)!;
       } catch {
+        const cached = globalBalanceCache[cacheKey];
         return cached?.balance || '0';
       }
     }
 
     const provider = rpcProvider.getProvider();
     if (!provider) {
+      const cached = globalBalanceCache[cacheKey];
       return cached?.balance || '0';
     }
 
     const fetchPromise = (async () => {
       try {
         let balance: string;
+        const isNative = tokenAddress === '0x0000000000000000000000000000000000000000';
         
-        if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+        if (isNative) {
           const result = await rpcProvider.call(
             () => provider.getBalance(walletAddress),
-            `balance_native_${walletAddress}`,
-            { retries: 2, timeout: 10000 }
+            cacheKey,
+            { retries: 3, timeout: 15000 }
           );
-          balance = result ? ethers.formatEther(result) : (cached?.balance || '0');
+          balance = result ? ethers.formatEther(result) : '0';
         } else {
           const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
           const result = await rpcProvider.call(
             () => contract.balanceOf(walletAddress),
-            `balance_${tokenAddress}_${walletAddress}`,
-            { retries: 2, timeout: 10000 }
+            cacheKey,
+            { retries: 3, timeout: 15000 }
           );
-          balance = result ? ethers.formatUnits(result, decimals) : (cached?.balance || '0');
+          balance = result ? ethers.formatUnits(result, decimals) : '0';
         }
 
-        // Only update cache if we got a real value
-        if (balance !== '0' || !cached) {
-          globalBalanceCache[cacheKey] = {
-            balance,
-            timestamp: Date.now(),
-          };
-        }
+        // Update cache
+        globalBalanceCache[cacheKey] = {
+          balance,
+          timestamp: Date.now(),
+        };
 
         return balance;
-      } catch {
+      } catch (err) {
+        console.warn('Balance fetch error:', err);
+        const cached = globalBalanceCache[cacheKey];
         return cached?.balance || '0';
       } finally {
         pendingRequests.delete(cacheKey);
@@ -125,10 +152,7 @@ export function useStableBalances(address: string | null) {
       ? '0x0000000000000000000000000000000000000000'
       : token.address;
     
-    const cacheKey = getCacheKey(address, tokenAddress);
-    const cached = globalBalanceCache[cacheKey];
-    
-    return cached?.balance || '0';
+    return getCachedBalance(address, tokenAddress);
   }, [address]);
 
   const fetchBalancesForTokens = useCallback(async (tokens: (TokenInfo | null)[]) => {
@@ -136,24 +160,32 @@ export function useStableBalances(address: string | null) {
     
     fetchingRef.current = true;
     setLoading(true);
+    setError(null);
     
     const newBalances = new Map<string, string>();
     
     try {
-      // Fetch balances sequentially with delay to avoid rate limiting
-      for (const token of tokens) {
-        if (!token || !mountedRef.current) continue;
-        
+      // Fetch all balances in parallel
+      const promises = tokens.map(async (token) => {
+        if (!token) return null;
         const balance = await getBalance(token);
-        const key = token.address.toLowerCase();
-        newBalances.set(key, balance);
-        
-        // Small delay between requests
-        await new Promise(r => setTimeout(r, 100));
-      }
+        return { address: token.address.toLowerCase(), balance };
+      });
+
+      const results = await Promise.all(promises);
+      
+      results.forEach(result => {
+        if (result) {
+          newBalances.set(result.address, result.balance);
+        }
+      });
       
       if (mountedRef.current) {
         setBalances(newBalances);
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setError('Failed to load balances');
       }
     } finally {
       fetchingRef.current = false;
@@ -171,11 +203,10 @@ export function useStableBalances(address: string | null) {
       : token.address;
     
     // Clear cache for this token
-    const cacheKey = getCacheKey(address, tokenAddress);
-    delete globalBalanceCache[cacheKey];
+    clearBalanceCache(address, tokenAddress);
     
     // Fetch fresh
-    const balance = await fetchSingleBalance(tokenAddress, token.decimals, address);
+    const balance = await fetchSingleBalance(tokenAddress, token.decimals, address, true);
     
     if (mountedRef.current) {
       setBalances(prev => {
@@ -196,6 +227,7 @@ export function useStableBalances(address: string | null) {
   return {
     balances,
     loading,
+    error,
     getBalance,
     getBalanceSync,
     fetchBalancesForTokens,
@@ -209,23 +241,33 @@ export function useTokenPairBalances(
   tokenA: TokenInfo | null,
   tokenB: TokenInfo | null
 ) {
-  // Initialize from cache immediately
-  const getCachedBalance = (token: TokenInfo | null): string => {
-    if (!address || !token) return '0';
-    const isNative = token.address === '0x0000000000000000000000000000000000000000';
-    const cacheKey = `balance_${isNative ? 'native' : token.address}_${address}`;
-    const cached = globalBalanceCache[cacheKey];
-    return cached?.balance || '0';
-  };
-
-  const [balanceA, setBalanceA] = useState(() => getCachedBalance(tokenA));
-  const [balanceB, setBalanceB] = useState(() => getCachedBalance(tokenB));
+  const [balanceA, setBalanceA] = useState('0');
+  const [balanceB, setBalanceB] = useState('0');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const fetchCountRef = useRef(0);
+  const lastFetchRef = useRef(0);
+
+  // Initialize from cache immediately
+  useEffect(() => {
+    if (tokenA) {
+      const tokenAddr = tokenA.address === '0x0000000000000000000000000000000000000000' 
+        ? '0x0000000000000000000000000000000000000000' 
+        : tokenA.address;
+      const cached = getCachedBalance(address, tokenAddr);
+      if (cached !== '0') setBalanceA(cached);
+    }
+    if (tokenB) {
+      const tokenAddr = tokenB.address === '0x0000000000000000000000000000000000000000' 
+        ? '0x0000000000000000000000000000000000000000' 
+        : tokenB.address;
+      const cached = getCachedBalance(address, tokenAddr);
+      if (cached !== '0') setBalanceB(cached);
+    }
+  }, [address, tokenA?.address, tokenB?.address]);
 
   const fetchBalances = useCallback(async (force = false) => {
-    // If no wallet, show 0 balance
     if (!address) {
       setBalanceA('0');
       setBalanceB('0');
@@ -233,28 +275,32 @@ export function useTokenPairBalances(
       return;
     }
 
+    // Debounce rapid calls
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < 500) {
+      return;
+    }
+    lastFetchRef.current = now;
+
     const currentFetch = ++fetchCountRef.current;
-    
-    // Show cached values immediately while fetching
-    const cachedA = getCachedBalance(tokenA);
-    const cachedB = getCachedBalance(tokenB);
-    if (cachedA !== '0') setBalanceA(cachedA);
-    if (cachedB !== '0') setBalanceB(cachedB);
-    
     setLoading(true);
+    setError(null);
 
     const fetchTokenBalance = async (token: TokenInfo | null): Promise<string> => {
       if (!token) return '0';
       
       const provider = rpcProvider.getProvider();
       if (!provider) {
-        // Return cached value if no provider
-        return getCachedBalance(token);
+        const tokenAddr = token.address === '0x0000000000000000000000000000000000000000' 
+          ? '0x0000000000000000000000000000000000000000' 
+          : token.address;
+        return getCachedBalance(address, tokenAddr);
       }
 
       try {
         const isNative = token.address === '0x0000000000000000000000000000000000000000';
-        const cacheKey = `balance_${isNative ? 'native' : token.address}_${address}`;
+        const tokenAddr = isNative ? '0x0000000000000000000000000000000000000000' : token.address;
+        const cacheKey = getCacheKey(address, tokenAddr);
         
         // Skip cache check if forcing refresh
         if (!force) {
@@ -269,20 +315,20 @@ export function useTokenPairBalances(
           const result = await rpcProvider.call(
             () => provider.getBalance(address),
             cacheKey,
-            { timeout: 10000, retries: 2 }
+            { timeout: 15000, retries: 3 }
           );
-          balance = result ? ethers.formatEther(result) : getCachedBalance(token);
+          balance = result ? ethers.formatEther(result) : getCachedBalance(address, tokenAddr);
         } else {
           const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
           const result = await rpcProvider.call(
             () => contract.balanceOf(address),
             cacheKey,
-            { timeout: 10000, retries: 2 }
+            { timeout: 15000, retries: 3 }
           );
-          balance = result ? ethers.formatUnits(result, token.decimals) : getCachedBalance(token);
+          balance = result ? ethers.formatUnits(result, token.decimals) : getCachedBalance(address, tokenAddr);
         }
 
-        // Update cache only if we got a real value
+        // Update cache
         if (balance !== '0') {
           globalBalanceCache[cacheKey] = {
             balance,
@@ -291,9 +337,12 @@ export function useTokenPairBalances(
         }
 
         return balance;
-      } catch {
-        // Return cached value on error
-        return getCachedBalance(token);
+      } catch (err) {
+        console.warn('Balance fetch error:', err);
+        const tokenAddr = token.address === '0x0000000000000000000000000000000000000000' 
+          ? '0x0000000000000000000000000000000000000000' 
+          : token.address;
+        return getCachedBalance(address, tokenAddr);
       }
     };
 
@@ -307,6 +356,10 @@ export function useTokenPairBalances(
       if (!mountedRef.current || currentFetch !== fetchCountRef.current) return;
       setBalanceA(balA);
       setBalanceB(balB);
+    } catch (err) {
+      if (mountedRef.current && currentFetch === fetchCountRef.current) {
+        setError('Failed to load balances');
+      }
     } finally {
       if (mountedRef.current && currentFetch === fetchCountRef.current) {
         setLoading(false);
@@ -324,13 +377,13 @@ export function useTokenPairBalances(
     };
   }, [address, tokenA?.address, tokenB?.address]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 20 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (address) {
         fetchBalances();
       }
-    }, 30000);
+    }, 20000);
     
     return () => clearInterval(interval);
   }, [address, fetchBalances]);
@@ -338,17 +391,23 @@ export function useTokenPairBalances(
   // Force refresh after transaction
   const forceRefresh = useCallback(async () => {
     // Clear cache for these tokens
-    if (tokenA) {
-      const cacheKeyA = `balance_${tokenA.address === '0x0000000000000000000000000000000000000000' ? 'native' : tokenA.address}_${address}`;
-      delete globalBalanceCache[cacheKeyA];
-    }
-    if (tokenB) {
-      const cacheKeyB = `balance_${tokenB.address === '0x0000000000000000000000000000000000000000' ? 'native' : tokenB.address}_${address}`;
-      delete globalBalanceCache[cacheKeyB];
+    if (address) {
+      if (tokenA) {
+        const tokenAddrA = tokenA.address === '0x0000000000000000000000000000000000000000' 
+          ? '0x0000000000000000000000000000000000000000' 
+          : tokenA.address;
+        clearBalanceCache(address, tokenAddrA);
+      }
+      if (tokenB) {
+        const tokenAddrB = tokenB.address === '0x0000000000000000000000000000000000000000' 
+          ? '0x0000000000000000000000000000000000000000' 
+          : tokenB.address;
+        clearBalanceCache(address, tokenAddrB);
+      }
     }
     
     // Wait a bit for blockchain to update
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 1500));
     await fetchBalances(true);
   }, [address, tokenA, tokenB, fetchBalances]);
 
@@ -356,6 +415,7 @@ export function useTokenPairBalances(
     balanceA,
     balanceB,
     loading,
+    error,
     refetch: () => fetchBalances(true),
     forceRefresh,
   };

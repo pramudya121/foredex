@@ -5,12 +5,13 @@ import { useWeb3 } from '@/contexts/Web3Context';
 import { TokenSelect } from './TokenSelect';
 import { SlippageSettings } from './SlippageSettings';
 import { TokenLogo } from './TokenLogo';
+import { BalanceRetryButton } from './BalanceRetryButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI, PAIR_ABI } from '@/config/abis';
-import { Plus, Minus, Loader2, Info } from 'lucide-react';
+import { Plus, Minus, Loader2, Info, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
@@ -32,6 +33,7 @@ export function LiquidityPanel() {
   const [amountA, setAmountA] = useState('');
   const [amountB, setAmountB] = useState('');
   const [lpBalance, setLpBalance] = useState('0');
+  const [lpBalanceLoading, setLpBalanceLoading] = useState(false);
   const [lpToRemove, setLpToRemove] = useState('');
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -49,7 +51,7 @@ export function LiquidityPanel() {
   const [estimatedShare, setEstimatedShare] = useState(0);
 
   // Use stable balance hook
-  const { balanceA, balanceB, loading: loadingBalances, refetch: refetchBalances } = 
+  const { balanceA, balanceB, loading: loadingBalances, error: balanceError, refetch: refetchBalances } = 
     useTokenPairBalances(address, tokenA, tokenB);
 
   const isNativeToken = (token: TokenInfo | null) =>
@@ -62,6 +64,8 @@ export function LiquidityPanel() {
   const fetchPairData = useCallback(async () => {
     if (!provider || !address || !tokenA || !tokenB) return;
 
+    setLpBalanceLoading(true);
+    
     try {
       const tokenAAddr = getTokenAddress(tokenA);
       const tokenBAddr = getTokenAddress(tokenB);
@@ -76,6 +80,7 @@ export function LiquidityPanel() {
         setPoolShare(0);
         setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
         setTotalSupply(BigInt(0));
+        setLpBalanceLoading(false);
         return;
       }
       
@@ -93,12 +98,14 @@ export function LiquidityPanel() {
             
             const lpBal = await rpcProvider.call(
               () => pairContract.balanceOf(address),
-              `lp_balance_${pair}_${address}`
+              `lp_balance_${pair}_${address}`,
+              { retries: 3, timeout: 15000 }
             );
             
             const supply = await rpcProvider.call(
               () => pairContract.totalSupply(),
-              `lp_supply_${pair}`
+              `lp_supply_${pair}`,
+              { retries: 3, timeout: 15000 }
             );
             
             if (lpBal !== null) {
@@ -113,8 +120,8 @@ export function LiquidityPanel() {
                 setPoolShare(isNaN(share) ? 0 : share);
               }
             }
-          } catch {
-            // Silent fail on LP balance fetch
+          } catch (err) {
+            console.warn('LP balance fetch error:', err);
             setLpBalance('0');
             setPoolShare(0);
           }
@@ -128,10 +135,11 @@ export function LiquidityPanel() {
       }
     } catch (error) {
       console.error('Error fetching pair data:', error);
-      // Reset state on error
       setPairAddress(null);
       setLpBalance('0');
       setPoolShare(0);
+    } finally {
+      setLpBalanceLoading(false);
     }
   }, [provider, address, tokenA, tokenB]);
 
@@ -154,7 +162,6 @@ export function LiquidityPanel() {
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           setApprovalA(allowance >= amountAWei);
         } catch {
-          // Silent fail - assume not approved, will check again before tx
           setApprovalA(false);
         }
       } else {
@@ -168,7 +175,6 @@ export function LiquidityPanel() {
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           setApprovalB(allowance >= amountBWei);
         } catch {
-          // Silent fail - assume not approved
           setApprovalB(false);
         }
       } else {
@@ -448,13 +454,24 @@ export function LiquidityPanel() {
       toast.success(`Liquidity removed! TX: ${receipt.hash.slice(0, 10)}...`);
       
       setLpToRemove('');
-      fetchPairData();
+      
+      // Refresh data
+      setTimeout(() => {
+        refetchBalances();
+        fetchPairData();
+      }, 2000);
     } catch (error: any) {
       // Use rpcProvider to parse user-friendly error messages
       const errorMsg = rpcProvider.parseError(error);
-      toast.error(errorMsg);
+      toast.error(errorMsg || 'Transaction failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMaxLp = () => {
+    if (lpBalance && parseFloat(lpBalance) > 0) {
+      setLpToRemove(lpBalance);
     }
   };
 
@@ -496,6 +513,7 @@ export function LiquidityPanel() {
                 ) : (
                   <span className="font-medium text-foreground">{parseFloat(balanceA || '0').toFixed(4)}</span>
                 )}
+                <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} />
                 {parseFloat(balanceA || '0') > 0 && (
                   <button
                     onClick={() => setAmountA(balanceA)}
@@ -537,6 +555,7 @@ export function LiquidityPanel() {
                 ) : (
                   <span className="font-medium text-foreground">{parseFloat(balanceB || '0').toFixed(4)}</span>
                 )}
+                <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} />
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -560,6 +579,22 @@ export function LiquidityPanel() {
               <TokenSelect selected={tokenB} onSelect={setTokenB} excludeToken={tokenA} />
             </div>
           </div>
+
+          {/* Balance Error Alert */}
+          {balanceError && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2 text-sm">
+              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+              <span className="text-destructive">{balanceError}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refetchBalances}
+                className="ml-auto h-7 text-xs"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
 
           {/* Pool Info */}
           {pairAddress && tokenA && tokenB && (
@@ -665,19 +700,54 @@ export function LiquidityPanel() {
             <TokenSelect selected={tokenB} onSelect={setTokenB} excludeToken={tokenA} className="flex-1" />
           </div>
 
-          {/* LP Balance */}
-          <div className="token-input">
-            <div className="flex justify-between mb-2 flex-wrap gap-1">
-              <span className="text-xs sm:text-sm text-muted-foreground">LP Tokens to Remove</span>
-              <span className="text-xs sm:text-sm text-muted-foreground">
-                Balance: {parseFloat(lpBalance).toFixed(6)}
-                <button
-                  onClick={() => setLpToRemove(lpBalance)}
-                  className="ml-2 text-primary hover:underline active:opacity-80 touch-manipulation"
-                >
-                  MAX
-                </button>
-              </span>
+          {/* LP Balance Display Card */}
+          <div className="p-3 sm:p-4 rounded-lg bg-muted/30 border border-border">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-muted-foreground">Your LP Balance</span>
+              <BalanceRetryButton onRetry={fetchPairData} loading={lpBalanceLoading} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-1">
+                  <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" />
+                  <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" />
+                </div>
+                <span className="text-sm font-medium">{tokenA?.symbol}/{tokenB?.symbol} LP</span>
+              </div>
+              {lpBalanceLoading ? (
+                <span className="text-lg font-bold animate-pulse">...</span>
+              ) : (
+                <span className="text-lg font-bold">{parseFloat(lpBalance).toFixed(6)}</span>
+              )}
+            </div>
+            {poolShare > 0 && (
+              <div className="text-xs text-muted-foreground mt-1 text-right">
+                Pool share: {poolShare.toFixed(2)}%
+              </div>
+            )}
+          </div>
+
+          {/* LP Tokens to Remove Input */}
+          <div className="token-input p-4">
+            <div className="flex justify-between mb-3 items-center flex-wrap gap-2">
+              <span className="text-sm text-muted-foreground font-medium">Amount to Remove</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Available: {lpBalanceLoading ? (
+                    <span className="animate-pulse">...</span>
+                  ) : (
+                    <span className="font-medium text-foreground">{parseFloat(lpBalance).toFixed(6)}</span>
+                  )}
+                </span>
+                {parseFloat(lpBalance) > 0 && (
+                  <button
+                    onClick={handleMaxLp}
+                    className="px-2.5 py-1 rounded bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
+                  >
+                    MAX
+                  </button>
+                )}
+              </div>
             </div>
             <Input
               type="number"
@@ -685,36 +755,56 @@ export function LiquidityPanel() {
               placeholder="0.0"
               value={lpToRemove}
               onChange={(e) => setLpToRemove(e.target.value)}
-              className="text-lg sm:text-xl font-medium bg-transparent border-none focus-visible:ring-0"
+              className="text-xl sm:text-2xl font-bold bg-transparent border-none focus-visible:ring-0 p-0 h-10"
             />
+            
+            {/* Quick percentage buttons */}
+            {parseFloat(lpBalance) > 0 && (
+              <div className="flex gap-2 mt-3">
+                {[25, 50, 75, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setLpToRemove((parseFloat(lpBalance) * pct / 100).toString())}
+                    className={cn(
+                      'flex-1 py-1.5 rounded text-xs font-medium transition-colors',
+                      lpToRemove && parseFloat(lpToRemove) === parseFloat(lpBalance) * pct / 100
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                    )}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Expected output */}
           {lpToRemove && parseFloat(lpToRemove) > 0 && pairAddress && (
-            <div className="p-2.5 sm:p-3 rounded-lg bg-muted/30 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground mb-1.5 sm:mb-2">
-                <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <div className="p-3 sm:p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                <Info className="w-4 h-4 shrink-0" />
                 <span>You will receive</span>
               </div>
               <div className="flex justify-between items-center gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" />
-                  <span className="truncate">{tokenA?.symbol}</span>
+                  <span className="truncate font-medium">{tokenA?.symbol}</span>
                 </div>
-                <span className="font-mono shrink-0">{parseFloat(removeAmounts.amountA).toFixed(6)}</span>
+                <span className="font-mono font-semibold">{parseFloat(removeAmounts.amountA).toFixed(6)}</span>
               </div>
               <div className="flex justify-between items-center gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" />
-                  <span className="truncate">{tokenB?.symbol}</span>
+                  <span className="truncate font-medium">{tokenB?.symbol}</span>
                 </div>
-                <span className="font-mono shrink-0">{parseFloat(removeAmounts.amountB).toFixed(6)}</span>
+                <span className="font-mono font-semibold">{parseFloat(removeAmounts.amountB).toFixed(6)}</span>
               </div>
             </div>
           )}
 
           {!pairAddress && tokenA && tokenB && (
-            <div className="p-3 sm:p-4 rounded-lg bg-muted/30 text-center text-muted-foreground text-sm">
+            <div className="p-4 rounded-lg bg-muted/30 text-center text-muted-foreground text-sm">
               No pool exists for this pair
             </div>
           )}
@@ -722,7 +812,7 @@ export function LiquidityPanel() {
           {isConnected ? (
             <Button
               onClick={handleRemoveLiquidity}
-              disabled={loading || !lpToRemove || !pairAddress || parseFloat(lpToRemove) === 0}
+              disabled={loading || !lpToRemove || !pairAddress || parseFloat(lpToRemove) === 0 || parseFloat(lpToRemove) > parseFloat(lpBalance)}
               className={cn(
                 'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold touch-manipulation',
                 'bg-destructive hover:bg-destructive/90'
@@ -733,6 +823,8 @@ export function LiquidityPanel() {
                   <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
                   Removing...
                 </>
+              ) : parseFloat(lpToRemove) > parseFloat(lpBalance) ? (
+                'Insufficient LP Balance'
               ) : (
                 'Remove Liquidity'
               )}
