@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +11,27 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Shield, Plus, Settings, Pause, Play, RefreshCw } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Shield, Plus, Settings, Pause, Play, RefreshCw, Droplets } from 'lucide-react';
 import { toast } from 'sonner';
+import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
+import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
+import { TokenLogo } from '@/components/TokenLogo';
+
+interface LPToken {
+  address: string;
+  token0Symbol: string;
+  token1Symbol: string;
+  token0Address: string;
+  token1Address: string;
+}
 
 interface AdminPanelProps {
   isPaused: boolean;
@@ -27,10 +47,80 @@ export function AdminPanel({ isPaused, onAddPool, onSetPoolAlloc, onPause, onUnp
   const [editPid, setEditPid] = useState('');
   const [editAlloc, setEditAlloc] = useState('');
   const [loading, setLoading] = useState<string | null>(null);
+  const [lpTokens, setLpTokens] = useState<LPToken[]>([]);
+  const [loadingLPs, setLoadingLPs] = useState(true);
+
+  // Fetch existing LP tokens from factory
+  useEffect(() => {
+    const fetchLPTokens = async () => {
+      setLoadingLPs(true);
+      try {
+        const provider = rpcProvider.getProvider();
+        if (!provider || !rpcProvider.isAvailable()) {
+          setLoadingLPs(false);
+          return;
+        }
+
+        const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+        const pairCount = await rpcProvider.call(
+          () => factory.allPairsLength(),
+          'admin_allPairsLength'
+        );
+
+        if (!pairCount) {
+          setLoadingLPs(false);
+          return;
+        }
+
+        const lps: LPToken[] = [];
+        const count = Number(pairCount);
+
+        for (let i = 0; i < count; i++) {
+          try {
+            const pairAddress = await rpcProvider.call(
+              () => factory.allPairs(i),
+              `admin_pair_${i}`
+            );
+
+            if (pairAddress) {
+              const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+              const [token0Addr, token1Addr] = await Promise.all([
+                rpcProvider.call(() => pair.token0(), `admin_token0_${pairAddress}`),
+                rpcProvider.call(() => pair.token1(), `admin_token1_${pairAddress}`),
+              ]);
+
+              const getSymbol = (addr: string) => {
+                const token = TOKEN_LIST.find(t => t.address.toLowerCase() === addr?.toLowerCase());
+                return token?.symbol || addr?.slice(0, 6) + '...';
+              };
+
+              lps.push({
+                address: pairAddress,
+                token0Symbol: getSymbol(token0Addr),
+                token1Symbol: getSymbol(token1Addr),
+                token0Address: token0Addr,
+                token1Address: token1Addr,
+              });
+            }
+          } catch {
+            continue;
+          }
+        }
+
+        setLpTokens(lps);
+      } catch (error) {
+        console.warn('Error fetching LP tokens:', error);
+      } finally {
+        setLoadingLPs(false);
+      }
+    };
+
+    fetchLPTokens();
+  }, []);
 
   const handleAddPool = async () => {
     if (!newPoolLP || !newPoolAlloc) {
-      toast.error('Please fill all fields');
+      toast.error('Please select an LP token and set allocation points');
       return;
     }
 
@@ -119,13 +209,48 @@ export function AdminPanel({ isPaused, onAddPool, onSetPoolAlloc, onPause, onUnp
             <AccordionContent>
               <div className="space-y-3 pt-2">
                 <div>
-                  <Label className="text-xs">LP Token Address</Label>
-                  <Input
-                    placeholder="0x..."
-                    value={newPoolLP}
-                    onChange={(e) => setNewPoolLP(e.target.value)}
-                    className="mt-1"
-                  />
+                  <Label className="text-xs">Select LP Token</Label>
+                  {loadingLPs ? (
+                    <div className="flex items-center gap-2 mt-1 p-2 border rounded-md">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">Loading LP tokens...</span>
+                    </div>
+                  ) : lpTokens.length > 0 ? (
+                    <Select value={newPoolLP} onValueChange={setNewPoolLP}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select an LP token" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lpTokens.map((lp) => (
+                          <SelectItem key={lp.address} value={lp.address}>
+                            <div className="flex items-center gap-2">
+                              <div className="flex -space-x-1">
+                                <TokenLogo symbol={lp.token0Symbol} size="sm" />
+                                <TokenLogo symbol={lp.token1Symbol} size="sm" />
+                              </div>
+                              <span>{lp.token0Symbol}/{lp.token1Symbol}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="mt-1 p-2 border rounded-md text-sm text-muted-foreground">
+                      <Droplets className="w-4 h-4 inline mr-2" />
+                      No LP tokens found. Create liquidity pairs first.
+                    </div>
+                  )}
+                  
+                  {/* Manual input option */}
+                  <div className="mt-2">
+                    <Label className="text-xs text-muted-foreground">Or enter address manually:</Label>
+                    <Input
+                      placeholder="0x..."
+                      value={newPoolLP}
+                      onChange={(e) => setNewPoolLP(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label className="text-xs">Allocation Points</Label>
@@ -136,10 +261,13 @@ export function AdminPanel({ isPaused, onAddPool, onSetPoolAlloc, onPause, onUnp
                     onChange={(e) => setNewPoolAlloc(e.target.value)}
                     className="mt-1"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Higher points = more rewards for this pool
+                  </p>
                 </div>
                 <Button 
                   onClick={handleAddPool} 
-                  disabled={loading === 'add'}
+                  disabled={loading === 'add' || !newPoolLP}
                   className="w-full"
                   size="sm"
                 >
