@@ -96,27 +96,34 @@ export function SwapCard() {
     }
 
     if (!provider || !tokenIn || !tokenOut) {
+      console.log('[SwapCard] getQuote - missing deps:', { provider: !!provider, tokenIn: tokenIn?.symbol, tokenOut: tokenOut?.symbol });
       return;
     }
 
+    console.log('[SwapCard] getQuote - starting for amount:', inputAmount, tokenIn?.symbol, '->', tokenOut?.symbol);
     setQuoting(true);
     try {
       const amountInWei = ethers.parseUnits(inputAmount, tokenIn.decimals);
       
       // Find all possible routes including multi-hop
+      console.log('[SwapCard] Finding routes...');
       const routes = await findBestRoute(provider, tokenIn, tokenOut, amountInWei);
+      console.log('[SwapCard] Routes found:', routes.length);
       setAllRoutes(routes);
       
       if (routes.length === 0) {
         // No routes found, try direct calculation
+        console.log('[SwapCard] No routes found, trying direct calculation...');
         const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
         const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
         
         try {
           const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
+          console.log('[SwapCard] Direct reserves:', { reserveA: reserveA.toString(), reserveB: reserveB.toString() });
           setReserves({ reserveA, reserveB });
           
           if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+            console.log('[SwapCard] Reserves are zero, cannot calculate');
             setAmountOut('');
             setPriceImpact(0);
             setBestRoute(null);
@@ -127,6 +134,7 @@ export function SwapCard() {
           const amountOutWei = calcAmountOut(amountInWei, reserveA, reserveB);
           const outAmount = ethers.formatUnits(amountOutWei, tokenOut.decimals);
           const formattedOut = parseFloat(outAmount);
+          console.log('[SwapCard] Calculated output:', formattedOut);
           setAmountOut(isNaN(formattedOut) ? '' : formattedOut.toFixed(6));
           
           const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
@@ -141,8 +149,9 @@ export function SwapCard() {
           if (isAutoSlippage && autoSlip.recommendedSlippage !== slippage) {
             setSlippage(autoSlip.recommendedSlippage);
           }
-        } catch {
+        } catch (err) {
           // Silent fail on reserve fetch
+          console.warn('[SwapCard] Direct reserve fetch error:', err);
           setAmountOut('');
           setPriceImpact(0);
           setBestRoute(null);
@@ -153,6 +162,7 @@ export function SwapCard() {
 
       // Use the best route
       const best = routes[0];
+      console.log('[SwapCard] Best route:', best.path.map(t => t.symbol).join(' -> '), 'Output:', ethers.formatUnits(best.amountOut, tokenOut.decimals));
       setBestRoute(best);
       
       const outAmount = ethers.formatUnits(best.amountOut, tokenOut.decimals);

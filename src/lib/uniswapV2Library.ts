@@ -4,6 +4,7 @@
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKENS } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from './rpcProvider';
 
 // Constants
 const MINIMUM_LIQUIDITY = BigInt(1000);
@@ -38,27 +39,60 @@ export function pairFor(factory: string, tokenA: string, tokenB: string, initCod
   return pair;
 }
 
-// Get reserves for a pair
+// Get reserves for a pair - uses rpcProvider for reliability
 export async function getReserves(
   provider: ethers.Provider,
   tokenA: string,
   tokenB: string
 ): Promise<{ reserveA: bigint; reserveB: bigint; pairAddress: string }> {
-  const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+  const rpc = rpcProvider.getProvider();
+  const useProvider = rpc || provider;
   
-  const pairAddress = await factory.getPair(tokenA, tokenB);
+  const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, useProvider);
   
-  if (pairAddress === ethers.ZeroAddress) {
+  // Use rpcProvider.call for reliability with retries
+  const pairAddress = await rpcProvider.call(
+    () => factory.getPair(tokenA, tokenB),
+    `pair_${tokenA}_${tokenB}`,
+    { retries: 3, timeout: 10000 }
+  );
+  
+  if (!pairAddress || pairAddress === ethers.ZeroAddress) {
     return { reserveA: BigInt(0), reserveB: BigInt(0), pairAddress: ethers.ZeroAddress };
   }
   
-  const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-  const [reserve0, reserve1] = await pair.getReserves();
-  const token0 = await pair.token0();
+  const pair = new ethers.Contract(pairAddress, PAIR_ABI, useProvider);
+  
+  // Fetch reserves with retry
+  const reserves = await rpcProvider.call(
+    () => pair.getReserves(),
+    `reserves_${pairAddress}`,
+    { retries: 3, timeout: 10000 }
+  );
+  
+  if (!reserves) {
+    return { reserveA: BigInt(0), reserveB: BigInt(0), pairAddress };
+  }
+  
+  // Get token0 to determine order
+  const token0 = await rpcProvider.call(
+    () => pair.token0(),
+    `token0_${pairAddress}`,
+    { retries: 2, timeout: 8000 }
+  );
+  
+  if (!token0) {
+    // Fallback: assume tokenA is token0 if we can't fetch
+    return { 
+      reserveA: BigInt(reserves[0]), 
+      reserveB: BigInt(reserves[1]), 
+      pairAddress 
+    };
+  }
   
   const [reserveA, reserveB] = tokenA.toLowerCase() === token0.toLowerCase()
-    ? [reserve0, reserve1]
-    : [reserve1, reserve0];
+    ? [reserves[0], reserves[1]]
+    : [reserves[1], reserves[0]];
   
   return { reserveA: BigInt(reserveA), reserveB: BigInt(reserveB), pairAddress };
 }

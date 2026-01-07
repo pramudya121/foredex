@@ -62,9 +62,13 @@ export function LiquidityPanel() {
 
   // Fetch pair info and LP balance with better error handling
   const fetchPairData = useCallback(async () => {
-    if (!provider || !address || !tokenA || !tokenB) return;
+    if (!provider || !address || !tokenA || !tokenB) {
+      console.log('[LiquidityPanel] Missing deps for fetchPairData:', { provider: !!provider, address, tokenA: tokenA?.symbol, tokenB: tokenB?.symbol });
+      return;
+    }
 
     setLpBalanceLoading(true);
+    console.log('[LiquidityPanel] Fetching pair data for:', tokenA.symbol, '/', tokenB.symbol);
     
     try {
       const tokenAAddr = getTokenAddress(tokenA);
@@ -73,15 +77,11 @@ export function LiquidityPanel() {
       let reserveData;
       try {
         reserveData = await getReserves(provider, tokenAAddr, tokenBAddr);
-      } catch {
-        // Silent fail - pool may not exist
-        setPairAddress(null);
-        setLpBalance('0');
-        setPoolShare(0);
-        setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
-        setTotalSupply(BigInt(0));
-        setLpBalanceLoading(false);
-        return;
+        console.log('[LiquidityPanel] Reserve data:', reserveData);
+      } catch (err) {
+        console.warn('[LiquidityPanel] getReserves error:', err);
+        // Still try to fetch LP balance even if reserves fail
+        reserveData = { reserveA: BigInt(0), reserveB: BigInt(0), pairAddress: null };
       }
       
       const { reserveA, reserveB, pairAddress: pair } = reserveData;
@@ -89,6 +89,7 @@ export function LiquidityPanel() {
       if (pair && pair !== ethers.ZeroAddress) {
         setPairAddress(pair);
         setReserves({ reserveA, reserveB });
+        console.log('[LiquidityPanel] Pair found:', pair);
         
         // Use rpcProvider for LP balance fetch
         const rpc = rpcProvider.getProvider();
@@ -96,37 +97,51 @@ export function LiquidityPanel() {
           try {
             const pairContract = new ethers.Contract(pair, PAIR_ABI, rpc);
             
-            const lpBal = await rpcProvider.call(
-              () => pairContract.balanceOf(address),
-              `lp_balance_${pair}_${address}`,
-              { retries: 3, timeout: 15000 }
-            );
+            // Fetch LP balance and supply in parallel
+            const [lpBal, supply] = await Promise.all([
+              rpcProvider.call(
+                () => pairContract.balanceOf(address),
+                `lp_balance_${pair}_${address}`,
+                { retries: 3, timeout: 15000 }
+              ),
+              rpcProvider.call(
+                () => pairContract.totalSupply(),
+                `lp_supply_${pair}`,
+                { retries: 3, timeout: 15000 }
+              )
+            ]);
             
-            const supply = await rpcProvider.call(
-              () => pairContract.totalSupply(),
-              `lp_supply_${pair}`,
-              { retries: 3, timeout: 15000 }
-            );
+            console.log('[LiquidityPanel] LP balance raw:', lpBal, 'supply raw:', supply);
             
             if (lpBal !== null) {
               const formatted = ethers.formatEther(lpBal);
               const parsed = parseFloat(formatted);
+              console.log('[LiquidityPanel] LP balance formatted:', formatted);
               setLpBalance(isNaN(parsed) ? '0' : formatted);
+            } else {
+              console.warn('[LiquidityPanel] LP balance is null');
+              setLpBalance('0');
             }
+            
             if (supply !== null) {
               setTotalSupply(BigInt(supply));
               if (lpBal !== null) {
                 const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
                 setPoolShare(isNaN(share) ? 0 : share);
               }
+            } else {
+              setTotalSupply(BigInt(0));
             }
           } catch (err) {
-            console.warn('LP balance fetch error:', err);
+            console.warn('[LiquidityPanel] LP balance fetch error:', err);
             setLpBalance('0');
             setPoolShare(0);
           }
+        } else {
+          console.warn('[LiquidityPanel] RPC not available for LP fetch');
         }
       } else {
+        console.log('[LiquidityPanel] No pair found');
         setPairAddress(null);
         setLpBalance('0');
         setPoolShare(0);
@@ -134,7 +149,7 @@ export function LiquidityPanel() {
         setTotalSupply(BigInt(0));
       }
     } catch (error) {
-      console.error('Error fetching pair data:', error);
+      console.error('[LiquidityPanel] Error fetching pair data:', error);
       setPairAddress(null);
       setLpBalance('0');
       setPoolShare(0);

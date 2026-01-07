@@ -154,11 +154,17 @@ export async function findBestRoute(
     ? CONTRACTS.WETH 
     : tokenOut.address;
 
+  console.log('[MultiHopRouter] Finding routes for:', tokenIn.symbol, '->', tokenOut.symbol);
+
   // Check direct route first
   try {
     const directPair = await pairExists(provider, tokenInAddress, tokenOutAddress);
+    console.log('[MultiHopRouter] Direct pair:', directPair);
+    
     if (directPair) {
       const reserves = await getPairReserves(provider, directPair, tokenInAddress, tokenOutAddress);
+      console.log('[MultiHopRouter] Direct pair reserves:', reserves);
+      
       if (reserves && reserves.reserveIn > BigInt(0)) {
         const step: RouteStep = {
           tokenIn,
@@ -169,6 +175,7 @@ export async function findBestRoute(
         };
         
         const { amountOut, priceImpact } = calculateRouteOutput(amountIn, [step]);
+        console.log('[MultiHopRouter] Direct route output:', amountOut.toString());
         
         routes.push({
           path: [tokenIn, tokenOut],
@@ -181,7 +188,7 @@ export async function findBestRoute(
       }
     }
   } catch (error) {
-    console.error('Error checking direct route:', error);
+    console.error('[MultiHopRouter] Error checking direct route:', error);
   }
 
   // Check multi-hop routes in parallel
