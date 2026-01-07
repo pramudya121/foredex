@@ -18,7 +18,9 @@ import {
   ChevronRight,
   Copy,
   Check,
-  Wallet
+  Wallet,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from './TokenLogo';
@@ -28,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import { toast } from 'sonner';
 import { PoolMiniChart } from './pools/PoolMiniChart';
+import { PoolCard } from './pools/PoolCard';
 
 interface Pool {
   address: string;
@@ -102,6 +105,7 @@ function PoolsTableInner() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showMyPositions, setShowMyPositions] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
   const isFetchingRef = useRef(false);
 
@@ -387,16 +391,37 @@ function PoolsTableInner() {
             {pools.length} Pools
           </Badge>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchPools(true)}
-          disabled={isRefreshing}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
-          <span className="hidden sm:inline">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="rounded-none h-8 px-2"
+            >
+              <List className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'card' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('card')}
+              className="rounded-none h-8 px-2"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchPools(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {/* Table Header - Desktop */}
@@ -440,8 +465,25 @@ function PoolsTableInner() {
         </div>
       )}
 
-      {/* Pools List */}
-      {!loading && displayedPools.length > 0 && (
+      {/* Card View */}
+      {!loading && displayedPools.length > 0 && viewMode === 'card' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {displayedPools.map((pool) => (
+            <PoolCard
+              key={pool.address}
+              pool={pool}
+              isFavorite={isFavorite(pool.address)}
+              isConnected={isConnected}
+              onToggleFavorite={toggleFavorite}
+              onCopyAddress={copyAddress}
+              copiedAddress={copiedAddress}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Table View */}
+      {!loading && displayedPools.length > 0 && viewMode === 'table' && (
         <div className="space-y-3">
           {displayedPools.map((pool) => (
             <div
