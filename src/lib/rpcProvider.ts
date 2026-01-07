@@ -5,12 +5,13 @@ import { NEXUS_TESTNET } from '@/config/contracts';
 class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
+  private currentRpcIndex = 0;
   private lastRequestTime = 0;
-  private minRequestInterval = 50; // Very fast - 50ms
+  private minRequestInterval = 100; // Slightly slower for stability
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 60000; // Cache for 60 seconds (increased)
+  private cacheTTL = 30000; // Cache for 30 seconds
   private errorCount = 0;
-  private maxErrors = 200; // Very lenient
+  private maxErrors = 50;
   private cooldownUntil = 0;
   private isInitializing = false;
   private consecutiveErrors = 0;
@@ -18,14 +19,24 @@ class RPCProviderService {
   private requestQueue: Array<() => void> = [];
   private isProcessingQueue = false;
   private lastSuccessTime = Date.now();
+  private providerReady = false;
 
   private constructor() {
     this.initProvider();
   }
 
-  private async initProvider() {
-    if (this.isInitializing || this.provider) return;
+  private getRpcUrls(): readonly string[] {
+    return NEXUS_TESTNET.rpcUrls || [NEXUS_TESTNET.rpcUrl];
+  }
+
+  private async initProvider(rpcIndex: number = 0) {
+    if (this.isInitializing) return;
     this.isInitializing = true;
+    this.providerReady = false;
+    
+    const rpcUrls = this.getRpcUrls();
+    this.currentRpcIndex = rpcIndex % rpcUrls.length;
+    const rpcUrl = rpcUrls[this.currentRpcIndex];
     
     try {
       const network = {
@@ -35,7 +46,7 @@ class RPCProviderService {
       
       // Create provider with EIP-1559 disabled (network doesn't support it)
       this.provider = new ethers.JsonRpcProvider(
-        NEXUS_TESTNET.rpcUrl,
+        rpcUrl,
         network,
         {
           staticNetwork: ethers.Network.from(network),
@@ -45,7 +56,6 @@ class RPCProviderService {
       );
 
       // Override getFeeData to avoid eth_maxPriorityFeePerGas calls
-      const originalGetFeeData = this.provider.getFeeData.bind(this.provider);
       this.provider.getFeeData = async () => {
         try {
           // Only fetch gas price, skip EIP-1559 fields
@@ -65,13 +75,42 @@ class RPCProviderService {
         }
       };
       
-      this.lastSuccessTime = Date.now();
+      // Test connection before marking as ready
+      try {
+        await Promise.race([
+          this.provider.getBlockNumber(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]);
+        this.providerReady = true;
+        this.lastSuccessTime = Date.now();
+        this.consecutiveErrors = 0;
+        console.log(`RPC connected: ${rpcUrl}`);
+      } catch (testError) {
+        console.warn(`RPC test failed for ${rpcUrl}, trying next...`);
+        this.provider = null;
+        // Try next RPC URL
+        if (rpcIndex < rpcUrls.length - 1) {
+          this.isInitializing = false;
+          await this.initProvider(rpcIndex + 1);
+          return;
+        }
+      }
     } catch {
       this.provider = null;
       this.cooldownUntil = Date.now() + 2000;
     } finally {
       this.isInitializing = false;
     }
+  }
+
+  // Switch to next RPC URL on persistent errors
+  private async switchRpc() {
+    const rpcUrls = this.getRpcUrls();
+    const nextIndex = (this.currentRpcIndex + 1) % rpcUrls.length;
+    console.log(`Switching RPC from index ${this.currentRpcIndex} to ${nextIndex}`);
+    this.provider = null;
+    this.providerReady = false;
+    await this.initProvider(nextIndex);
   }
 
   static getInstance(): RPCProviderService {
@@ -94,12 +133,16 @@ class RPCProviderService {
     if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
       this.consecutiveErrors = 0;
-      this.errorCount = Math.max(0, this.errorCount - 20);
-      this.minRequestInterval = 50;
+      this.errorCount = Math.max(0, this.errorCount - 10);
+      this.minRequestInterval = 100;
     }
     
-    // Always return true if provider exists - let individual calls handle errors
-    return this.provider !== null;
+    // Check if we're in cooldown
+    if (now < this.cooldownUntil) {
+      return false;
+    }
+    
+    return this.provider !== null && this.providerReady;
   }
 
   private getFromCache(key: string): any | null {
@@ -124,36 +167,50 @@ class RPCProviderService {
     }
   }
 
-  private handleError(error: any): void {
+  private async handleError(error: any): Promise<void> {
     const errorMessage = error?.message || String(error);
     this.consecutiveErrors++;
     
-    // Only count as error for severe repeated failures
-    if (this.consecutiveErrors > 10) {
+    // Count errors
+    if (this.consecutiveErrors > 5) {
       this.errorCount++;
     }
     
-    // Minimal throttling - only for rate limits
-    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
-      this.cooldownUntil = Date.now() + 1000; // 1s cooldown for rate limit
-      this.minRequestInterval = Math.min(500, this.minRequestInterval * 1.2);
+    // Handle CORS and fetch errors - switch RPC
+    if (errorMessage.includes('CORS') || 
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('ERR_FAILED') ||
+        errorMessage.includes('NetworkError')) {
+      if (this.consecutiveErrors >= 3) {
+        await this.switchRpc();
+        this.consecutiveErrors = 0;
+      }
+      return;
     }
-    // Don't set cooldown for network errors - just use cache
+    
+    // Rate limit handling
+    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
+      this.cooldownUntil = Date.now() + 2000;
+      this.minRequestInterval = Math.min(500, this.minRequestInterval * 1.5);
+    }
   }
 
   // Parse user-friendly error messages - returns null for transient errors that should be silent
   parseError(error: any, showTransient = false): string | null {
     const msg = error?.message || error?.reason || String(error);
     
-    // Transient network errors - return null to suppress toast
+    // Transient network errors - ALWAYS suppress these, never show toast
     if (msg.includes('coalesce') || 
         msg.includes('CORS') || 
         msg.includes('ERR_FAILED') || 
         msg.includes('Failed to fetch') ||
         msg.includes('eth_maxPriorityFeePerGas') ||
         msg.includes('rate limit') ||
+        msg.includes('NetworkError') ||
+        msg.includes('Timeout') ||
         msg.includes('429')) {
-      return showTransient ? 'Network busy - please try again in a moment' : null;
+      // Never show network busy message - just return null to suppress
+      return null;
     }
     
     if (msg.includes('missing revert data')) {
@@ -296,30 +353,33 @@ class RPCProviderService {
         // Reset on success
         this.consecutiveErrors = 0;
         this.errorCount = Math.max(0, this.errorCount - 5);
-        this.minRequestInterval = 50;
+        this.minRequestInterval = 100;
         this.lastSuccessTime = Date.now();
         
         return result as T;
       } catch (error: any) {
         const errorMsg = error?.message || String(error);
         
-        // Don't log transient errors
+        // Identify transient/network errors
         const isTransient = errorMsg.includes('coalesce') || 
                            errorMsg.includes('CORS') || 
                            errorMsg.includes('429') ||
                            errorMsg.includes('rate limit') ||
                            errorMsg.includes('Timeout') ||
                            errorMsg.includes('Failed to fetch') ||
+                           errorMsg.includes('NetworkError') ||
+                           errorMsg.includes('ERR_FAILED') ||
                            errorMsg.includes('eth_maxPriorityFeePerGas');
         
-        // Retry once on transient errors
+        // Retry on transient errors with backoff
         if (attempt < maxRetries && isTransient) {
-          const delay = 500 * (attempt + 1);
+          const delay = 800 * (attempt + 1);
           await new Promise(r => setTimeout(r, delay));
           return executeCall(attempt + 1);
         }
         
-        this.handleError(error);
+        // Handle error (may switch RPC)
+        await this.handleError(error);
         
         // Return cached data if available
         if (cacheKey) {

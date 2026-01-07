@@ -158,10 +158,12 @@ function PoolsTableInner() {
 
     const provider = rpcProvider.getProvider();
     
-    if (!provider || !rpcProvider.isAvailable()) {
-      isFetchingRef.current = false;
-      setLoading(false);
-      setIsRefreshing(false);
+    // Don't fail if provider is temporarily unavailable - just wait
+    if (!provider) {
+      setTimeout(() => {
+        isFetchingRef.current = false;
+        fetchPools(force);
+      }, 2000);
       return;
     }
 
@@ -194,7 +196,7 @@ function PoolsTableInner() {
       const pairAddresses = await Promise.all(pairPromises);
 
       // Fetch pair data in parallel batches
-      const BATCH_SIZE = 3; // Smaller batch size to avoid rate limiting
+      const BATCH_SIZE = 5; // Slightly larger batch for efficiency
       for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
         const batch = pairAddresses.slice(i, i + BATCH_SIZE);
         const batchPromises = batch.map(async (pairAddress) => {
@@ -290,8 +292,8 @@ function PoolsTableInner() {
         setPools(fetchedPools);
         poolsTableCache = { pools: fetchedPools, timestamp: Date.now() };
       }
-    } catch (error) {
-      console.warn('Pool fetch error:', error);
+    } catch {
+      // Silent fail - will retry automatically
     } finally {
       setLoading(false);
       setIsRefreshing(false);

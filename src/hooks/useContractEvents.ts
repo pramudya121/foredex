@@ -213,8 +213,8 @@ export function useContractEvents(
         }
         
         lastCheckedBlock = currentBlock;
-      } catch (error) {
-        console.warn('Error polling events:', error);
+      } catch {
+        // Silent fail - network errors are expected
       }
     };
     

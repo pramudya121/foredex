@@ -29,7 +29,12 @@ export const NEXUS_TESTNET = {
   chainId: 3945,
   chainIdHex: '0xF69',
   name: 'Nexus Testnet',
-  rpcUrl: 'https://testnet.rpc.nexus.xyz',
+  rpcUrl: 'https://testnet.rpc.nexus.xyz/',
+  // Fallback RPC URLs untuk mengatasi CORS issues
+  rpcUrls: [
+    'https://testnet.rpc.nexus.xyz/',
+    'https://rpc.nexus.xyz/testnet',
+  ],
   blockExplorer: 'https://nexus.testnet.blockscout.com',
   nativeCurrency: {
     name: 'NEX',

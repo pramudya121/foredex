@@ -263,8 +263,8 @@ export function useFarmingData() {
                 apr: Math.min(apr, 99999),
                 lpBalance,
               };
-            } catch (e) {
-              console.error(`Error fetching pool ${pid}:`, e);
+            } catch {
+              // Silent fail - skip problematic pools
               return null;
             }
           })()
@@ -288,16 +288,25 @@ export function useFarmingData() {
 
       setPools(validPools);
       setError(null);
-    } catch (err) {
-      console.error('Error fetching farming data:', err);
+    } catch (err: any) {
+      // Only log non-network errors
+      const errMsg = err?.message || String(err);
+      const isNetworkError = errMsg.includes('Failed to fetch') || 
+                            errMsg.includes('CORS') || 
+                            errMsg.includes('NetworkError') ||
+                            errMsg.includes('Timeout');
+      
+      if (!isNetworkError) {
+        console.error('Error fetching farming data:', err);
+      }
+      
       if (mountedRef.current) {
-        setError('Network connection issue. Retrying...');
-        // Keep previous data if available
+        // Keep previous data if available, don't show error for network issues
         if (farmingCache) {
           setPools(farmingCache.pools);
           setStats(farmingCache.stats);
         }
-        // Auto-retry after 5 seconds
+        // Auto-retry after 5 seconds for any error
         setTimeout(() => {
           if (mountedRef.current) {
             fetchingRef.current = false;
