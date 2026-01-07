@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, RefreshCw, Loader2, AlertTriangle, Zap } from 'lucide-react';
+import { ArrowDown, Loader2, AlertTriangle, Zap, AlertCircle } from 'lucide-react';
+import { BalanceRetryButton } from './BalanceRetryButton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
@@ -420,14 +421,19 @@ export function SwapCard() {
       <div className="token-input mb-2 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-muted-foreground font-medium">You pay</span>
-          <span className="text-sm text-muted-foreground flex items-center gap-2">
-            <span className="hidden sm:inline">Balance:</span>
-            <span className="sm:hidden">Bal:</span>
+          <div className="flex items-center gap-1.5">
             {loadingBalances ? (
-              <Skeleton className="h-4 w-16 inline-block" />
+              <Skeleton className="h-4 w-20 inline-block" />
+            ) : balanceIn === '0' && !loadingBalances ? (
+              <div className="flex items-center gap-1 text-yellow-500">
+                <AlertCircle className="w-3 h-3" />
+                <span className="text-xs">0.0000</span>
+                <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} />
+              </div>
             ) : (
-              <span className="font-medium text-foreground">{parseFloat(balanceIn || '0').toFixed(4)}</span>
+              <span className="text-sm font-medium text-foreground">{parseFloat(balanceIn || '0').toFixed(4)}</span>
             )}
+            <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} className="ml-0.5" />
             {parseFloat(balanceIn || '0') > 0 && (
               <button
                 onClick={() => setAmountIn(balanceIn)}
@@ -436,7 +442,7 @@ export function SwapCard() {
                 MAX
               </button>
             )}
-          </span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Input
@@ -467,15 +473,19 @@ export function SwapCard() {
       <div className="token-input mt-2 mb-5 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-muted-foreground font-medium">You receive</span>
-          <span className="text-sm text-muted-foreground flex items-center gap-2">
-            <span className="hidden sm:inline">Balance:</span>
-            <span className="sm:hidden">Bal:</span>
+          <div className="flex items-center gap-1.5">
             {loadingBalances ? (
-              <Skeleton className="h-4 w-16 inline-block" />
+              <Skeleton className="h-4 w-20 inline-block" />
+            ) : balanceOut === '0' && !loadingBalances ? (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <span className="text-sm">0.0000</span>
+                <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} />
+              </div>
             ) : (
-              <span className="font-medium text-foreground">{parseFloat(balanceOut || '0').toFixed(4)}</span>
+              <span className="text-sm font-medium text-foreground">{parseFloat(balanceOut || '0').toFixed(4)}</span>
             )}
-          </span>
+            <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} className="ml-0.5" />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2">
