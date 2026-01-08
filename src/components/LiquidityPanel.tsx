@@ -62,8 +62,14 @@ export function LiquidityPanel() {
 
   // Fetch pair info and LP balance with better error handling
   const fetchPairData = useCallback(async () => {
-    if (!provider || !address || !tokenA || !tokenB) {
-      console.log('[LiquidityPanel] Missing deps for fetchPairData:', { provider: !!provider, address, tokenA: tokenA?.symbol, tokenB: tokenB?.symbol });
+    if (!address || !tokenA || !tokenB) {
+      console.log('[LiquidityPanel] Missing deps for fetchPairData:', { address, tokenA: tokenA?.symbol, tokenB: tokenB?.symbol });
+      return;
+    }
+
+    const rpc = rpcProvider.getProvider();
+    if (!rpc || !rpcProvider.isAvailable()) {
+      console.warn('[LiquidityPanel] RPC not available for fetchPairData');
       return;
     }
 
@@ -74,131 +80,186 @@ export function LiquidityPanel() {
       const tokenAAddr = getTokenAddress(tokenA);
       const tokenBAddr = getTokenAddress(tokenB);
       
-      let reserveData;
-      try {
-        reserveData = await getReserves(provider, tokenAAddr, tokenBAddr);
-        console.log('[LiquidityPanel] Reserve data:', reserveData);
-      } catch (err) {
-        console.warn('[LiquidityPanel] getReserves error:', err);
-        // Still try to fetch LP balance even if reserves fail
-        reserveData = { reserveA: BigInt(0), reserveB: BigInt(0), pairAddress: null };
-      }
+      // Fetch pair address directly using rpcProvider
+      const factory = new ethers.Contract(CONTRACTS.FACTORY, ['function getPair(address, address) view returns (address)'], rpc);
       
-      const { reserveA, reserveB, pairAddress: pair } = reserveData;
+      const pairAddr = await rpcProvider.call(
+        () => factory.getPair(tokenAAddr, tokenBAddr),
+        `pair_${tokenAAddr}_${tokenBAddr}`,
+        { retries: 3, timeout: 15000 }
+      );
       
-      if (pair && pair !== ethers.ZeroAddress) {
-        setPairAddress(pair);
-        setReserves({ reserveA, reserveB });
-        console.log('[LiquidityPanel] Pair found:', pair);
-        
-        // Use rpcProvider for LP balance fetch
-        const rpc = rpcProvider.getProvider();
-        if (rpc && rpcProvider.isAvailable()) {
-          try {
-            const pairContract = new ethers.Contract(pair, PAIR_ABI, rpc);
-            
-            // Fetch LP balance and supply in parallel
-            const [lpBal, supply] = await Promise.all([
-              rpcProvider.call(
-                () => pairContract.balanceOf(address),
-                `lp_balance_${pair}_${address}`,
-                { retries: 3, timeout: 15000 }
-              ),
-              rpcProvider.call(
-                () => pairContract.totalSupply(),
-                `lp_supply_${pair}`,
-                { retries: 3, timeout: 15000 }
-              )
-            ]);
-            
-            console.log('[LiquidityPanel] LP balance raw:', lpBal, 'supply raw:', supply);
-            
-            if (lpBal !== null) {
-              const formatted = ethers.formatEther(lpBal);
-              const parsed = parseFloat(formatted);
-              console.log('[LiquidityPanel] LP balance formatted:', formatted);
-              setLpBalance(isNaN(parsed) ? '0' : formatted);
-            } else {
-              console.warn('[LiquidityPanel] LP balance is null');
-              setLpBalance('0');
-            }
-            
-            if (supply !== null) {
-              setTotalSupply(BigInt(supply));
-              if (lpBal !== null) {
-                const share = calculatePoolShare(BigInt(lpBal), BigInt(supply));
-                setPoolShare(isNaN(share) ? 0 : share);
-              }
-            } else {
-              setTotalSupply(BigInt(0));
-            }
-          } catch (err) {
-            console.warn('[LiquidityPanel] LP balance fetch error:', err);
-            setLpBalance('0');
-            setPoolShare(0);
-          }
-        } else {
-          console.warn('[LiquidityPanel] RPC not available for LP fetch');
-        }
-      } else {
+      console.log('[LiquidityPanel] Pair address result:', pairAddr);
+      
+      if (!pairAddr || pairAddr === ethers.ZeroAddress) {
         console.log('[LiquidityPanel] No pair found');
         setPairAddress(null);
         setLpBalance('0');
         setPoolShare(0);
         setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
         setTotalSupply(BigInt(0));
+        setLpBalanceLoading(false);
+        return;
+      }
+      
+      setPairAddress(pairAddr);
+      console.log('[LiquidityPanel] Pair found:', pairAddr);
+      
+      // Fetch all pair data in parallel
+      const pairContract = new ethers.Contract(pairAddr, PAIR_ABI, rpc);
+      
+      const [reservesResult, token0Result, lpBalResult, supplyResult] = await Promise.all([
+        rpcProvider.call(
+          () => pairContract.getReserves(),
+          `reserves_${pairAddr}`,
+          { retries: 3, timeout: 15000 }
+        ),
+        rpcProvider.call(
+          () => pairContract.token0(),
+          `token0_${pairAddr}`,
+          { retries: 2, timeout: 10000 }
+        ),
+        rpcProvider.call(
+          () => pairContract.balanceOf(address),
+          `lp_balance_${pairAddr}_${address}`,
+          { retries: 3, timeout: 15000, skipCache: true }
+        ),
+        rpcProvider.call(
+          () => pairContract.totalSupply(),
+          `lp_supply_${pairAddr}`,
+          { retries: 3, timeout: 15000 }
+        )
+      ]);
+      
+      console.log('[LiquidityPanel] Pair data fetched:', { reservesResult, token0Result, lpBalResult, supplyResult });
+      
+      // Process reserves
+      if (reservesResult && token0Result) {
+        const [reserve0, reserve1] = reservesResult;
+        const [reserveA, reserveB] = tokenAAddr.toLowerCase() === token0Result.toLowerCase()
+          ? [reserve0, reserve1]
+          : [reserve1, reserve0];
+        setReserves({ reserveA: BigInt(reserveA), reserveB: BigInt(reserveB) });
+        console.log('[LiquidityPanel] Reserves set:', { reserveA: reserveA.toString(), reserveB: reserveB.toString() });
+      } else if (reservesResult) {
+        // Fallback if token0 fails
+        setReserves({ reserveA: BigInt(reservesResult[0]), reserveB: BigInt(reservesResult[1]) });
+      } else {
+        setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
+      }
+      
+      // Process LP balance
+      if (lpBalResult !== null) {
+        const formatted = ethers.formatEther(lpBalResult);
+        const parsed = parseFloat(formatted);
+        console.log('[LiquidityPanel] LP balance formatted:', formatted);
+        setLpBalance(isNaN(parsed) ? '0' : formatted);
+      } else {
+        console.warn('[LiquidityPanel] LP balance is null');
+        setLpBalance('0');
+      }
+      
+      // Process total supply and pool share
+      if (supplyResult !== null) {
+        const supply = BigInt(supplyResult);
+        setTotalSupply(supply);
+        if (lpBalResult !== null && supply > BigInt(0)) {
+          const share = calculatePoolShare(BigInt(lpBalResult), supply);
+          setPoolShare(isNaN(share) ? 0 : share);
+        } else {
+          setPoolShare(0);
+        }
+      } else {
+        setTotalSupply(BigInt(0));
+        setPoolShare(0);
       }
     } catch (error) {
       console.error('[LiquidityPanel] Error fetching pair data:', error);
       setPairAddress(null);
       setLpBalance('0');
       setPoolShare(0);
+      setReserves({ reserveA: BigInt(0), reserveB: BigInt(0) });
+      setTotalSupply(BigInt(0));
     } finally {
       setLpBalanceLoading(false);
     }
-  }, [provider, address, tokenA, tokenB]);
+  }, [address, tokenA, tokenB]);
 
-  // Check token approvals - with silent error handling
+  // Check token approvals - with silent error handling using rpcProvider
   const checkApprovals = useCallback(async () => {
-    if (!provider || !address || !tokenA || !tokenB || !amountA || !amountB) {
-      setApprovalA(false);
-      setApprovalB(false);
+    if (!address || !tokenA || !tokenB) {
+      return;
+    }
+
+    // Check amount A valid
+    const hasAmountA = amountA && amountA.trim() !== '' && parseFloat(amountA) > 0;
+    // Check amount B valid  
+    const hasAmountB = amountB && amountB.trim() !== '' && parseFloat(amountB) > 0;
+
+    // Native tokens don't need approval
+    if (isNativeToken(tokenA)) {
+      setApprovalA(true);
+    }
+    if (isNativeToken(tokenB)) {
+      setApprovalB(true);
+    }
+
+    const rpc = rpcProvider.getProvider();
+    if (!rpc || !rpcProvider.isAvailable()) {
+      // If RPC not available, assume not approved to be safe
+      if (!isNativeToken(tokenA)) setApprovalA(false);
+      if (!isNativeToken(tokenB)) setApprovalB(false);
       return;
     }
 
     try {
-      const amountAWei = ethers.parseUnits(amountA || '0', tokenA.decimals);
-      const amountBWei = ethers.parseUnits(amountB || '0', tokenB.decimals);
-
-      // Check token A approval (skip if native token)
-      if (!isNativeToken(tokenA) && amountAWei > BigInt(0)) {
+      // Check token A approval (skip if native token or no amount)
+      if (!isNativeToken(tokenA) && hasAmountA) {
         try {
-          const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, provider);
-          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-          setApprovalA(allowance >= amountAWei);
+          const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
+          const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, rpc);
+          const allowance = await rpcProvider.call(
+            () => tokenContract.allowance(address, CONTRACTS.ROUTER),
+            `allowance_${tokenA.address}_${address}`,
+            { retries: 2, timeout: 10000, skipCache: true }
+          );
+          if (allowance !== null) {
+            setApprovalA(BigInt(allowance) >= amountAWei);
+          } else {
+            setApprovalA(false);
+          }
         } catch {
           setApprovalA(false);
         }
-      } else {
-        setApprovalA(true);
+      } else if (!isNativeToken(tokenA)) {
+        setApprovalA(false);
       }
 
-      // Check token B approval (skip if native token)
-      if (!isNativeToken(tokenB) && amountBWei > BigInt(0)) {
+      // Check token B approval (skip if native token or no amount)
+      if (!isNativeToken(tokenB) && hasAmountB) {
         try {
-          const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, provider);
-          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-          setApprovalB(allowance >= amountBWei);
+          const amountBWei = ethers.parseUnits(amountB, tokenB.decimals);
+          const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, rpc);
+          const allowance = await rpcProvider.call(
+            () => tokenContract.allowance(address, CONTRACTS.ROUTER),
+            `allowance_${tokenB.address}_${address}`,
+            { retries: 2, timeout: 10000, skipCache: true }
+          );
+          if (allowance !== null) {
+            setApprovalB(BigInt(allowance) >= amountBWei);
+          } else {
+            setApprovalB(false);
+          }
         } catch {
           setApprovalB(false);
         }
-      } else {
-        setApprovalB(true);
+      } else if (!isNativeToken(tokenB)) {
+        setApprovalB(false);
       }
     } catch {
       // Silent fail on parse errors
     }
-  }, [provider, address, tokenA, tokenB, amountA, amountB]);
+  }, [address, tokenA, tokenB, amountA, amountB]);
 
   useEffect(() => {
     checkApprovals();
@@ -210,13 +271,25 @@ export function LiquidityPanel() {
     setApprovingA(true);
     try {
       const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, signer);
+      
+      console.log('[LiquidityPanel] Approving token A:', tokenA.symbol);
       const tx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
       toast.info(`Approving ${tokenA.symbol}...`);
-      await tx.wait();
+      
+      const receipt = await tx.wait();
+      console.log('[LiquidityPanel] Token A approved:', receipt.hash);
+      
       toast.success(`${tokenA.symbol} approved!`);
       setApprovalA(true);
+      
+      // Re-check approvals after successful approval
+      setTimeout(() => checkApprovals(), 1000);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to approve token');
+      console.error('[LiquidityPanel] Approve A error:', error);
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      }
     } finally {
       setApprovingA(false);
     }
@@ -228,13 +301,25 @@ export function LiquidityPanel() {
     setApprovingB(true);
     try {
       const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, signer);
+      
+      console.log('[LiquidityPanel] Approving token B:', tokenB.symbol);
       const tx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
       toast.info(`Approving ${tokenB.symbol}...`);
-      await tx.wait();
+      
+      const receipt = await tx.wait();
+      console.log('[LiquidityPanel] Token B approved:', receipt.hash);
+      
       toast.success(`${tokenB.symbol} approved!`);
       setApprovalB(true);
+      
+      // Re-check approvals after successful approval
+      setTimeout(() => checkApprovals(), 1000);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to approve token');
+      console.error('[LiquidityPanel] Approve B error:', error);
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      }
     } finally {
       setApprovingB(false);
     }
@@ -263,8 +348,10 @@ export function LiquidityPanel() {
       return;
     }
     
+    // Check if this is a new pool (no reserves)
     if (reserves.reserveA === BigInt(0) || reserves.reserveB === BigInt(0)) {
-      // New pool - 100% share, allow user to set both amounts
+      // New pool - 100% share, allow user to set both amounts manually
+      console.log('[LiquidityPanel] New pool detected, allowing manual input for both amounts');
       setEstimatedShare(100);
       setCalculating(false);
       return;
@@ -276,23 +363,39 @@ export function LiquidityPanel() {
     // Debounce the calculation
     const timeout = setTimeout(() => {
       try {
+        console.log('[LiquidityPanel] Calculating amountB for amountA:', amountA);
+        console.log('[LiquidityPanel] Using reserves:', { 
+          reserveA: reserves.reserveA.toString(), 
+          reserveB: reserves.reserveB.toString() 
+        });
+        
         const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
         const amountBWei = quote(amountAWei, reserves.reserveA, reserves.reserveB);
         const formattedB = ethers.formatUnits(amountBWei, tokenB.decimals);
         const parsedB = parseFloat(formattedB);
         
+        console.log('[LiquidityPanel] Calculated amountB:', formattedB);
+        
         if (!isNaN(parsedB) && parsedB > 0) {
-          setAmountB(parsedB.toFixed(6));
+          // Format to reasonable precision
+          const formatted = parsedB < 1 ? parsedB.toFixed(8) : parsedB.toFixed(6);
+          setAmountB(formatted);
         } else {
           setAmountB('');
         }
         
         // Estimate pool share after adding liquidity
-        const newTotalA = reserves.reserveA + amountAWei;
-        const share = Number(amountAWei * BigInt(100)) / Number(newTotalA);
-        setEstimatedShare(isNaN(share) ? 0 : share);
-      } catch {
+        if (reserves.reserveA > BigInt(0)) {
+          const newTotalA = reserves.reserveA + amountAWei;
+          const share = Number(amountAWei * BigInt(10000)) / Number(newTotalA) / 100;
+          setEstimatedShare(isNaN(share) ? 0 : share);
+        } else {
+          setEstimatedShare(100);
+        }
+      } catch (err) {
+        console.error('[LiquidityPanel] Quote calculation error:', err);
         setEstimatedShare(0);
+        setAmountB('');
       } finally {
         setCalculating(false);
       }
