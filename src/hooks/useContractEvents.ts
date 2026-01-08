@@ -94,64 +94,76 @@ export function useContractEvents(
 
     isListening = true;
 
-    // Listen to Factory PairCreated events
-    const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+    // NOTE: We don't use event listeners (factory.on) because the RPC doesn't support
+    // eth_getFilterChanges properly. Instead, we poll for events using queryFilter.
     
-    const pairCreatedHandler = async (token0: string, token1: string, pair: string, _: bigint, event: any) => {
-      const log: EventLog = {
-        type: 'pairCreated',
-        pairAddress: pair,
-        token0Symbol: getTokenSymbol(token0),
-        token1Symbol: getTokenSymbol(token1),
-        timestamp: Date.now(),
-        txHash: event.log?.transactionHash || '',
-      };
-      
-      eventCallbacks.forEach(cb => cb(log));
-    };
-
-    factory.on('PairCreated', pairCreatedHandler);
-
-    // We can't listen to all pair events without knowing addresses,
-    // but we can poll recent blocks for events
     let lastCheckedBlock = 0;
+    let isPolling = false;
     
     const pollEvents = async () => {
+      if (isPolling) return;
+      isPolling = true;
+      
       try {
-        const currentBlock = await provider.getBlockNumber();
+        if (!rpcProvider.isAvailable()) {
+          return;
+        }
+        
+        const currentBlock = await rpcProvider.call(
+          () => provider.getBlockNumber(),
+          'blockNumber',
+          { timeout: 5000 }
+        );
+        
+        if (!currentBlock) return;
+        
         if (lastCheckedBlock === 0) {
-          lastCheckedBlock = currentBlock - 10; // Start from 10 blocks ago
+          lastCheckedBlock = currentBlock - 5; // Start from 5 blocks ago
         }
         
         if (currentBlock <= lastCheckedBlock) return;
         
-        // Get all pairs from factory
-        const pairCount = await factory.allPairsLength();
-        const numPairs = Math.min(Number(pairCount), 20); // Limit to first 20 pairs
+        const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+        
+        // Get pair count
+        const pairCount = await rpcProvider.call(
+          () => factory.allPairsLength(),
+          'pairCount',
+          { timeout: 5000 }
+        );
+        
+        if (!pairCount) return;
+        
+        const numPairs = Math.min(Number(pairCount), 10); // Limit to first 10 pairs for performance
         
         for (let i = 0; i < numPairs; i++) {
           try {
-            const pairAddress = await factory.allPairs(i);
+            const pairAddress = await rpcProvider.call(
+              () => factory.allPairs(i),
+              `pair_${i}`,
+              { timeout: 5000 }
+            );
+            
+            if (!pairAddress) continue;
+            
             const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
             
             // Get token info for this pair
             const [token0Addr, token1Addr] = await Promise.all([
-              pair.token0(),
-              pair.token1(),
+              rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
             ]);
+            
+            if (!token0Addr || !token1Addr) continue;
             
             const token0Symbol = getTokenSymbol(token0Addr);
             const token1Symbol = getTokenSymbol(token1Addr);
             
-            // Query events from last checked block
-            const swapFilter = pair.filters.Swap();
-            const mintFilter = pair.filters.Mint();
-            const burnFilter = pair.filters.Burn();
-            
+            // Query events from last checked block using queryFilter (no filters/subscriptions)
             const [swapEvents, mintEvents, burnEvents] = await Promise.all([
-              pair.queryFilter(swapFilter, lastCheckedBlock, currentBlock).catch(() => []),
-              pair.queryFilter(mintFilter, lastCheckedBlock, currentBlock).catch(() => []),
-              pair.queryFilter(burnFilter, lastCheckedBlock, currentBlock).catch(() => []),
+              pair.queryFilter('Swap', lastCheckedBlock, currentBlock).catch(() => []),
+              pair.queryFilter('Mint', lastCheckedBlock, currentBlock).catch(() => []),
+              pair.queryFilter('Burn', lastCheckedBlock, currentBlock).catch(() => []),
             ]);
             
             // Process swap events
@@ -208,25 +220,27 @@ export function useContractEvents(
               }
             }
           } catch {
-            // Skip failed pairs
+            // Skip failed pairs silently
           }
         }
         
         lastCheckedBlock = currentBlock;
       } catch {
         // Silent fail - network errors are expected
+      } finally {
+        isPolling = false;
       }
     };
     
-    // Poll every 15 seconds
-    const pollInterval = setInterval(pollEvents, 15000);
+    // Poll every 30 seconds (less aggressive)
+    const pollInterval = setInterval(pollEvents, 30000);
     
-    // Initial poll
-    setTimeout(pollEvents, 2000);
+    // Initial poll after 3 seconds
+    const initialTimeout = setTimeout(pollEvents, 3000);
 
     return () => {
-      factory.off('PairCreated', pairCreatedHandler);
       clearInterval(pollInterval);
+      clearTimeout(initialTimeout);
       isListening = false;
     };
   }, []);

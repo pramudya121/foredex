@@ -44,16 +44,21 @@ class RPCProviderService {
         name: NEXUS_TESTNET.name,
       };
       
-      // Create provider with EIP-1559 disabled (network doesn't support it)
+      // Create provider with EIP-1559 disabled and no event polling
+      // Disable polling to prevent "filter not found" errors
       this.provider = new ethers.JsonRpcProvider(
         rpcUrl,
         network,
         {
           staticNetwork: ethers.Network.from(network),
           batchMaxCount: 1,
-          polling: false,
+          polling: false, // Critical: disable polling to prevent filter errors
+          cacheTimeout: -1, // Disable caching 
         }
       );
+      
+      // Disable event polling completely to prevent "filter not found" errors
+      this.provider.pollingInterval = 0;
 
       // Override getFeeData to avoid eth_maxPriorityFeePerGas calls
       this.provider.getFeeData = async () => {
