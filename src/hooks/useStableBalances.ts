@@ -122,8 +122,8 @@ export function useStableBalances(address: string | null) {
         };
 
         return balance;
-      } catch (err) {
-        console.warn('Balance fetch error:', err);
+      } catch {
+        // Silent fail - network errors are expected
         const cached = globalBalanceCache[cacheKey];
         return cached?.balance || '0';
       } finally {
@@ -337,8 +337,8 @@ export function useTokenPairBalances(
         }
 
         return balance;
-      } catch (err) {
-        console.warn('Balance fetch error:', err);
+      } catch {
+        // Silent fail - return cached balance
         const tokenAddr = token.address === '0x0000000000000000000000000000000000000000' 
           ? '0x0000000000000000000000000000000000000000' 
           : token.address;

@@ -154,7 +154,6 @@ export function useFarmingData() {
               
               // Skip if LP token is zero address
               if (lpToken === ethers.ZeroAddress || !lpToken) {
-                console.warn(`Pool ${pid} has invalid LP token address`);
                 return null;
               }
               
@@ -168,11 +167,9 @@ export function useFarmingData() {
               try {
                 const code = await provider.getCode(lpToken);
                 if (code === '0x' || code === '0x0') {
-                  console.warn(`Pool ${pid} LP token contract doesn't exist at ${lpToken}`);
                   return null; // Skip this pool
                 }
               } catch {
-                console.warn(`Could not verify LP token contract for pool ${pid}`);
                 return null;
               }
 
@@ -197,8 +194,7 @@ export function useFarmingData() {
               try {
                 const staked = await lpContract.balanceOf(CONTRACTS.FARMING);
                 totalStaked = ethers.formatEther(staked);
-              } catch (e) {
-                console.warn(`Could not fetch total staked for pool ${pid}, skipping:`, e);
+              } catch {
                 return null; // Skip pools where we can't even get total staked
               }
 
