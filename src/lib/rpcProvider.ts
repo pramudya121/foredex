@@ -7,9 +7,9 @@ class RPCProviderService {
   private provider: ethers.JsonRpcProvider | null = null;
   private currentRpcIndex = 0;
   private lastRequestTime = 0;
-  private minRequestInterval = 100; // Slightly slower for stability
+  private minRequestInterval = 150;
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 30000; // Cache for 30 seconds
+  private cacheTTL = 60000; // Cache for 60 seconds - reduce requests
   private errorCount = 0;
   private maxErrors = 50;
   private cooldownUntil = 0;
@@ -20,17 +20,40 @@ class RPCProviderService {
   private isProcessingQueue = false;
   private lastSuccessTime = Date.now();
   private providerReady = false;
+  private initPromise: Promise<void> | null = null;
 
   private constructor() {
-    this.initProvider();
+    this.initPromise = this.initProvider();
   }
 
-  private getRpcUrls(): readonly string[] {
-    return NEXUS_TESTNET.rpcUrls || [NEXUS_TESTNET.rpcUrl];
+  // Get RPC URLs with CORS proxy fallbacks
+  private getRpcUrls(): string[] {
+    const directUrls = NEXUS_TESTNET.rpcUrls || [NEXUS_TESTNET.rpcUrl];
+    const corsProxies = [
+      'https://corsproxy.io/?',
+      'https://api.allorigins.win/raw?url=',
+    ];
+    
+    // Build list: direct URLs first, then proxied versions
+    const allUrls: string[] = [];
+    
+    // Add direct URLs
+    for (const url of directUrls) {
+      allUrls.push(url);
+    }
+    
+    // Add CORS-proxied URLs as fallbacks
+    for (const proxy of corsProxies) {
+      for (const url of directUrls) {
+        allUrls.push(`${proxy}${encodeURIComponent(url)}`);
+      }
+    }
+    
+    return allUrls;
   }
 
-  private async initProvider(rpcIndex: number = 0) {
-    if (this.isInitializing) return;
+  private async initProvider(rpcIndex: number = 0): Promise<void> {
+    if (this.isInitializing && rpcIndex === 0) return;
     this.isInitializing = true;
     this.providerReady = false;
     
@@ -44,56 +67,44 @@ class RPCProviderService {
         name: NEXUS_TESTNET.name,
       };
       
-      // Create provider with EIP-1559 disabled and no event polling
-      // Disable polling to prevent "filter not found" errors
+      // Create provider with minimal config
       this.provider = new ethers.JsonRpcProvider(
         rpcUrl,
         network,
         {
           staticNetwork: ethers.Network.from(network),
           batchMaxCount: 1,
-          polling: false, // Critical: disable polling to prevent filter errors
-          cacheTimeout: -1, // Disable caching 
+          polling: false,
+          cacheTimeout: -1,
         }
       );
       
-      // Disable event polling completely to prevent "filter not found" errors
       this.provider.pollingInterval = 0;
 
-      // Override getFeeData to avoid eth_maxPriorityFeePerGas calls
+      // Override getFeeData to avoid unsupported calls
       this.provider.getFeeData = async () => {
         try {
-          // Only fetch gas price, skip EIP-1559 fields
           const gasPrice = await this.provider!.send('eth_gasPrice', []);
-          return new ethers.FeeData(
-            BigInt(gasPrice), // gasPrice
-            null, // maxFeePerGas - null means not EIP-1559
-            null  // maxPriorityFeePerGas - null means not EIP-1559
-          );
+          return new ethers.FeeData(BigInt(gasPrice), null, null);
         } catch {
-          // Return default gas price if RPC fails
-          return new ethers.FeeData(
-            BigInt(1000000000), // 1 gwei default
-            null,
-            null
-          );
+          return new ethers.FeeData(BigInt(1000000000), null, null);
         }
       };
       
-      // Test connection before marking as ready
+      // Test connection silently
       try {
         await Promise.race([
           this.provider.getBlockNumber(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
         ]);
         this.providerReady = true;
         this.lastSuccessTime = Date.now();
         this.consecutiveErrors = 0;
-        console.log(`RPC connected: ${rpcUrl}`);
-      } catch (testError) {
-        console.warn(`RPC test failed for ${rpcUrl}, trying next...`);
+        // Only log successful connection, not failures
+        console.info(`RPC connected: ${rpcUrl.includes('corsproxy') ? 'via CORS proxy' : rpcUrl}`);
+      } catch {
+        // Silently try next RPC without logging
         this.provider = null;
-        // Try next RPC URL
         if (rpcIndex < rpcUrls.length - 1) {
           this.isInitializing = false;
           await this.initProvider(rpcIndex + 1);
@@ -102,17 +113,17 @@ class RPCProviderService {
       }
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 2000;
+      this.cooldownUntil = Date.now() + 3000;
     } finally {
       this.isInitializing = false;
     }
   }
 
-  // Switch to next RPC URL on persistent errors
+  // Switch to next RPC URL on persistent errors - silently
   private async switchRpc() {
     const rpcUrls = this.getRpcUrls();
     const nextIndex = (this.currentRpcIndex + 1) % rpcUrls.length;
-    console.log(`Switching RPC from index ${this.currentRpcIndex} to ${nextIndex}`);
+    // Don't log RPC switching to reduce console spam
     this.provider = null;
     this.providerReady = false;
     await this.initProvider(nextIndex);
