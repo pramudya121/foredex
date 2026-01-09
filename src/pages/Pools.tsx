@@ -2,7 +2,7 @@ import { memo, useMemo, useCallback, useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
 import { FactoryInfo } from '@/components/FactoryInfo';
 import { FactoryAdminPanel } from '@/components/FactoryAdminPanel';
-import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2, Shield } from 'lucide-react';
+import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2, Shield, Sparkles } from 'lucide-react';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+
 const StatCard = memo(({ 
   icon: Icon, 
   iconColor, 
@@ -20,7 +21,8 @@ const StatCard = memo(({
   label, 
   value, 
   loading, 
-  valueColor 
+  valueColor,
+  delay = 0
 }: {
   icon: React.ElementType;
   iconColor: string;
@@ -29,10 +31,14 @@ const StatCard = memo(({
   value: string;
   loading: boolean;
   valueColor?: string;
+  delay?: number;
 }) => (
-  <div className={`glass-card p-3 sm:p-4 md:p-5 hover:border-${iconColor}/30 transition-colors`}>
+  <div 
+    className={`glass-card p-3 sm:p-4 md:p-5 hover-lift card-glow transition-all duration-300 animate-scale-in opacity-0`}
+    style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
+  >
     <div className="flex items-center gap-2 sm:gap-3">
-      <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl ${bgColor}`}>
+      <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl ${bgColor} transition-transform duration-300 hover:scale-110`}>
         <Icon className={`w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 ${iconColor}`} />
       </div>
       <div className="min-w-0 flex-1">
@@ -60,19 +66,26 @@ const Pools = () => {
   }, []);
 
   const statsData = useMemo(() => [
-    { icon: Droplets, iconColor: 'text-primary', bgColor: 'bg-primary/10', label: 'Total Pools', value: String(stats.totalPools) },
-    { icon: TrendingUp, iconColor: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Total TVL', value: formatNumber(stats.totalTVL) },
-    { icon: BarChart3, iconColor: 'text-blue-500', bgColor: 'bg-blue-500/10', label: '24h Volume', value: formatNumber(stats.volume24h) },
-    { icon: Coins, iconColor: 'text-purple-500', bgColor: 'bg-purple-500/10', label: '24h Fees', value: formatNumber(stats.totalFees), valueColor: 'text-green-500' },
+    { icon: Droplets, iconColor: 'text-primary', bgColor: 'bg-primary/10', label: 'Total Pools', value: String(stats.totalPools), delay: 100 },
+    { icon: TrendingUp, iconColor: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Total TVL', value: formatNumber(stats.totalTVL), delay: 200 },
+    { icon: BarChart3, iconColor: 'text-blue-500', bgColor: 'bg-blue-500/10', label: '24h Volume', value: formatNumber(stats.volume24h), delay: 300 },
+    { icon: Coins, iconColor: 'text-purple-500', bgColor: 'bg-purple-500/10', label: '24h Fees', value: formatNumber(stats.totalFees), valueColor: 'text-green-500', delay: 400 },
   ], [stats, formatNumber]);
 
   return (
-    <main className="container py-4 sm:py-6 md:py-10 max-w-7xl px-3 sm:px-4">
+    <main className="container py-4 sm:py-6 md:py-10 max-w-7xl px-3 sm:px-4 relative">
+      {/* Ambient background effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-20 right-1/4 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-40 left-1/4 w-64 h-64 bg-primary/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+      </div>
+
       {/* Hero Section */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 animate-fade-in">
         <div>
           <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-wolf">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-wolf relative animate-bounce-subtle">
+              <div className="absolute inset-0 bg-primary/30 rounded-xl blur-lg -z-10" />
               <Droplets className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
@@ -148,6 +161,7 @@ const Pools = () => {
             value={stat.value}
             loading={stats.loading}
             valueColor={stat.valueColor}
+            delay={stat.delay}
           />
         ))}
       </div>
