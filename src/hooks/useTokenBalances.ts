@@ -10,8 +10,23 @@ export interface TokenBalance {
   balanceRaw: bigint;
 }
 
-// Global cache for balances to reduce RPC calls
+// Global cache for balances to reduce RPC calls - shared format with useStableBalances
 const balanceCache = new Map<string, { balances: Map<string, TokenBalance>; timestamp: number }>();
+
+// Shared cache for individual token balances (used by useStableBalances too)
+export const sharedBalanceCache: { [key: string]: { balance: string; timestamp: number } } = {};
+export const SHARED_CACHE_TTL = 30000; // 30 seconds
+
+// Update shared cache when fetching balances
+const updateSharedCache = (walletAddress: string, tokenAddress: string, balance: string) => {
+  const isNative = tokenAddress === '0x0000000000000000000000000000000000000000';
+  const cacheKey = `bal_${walletAddress.toLowerCase()}_${isNative ? 'native' : tokenAddress.toLowerCase()}`;
+  sharedBalanceCache[cacheKey] = {
+    balance,
+    timestamp: Date.now(),
+  };
+};
+
 const CACHE_TTL = 30000; // 30 seconds
 const MAX_RETRIES = 2;
 
@@ -62,11 +77,14 @@ async function fetchBalancesWithMulticall(
     if (nativeToken) {
       try {
         const nativeBalance = await provider.getBalance(userAddress);
+        const formattedBalance = ethers.formatUnits(nativeBalance, nativeToken.decimals);
         newBalances.set(nativeToken.address.toLowerCase(), {
           token: nativeToken,
-          balance: ethers.formatUnits(nativeBalance, nativeToken.decimals),
+          balance: formattedBalance,
           balanceRaw: nativeBalance,
         });
+        // Update shared cache for native token
+        updateSharedCache(userAddress, nativeToken.address, formattedBalance);
       } catch {
         // Keep default 0 balance
       }
@@ -95,11 +113,14 @@ async function fetchBalancesWithMulticall(
       const token = erc20Tokens[index];
       try {
         const balance = decodeBalanceOfResult(data);
+        const formattedBalance = ethers.formatUnits(balance, token.decimals);
         newBalances.set(token.address.toLowerCase(), {
           token,
-          balance: ethers.formatUnits(balance, token.decimals),
+          balance: formattedBalance,
           balanceRaw: balance,
         });
+        // Update shared cache for useStableBalances
+        updateSharedCache(userAddress, token.address, formattedBalance);
       } catch {
         // Keep default 0 balance on decode error
       }
@@ -136,11 +157,14 @@ async function fetchBalancesFallback(userAddress: string): Promise<Map<string, T
           const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
           balance = await contract.balanceOf(userAddress);
         }
+        const formattedBalance = ethers.formatUnits(balance, token.decimals);
         newBalances.set(token.address.toLowerCase(), {
           token,
-          balance: ethers.formatUnits(balance, token.decimals),
+          balance: formattedBalance,
           balanceRaw: balance,
         });
+        // Update shared cache
+        updateSharedCache(userAddress, token.address, formattedBalance);
       } catch {
         // Keep default 0 balance
       }
