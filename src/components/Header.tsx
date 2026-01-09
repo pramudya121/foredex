@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, QrCode, HelpCircle } from 'lucide-react';
+import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, QrCode, HelpCircle, ArrowLeft, Loader2, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
@@ -25,6 +25,7 @@ import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
 import { RpcStatusIndicator } from './RpcStatusIndicator';
+import { QRCodeSVG } from 'qrcode.react';
 
 const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 
@@ -116,8 +117,20 @@ const WALLETS = [
 
 export function Header() {
   const { pathname } = useLocation();
-  const { isConnected, isConnecting, address, balance, connect, disconnect } = useWeb3();
+  const { 
+    isConnected, 
+    isConnecting, 
+    address, 
+    balance, 
+    connect, 
+    disconnect,
+    wcQrUri,
+    isWcConnecting,
+    cancelWcConnection,
+    connectWalletConnect,
+  } = useWeb3();
   const [walletOpen, setWalletOpen] = useState(false);
+  const [showQrView, setShowQrView] = useState(false);
 
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -133,6 +146,25 @@ export function Header() {
   const openExplorer = () => {
     if (address) {
       window.open(`${NEXUS_TESTNET.blockExplorer}/address/${address}`, '_blank');
+    }
+  };
+
+  const handleWalletConnect = async () => {
+    setShowQrView(true);
+    await connectWalletConnect();
+  };
+
+  const handleBackToWallets = () => {
+    setShowQrView(false);
+    cancelWcConnection();
+  };
+
+  // Reset QR view when dialog closes
+  const handleDialogChange = (open: boolean) => {
+    setWalletOpen(open);
+    if (!open) {
+      setShowQrView(false);
+      cancelWcConnection();
     }
   };
 
@@ -220,90 +252,172 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Dialog open={walletOpen} onOpenChange={setWalletOpen}>
+            <Dialog open={walletOpen} onOpenChange={handleDialogChange}>
               <DialogTrigger asChild>
                 <Button 
                   className="gap-2 bg-gradient-wolf btn-glow"
-                  disabled={isConnecting}
+                  disabled={isConnecting || isWcConnecting}
                 >
                   <Wallet className="w-4 h-4" />
-                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                  {isConnecting || isWcConnecting ? 'Connecting...' : 'Connect Wallet'}
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50">
-                <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b border-border/30">
-                  <div className="flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4 text-muted-foreground" />
-                    <DialogTitle className="text-lg font-semibold">Connect Wallet</DialogTitle>
-                  </div>
-                </DialogHeader>
-                
-                <div className="space-y-2 py-4">
-                  {WALLETS.map((wallet) => {
-                    const isInstalled = wallet.checkInstalled?.() ?? (wallet.id === 'walletconnect');
-                    const IconComponent = wallet.icon;
-                    
-                    return (
-                      <button
-                        key={wallet.id}
-                        onClick={() => {
-                          if (wallet.id === 'walletconnect') {
-                            toast.info('WalletConnect coming soon!');
-                            return;
-                          }
-                          if (!isInstalled) {
-                            toast.error(`${wallet.name} not detected. Please install it first.`);
-                            return;
-                          }
-                          connect(wallet.id);
-                          setWalletOpen(false);
-                        }}
-                        className={cn(
-                          'w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200',
-                          'hover:bg-muted/50 border border-transparent hover:border-border/50',
-                          'group cursor-pointer'
-                        )}
+                {showQrView ? (
+                  // WalletConnect QR View
+                  <>
+                    <DialogHeader className="flex flex-row items-center gap-2 pb-4 border-b border-border/30">
+                      <button 
+                        onClick={handleBackToWallets}
+                        className="p-1 rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-background flex items-center justify-center">
-                            <IconComponent />
-                          </div>
-                          <span className="font-medium text-foreground">{wallet.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {wallet.id === 'walletconnect' ? (
-                            <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold uppercase', wallet.badgeColor)}>
-                              <QrCode className="w-3 h-3 inline mr-1" />
-                              QR CODE
-                            </span>
-                          ) : isInstalled ? (
-                            <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold uppercase', wallet.badgeColor)}>
-                              INSTALLED
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-muted/50 text-muted-foreground">
-                              NOT DETECTED
-                            </span>
-                          )}
-                        </div>
+                        <ArrowLeft className="w-4 h-4" />
                       </button>
-                    );
-                  })}
-                </div>
-                
-                <div className="border-t border-border/30 pt-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Haven't got a wallet?{' '}
-                    <a 
-                      href="https://metamask.io/download/" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline font-medium"
-                    >
-                      Get started
-                    </a>
-                  </p>
-                </div>
+                      <div className="flex items-center gap-2">
+                        <WalletConnectIcon />
+                        <DialogTitle className="text-lg font-semibold">WalletConnect</DialogTitle>
+                      </div>
+                    </DialogHeader>
+                    
+                    <div className="py-6">
+                      {wcQrUri ? (
+                        <div className="flex flex-col items-center">
+                          {/* QR Code */}
+                          <div className="p-4 bg-white rounded-2xl shadow-lg mb-4">
+                            <QRCodeSVG 
+                              value={wcQrUri} 
+                              size={220}
+                              level="M"
+                              includeMargin={false}
+                            />
+                          </div>
+                          
+                          {/* Instructions */}
+                          <div className="text-center space-y-2">
+                            <div className="flex items-center justify-center gap-2 text-primary">
+                              <Smartphone className="w-5 h-5" />
+                              <span className="font-medium">Scan with your mobile wallet</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground max-w-xs">
+                              Open your wallet app, go to settings and scan the QR code to connect
+                            </p>
+                          </div>
+
+                          {/* Supported wallets */}
+                          <div className="mt-6 pt-4 border-t border-border/30 w-full">
+                            <p className="text-xs text-muted-foreground text-center mb-3">
+                              Supported wallets
+                            </p>
+                            <div className="flex items-center justify-center gap-4">
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                                  <MetaMaskIcon />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">MetaMask</span>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="#3B99FC"/>
+                                  </svg>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">Trust</span>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                                  <RabbyIcon />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">Rabby</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+                          <p className="text-muted-foreground">Initializing WalletConnect...</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  // Wallet Selection View
+                  <>
+                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b border-border/30">
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                        <DialogTitle className="text-lg font-semibold">Connect Wallet</DialogTitle>
+                      </div>
+                    </DialogHeader>
+                    
+                    <div className="space-y-2 py-4">
+                      {WALLETS.map((wallet) => {
+                        const isInstalled = wallet.checkInstalled?.() ?? (wallet.id === 'walletconnect');
+                        const IconComponent = wallet.icon;
+                        
+                        return (
+                          <button
+                            key={wallet.id}
+                            onClick={() => {
+                              if (wallet.id === 'walletconnect') {
+                                handleWalletConnect();
+                                return;
+                              }
+                              if (!isInstalled) {
+                                toast.error(`${wallet.name} not detected. Please install it first.`);
+                                return;
+                              }
+                              connect(wallet.id);
+                              setWalletOpen(false);
+                            }}
+                            className={cn(
+                              'w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200',
+                              'hover:bg-muted/50 border border-transparent hover:border-border/50',
+                              'group cursor-pointer'
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-background flex items-center justify-center">
+                                <IconComponent />
+                              </div>
+                              <span className="font-medium text-foreground">{wallet.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {wallet.id === 'walletconnect' ? (
+                                <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold uppercase', wallet.badgeColor)}>
+                                  <QrCode className="w-3 h-3 inline mr-1" />
+                                  QR CODE
+                                </span>
+                              ) : isInstalled ? (
+                                <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold uppercase', wallet.badgeColor)}>
+                                  INSTALLED
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-muted/50 text-muted-foreground">
+                                  NOT DETECTED
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    <div className="border-t border-border/30 pt-4 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Haven't got a wallet?{' '}
+                        <a 
+                          href="https://metamask.io/download/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Get started
+                        </a>
+                      </p>
+                    </div>
+                  </>
+                )}
               </DialogContent>
             </Dialog>
           )}

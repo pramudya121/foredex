@@ -4,6 +4,9 @@ import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
 import { rpcProvider } from '@/lib/rpcProvider';
 
+// WalletConnect types
+type WalletConnectProvider = any;
+
 interface Web3ContextType {
   provider: ethers.BrowserProvider | null;
   signer: ethers.Signer | null;
@@ -12,10 +15,15 @@ interface Web3ContextType {
   isConnected: boolean;
   isConnecting: boolean;
   balance: string;
+  walletType: 'injected' | 'walletconnect' | null;
   connect: (walletType?: string) => Promise<void>;
+  connectWalletConnect: () => Promise<string | null>; // Returns QR URI
   disconnect: () => void;
   switchToNexus: () => Promise<void>;
   refreshBalance: () => Promise<void>;
+  wcQrUri: string | null;
+  isWcConnecting: boolean;
+  cancelWcConnection: () => void;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -27,11 +35,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [balance, setBalance] = useState('0');
+  const [walletType, setWalletType] = useState<'injected' | 'walletconnect' | null>(null);
+  const [wcQrUri, setWcQrUri] = useState<string | null>(null);
+  const [isWcConnecting, setIsWcConnecting] = useState(false);
   const balanceFetchRef = useRef<NodeJS.Timeout | null>(null);
+  const wcProviderRef = useRef<WalletConnectProvider | null>(null);
 
   const isConnected = !!address;
 
-  const getProvider = useCallback((walletType?: string) => {
+  const getProvider = useCallback((walletTypeParam?: string) => {
     const ethereum = (window as any).ethereum;
     
     if (!ethereum) {
@@ -39,11 +51,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
 
     // Handle multiple wallet providers
-    if (walletType === 'okx' && (window as any).okxwallet) {
-      return (window as any).okxwallet;
-    }
-    if (walletType === 'bitget' && (window as any).bitkeep?.ethereum) {
-      return (window as any).bitkeep.ethereum;
+    if (walletTypeParam === 'rabby' && ((window as any).ethereum?.isRabby || (window as any).rabby)) {
+      return (window as any).ethereum?.isRabby ? (window as any).ethereum : (window as any).rabby;
     }
     
     // Default to MetaMask or injected provider
@@ -100,11 +109,153 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }, [address]);
 
-  const connect = useCallback(async (walletType?: string) => {
+  // Initialize WalletConnect provider
+  const initWalletConnect = useCallback(async () => {
+    if (wcProviderRef.current) return wcProviderRef.current;
+
+    try {
+      const { default: EthereumProvider } = await import('@walletconnect/ethereum-provider');
+      const { WALLETCONNECT_PROJECT_ID, WALLETCONNECT_METADATA } = await import('@/config/walletconnect');
+      
+      const wcProvider = await EthereumProvider.init({
+        projectId: WALLETCONNECT_PROJECT_ID,
+        chains: [NEXUS_TESTNET.chainId],
+        optionalChains: [1, 137, 56],
+        showQrModal: false,
+        metadata: WALLETCONNECT_METADATA,
+        rpcMap: {
+          [NEXUS_TESTNET.chainId]: NEXUS_TESTNET.rpcUrl,
+        },
+      });
+
+      wcProviderRef.current = wcProvider;
+      return wcProvider;
+    } catch (error) {
+      console.error('[WalletConnect] Init failed:', error);
+      return null;
+    }
+  }, []);
+
+  // Connect via WalletConnect - returns QR URI
+  const connectWalletConnect = useCallback(async (): Promise<string | null> => {
+    setIsWcConnecting(true);
+    setWcQrUri(null);
+
+    try {
+      const wcProvider = await initWalletConnect();
+      if (!wcProvider) {
+        throw new Error('Failed to initialize WalletConnect');
+      }
+
+      // If already connected, use existing session
+      if (wcProvider.session) {
+        const browserProvider = new ethers.BrowserProvider(wcProvider);
+        const browserSigner = await browserProvider.getSigner();
+        const userAddress = await browserSigner.getAddress();
+
+        setProvider(browserProvider);
+        setSigner(browserSigner);
+        setAddress(userAddress);
+        setChainId(NEXUS_TESTNET.chainId);
+        setWalletType('walletconnect');
+        setIsWcConnecting(false);
+        
+        toast.success('Wallet connected via WalletConnect!');
+        
+        // Fetch balance
+        setTimeout(() => refreshBalance(), 2000);
+        
+        return null;
+      }
+
+      // Set up QR URI listener
+      return new Promise<string | null>((resolve) => {
+        let uriResolved = false;
+
+        const onDisplayUri = (uri: string) => {
+          console.log('[WalletConnect] QR URI received');
+          setWcQrUri(uri);
+          if (!uriResolved) {
+            uriResolved = true;
+            resolve(uri);
+          }
+        };
+
+        const onConnect = async () => {
+          console.log('[WalletConnect] Connected');
+          wcProvider.removeListener('display_uri', onDisplayUri);
+          
+          try {
+            const browserProvider = new ethers.BrowserProvider(wcProvider);
+            const browserSigner = await browserProvider.getSigner();
+            const userAddress = await browserSigner.getAddress();
+
+            setProvider(browserProvider);
+            setSigner(browserSigner);
+            setAddress(userAddress);
+            setChainId(NEXUS_TESTNET.chainId);
+            setWalletType('walletconnect');
+            setWcQrUri(null);
+            setIsWcConnecting(false);
+            
+            toast.success('Wallet connected via WalletConnect!');
+            
+            setTimeout(() => refreshBalance(), 2000);
+          } catch (error) {
+            console.error('[WalletConnect] Post-connect error:', error);
+            setIsWcConnecting(false);
+          }
+        };
+
+        const onDisconnect = () => {
+          console.log('[WalletConnect] Disconnected during connection');
+          wcProvider.removeListener('display_uri', onDisplayUri);
+          wcProvider.removeListener('connect', onConnect);
+          setIsWcConnecting(false);
+          setWcQrUri(null);
+        };
+
+        wcProvider.on('display_uri', onDisplayUri);
+        wcProvider.once('connect', onConnect);
+        wcProvider.once('disconnect', onDisconnect);
+
+        // Start connection
+        wcProvider.connect().catch((error: any) => {
+          console.error('[WalletConnect] Connect error:', error);
+          setIsWcConnecting(false);
+          setWcQrUri(null);
+          if (!uriResolved) {
+            resolve(null);
+          }
+        });
+      });
+    } catch (error: any) {
+      console.error('[WalletConnect] Error:', error);
+      setIsWcConnecting(false);
+      setWcQrUri(null);
+      toast.error('WalletConnect connection failed');
+      return null;
+    }
+  }, [initWalletConnect, refreshBalance]);
+
+  // Cancel WalletConnect connection
+  const cancelWcConnection = useCallback(() => {
+    setIsWcConnecting(false);
+    setWcQrUri(null);
+  }, []);
+
+  // Connect via injected wallet
+  const connect = useCallback(async (walletTypeParam?: string) => {
+    // Handle WalletConnect separately
+    if (walletTypeParam === 'walletconnect') {
+      connectWalletConnect();
+      return;
+    }
+
     setIsConnecting(true);
     
     try {
-      const ethereum = getProvider(walletType);
+      const ethereum = getProvider(walletTypeParam);
       const browserProvider = new ethers.BrowserProvider(ethereum);
       
       // Request accounts
@@ -135,11 +286,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setProvider(browserProvider);
       setSigner(browserSigner);
       setAddress(userAddress);
-      setBalance('0'); // Default, will update after delay
+      setBalance('0');
+      setWalletType('injected');
       
       toast.success('Wallet connected!');
       
-      // Fetch balance after a delay to avoid rate limiting
+      // Fetch balance after a delay
       if (balanceFetchRef.current) {
         clearTimeout(balanceFetchRef.current);
       }
@@ -158,10 +310,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         } catch {
           // Silent fail
         }
-      }, 2000); // Wait 2 seconds before fetching balance
+      }, 2000);
       
     } catch (error: any) {
-      // Parse user-friendly error message - only show if it's an actionable error
       const errorMsg = rpcProvider.parseError(error, true);
       if (errorMsg) {
         toast.error(errorMsg);
@@ -169,24 +320,37 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [getProvider, switchToNexus]);
+  }, [getProvider, switchToNexus, connectWalletConnect]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     if (balanceFetchRef.current) {
       clearTimeout(balanceFetchRef.current);
     }
+
+    // Disconnect WalletConnect if active
+    if (walletType === 'walletconnect' && wcProviderRef.current?.session) {
+      try {
+        await wcProviderRef.current.disconnect();
+      } catch (error) {
+        console.error('[WalletConnect] Disconnect error:', error);
+      }
+    }
+
     setProvider(null);
     setSigner(null);
     setAddress(null);
     setChainId(null);
     setBalance('0');
+    setWalletType(null);
+    setWcQrUri(null);
+    setIsWcConnecting(false);
     toast.info('Wallet disconnected');
-  }, []);
+  }, [walletType]);
 
-  // Listen for account/chain changes
+  // Listen for account/chain changes (injected wallets only)
   useEffect(() => {
     const ethereum = (window as any).ethereum;
-    if (!ethereum) return;
+    if (!ethereum || walletType === 'walletconnect') return;
 
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts.length === 0) {
@@ -207,13 +371,35 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       ethereum.removeListener('accountsChanged', handleAccountsChanged);
       ethereum.removeListener('chainChanged', handleChainChanged);
     };
-  }, [address, connect, disconnect]);
+  }, [address, connect, disconnect, walletType]);
+
+  // WalletConnect session events
+  useEffect(() => {
+    const wcProvider = wcProviderRef.current;
+    if (!wcProvider || walletType !== 'walletconnect') return;
+
+    const handleDisconnect = () => {
+      console.log('[WalletConnect] Session disconnected');
+      disconnect();
+    };
+
+    const handleSessionUpdate = () => {
+      console.log('[WalletConnect] Session updated');
+    };
+
+    wcProvider.on('disconnect', handleDisconnect);
+    wcProvider.on('session_update', handleSessionUpdate);
+
+    return () => {
+      wcProvider.removeListener('disconnect', handleDisconnect);
+      wcProvider.removeListener('session_update', handleSessionUpdate);
+    };
+  }, [walletType, disconnect]);
 
   // Auto-connect if previously connected (with delay)
   useEffect(() => {
     const ethereum = (window as any).ethereum;
     if (ethereum?.selectedAddress) {
-      // Delay auto-connect to prevent immediate rate limiting
       const timeout = setTimeout(() => {
         connect();
       }, 1000);
@@ -221,7 +407,34 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Refresh balance periodically (every 60 seconds)
+  // Check for existing WalletConnect session
+  useEffect(() => {
+    const checkWcSession = async () => {
+      try {
+        const wcProvider = await initWalletConnect();
+        if (wcProvider?.session) {
+          console.log('[WalletConnect] Restoring session');
+          const browserProvider = new ethers.BrowserProvider(wcProvider);
+          const browserSigner = await browserProvider.getSigner();
+          const userAddress = await browserSigner.getAddress();
+
+          setProvider(browserProvider);
+          setSigner(browserSigner);
+          setAddress(userAddress);
+          setChainId(NEXUS_TESTNET.chainId);
+          setWalletType('walletconnect');
+          
+          setTimeout(() => refreshBalance(), 2000);
+        }
+      } catch (error) {
+        console.error('[WalletConnect] Session restore failed:', error);
+      }
+    };
+
+    checkWcSession();
+  }, [initWalletConnect, refreshBalance]);
+
+  // Refresh balance periodically
   useEffect(() => {
     if (!address) return;
     
@@ -241,10 +454,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       isConnected,
       isConnecting,
       balance,
+      walletType,
       connect,
+      connectWalletConnect,
       disconnect,
       switchToNexus,
       refreshBalance,
+      wcQrUri,
+      isWcConnecting,
+      cancelWcConnection,
     }}>
       {children}
     </Web3Context.Provider>
