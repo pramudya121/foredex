@@ -16,7 +16,8 @@ import { BalanceRetryButton } from './BalanceRetryButton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { 
-  getAmountOut as calcAmountOut, 
+  getAmountOut as calcAmountOut,
+  getAmountIn as calcAmountIn,
   calculatePriceImpact, 
   getReserves,
 } from '@/lib/uniswapV2Library';
@@ -39,6 +40,7 @@ export function SwapCard() {
   const [tokenOut, setTokenOut] = useState<TokenInfo | null>(TOKEN_LIST[4]); // FRDX
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
+  const [isExactOutput, setIsExactOutput] = useState(false); // Track if user is inputting exact output
   const [loading, setLoading] = useState(false);
   const [quoting, setQuoting] = useState(false);
   const [slippage, setSlippage] = useState(settings.defaultSlippage);
@@ -220,13 +222,106 @@ export function SwapCard() {
     }
   }, [provider, tokenIn, tokenOut, slippage, isAutoSlippage, reserves]);
 
+  // Get reverse quote using getAmountsIn - calculate input from desired output
+  const getReverseQuote = useCallback(async (outputAmount: string) => {
+    if (!outputAmount || outputAmount.trim() === '') {
+      setAmountIn('');
+      setPriceImpact(0);
+      setBestRoute(null);
+      return;
+    }
+
+    const outputNum = parseFloat(outputAmount);
+    if (isNaN(outputNum) || outputNum <= 0) {
+      setAmountIn('');
+      setPriceImpact(0);
+      setBestRoute(null);
+      return;
+    }
+
+    if (!provider || !tokenIn || !tokenOut) return;
+
+    setQuoting(true);
+    try {
+      const tokenAAddress = isNativeToken(tokenIn) ? CONTRACTS.WETH : tokenIn.address;
+      const tokenBAddress = isNativeToken(tokenOut) ? CONTRACTS.WETH : tokenOut.address;
+      
+      const { reserveA, reserveB } = await getReserves(provider, tokenAAddress, tokenBAddress);
+      setReserves({ reserveA, reserveB });
+      
+      if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+        setAmountIn('');
+        setPriceImpact(0);
+        return;
+      }
+
+      const amountOutWei = ethers.parseUnits(outputAmount, tokenOut.decimals);
+      
+      // Check if desired output is more than available reserves
+      if (amountOutWei >= reserveB) {
+        setAmountIn('');
+        setPriceImpact(100);
+        return;
+      }
+
+      const amountInWei = calcAmountIn(amountOutWei, reserveA, reserveB);
+      const inAmount = ethers.formatUnits(amountInWei, tokenIn.decimals);
+      const formattedIn = parseFloat(inAmount);
+      setAmountIn(isNaN(formattedIn) ? '' : formattedIn.toFixed(6));
+      
+      const impact = calculatePriceImpact(amountInWei, amountOutWei, reserveA, reserveB);
+      setPriceImpact(isNaN(impact) ? 0 : impact);
+    } catch (error) {
+      console.error('Reverse quote error:', error);
+      // Fallback to router call using getAmountsIn
+      try {
+        const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, provider);
+        const amountOutWei = ethers.parseUnits(outputAmount, tokenOut.decimals);
+        const path = [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
+        
+        const amounts = await router.getAmountsIn(amountOutWei, path);
+        const inAmountFallback = ethers.formatUnits(amounts[0], tokenIn.decimals);
+        const formattedIn = parseFloat(inAmountFallback);
+        setAmountIn(isNaN(formattedIn) ? '' : formattedIn.toFixed(6));
+        setPriceImpact(0);
+      } catch {
+        setAmountIn('');
+        setPriceImpact(0);
+      }
+    } finally {
+      setQuoting(false);
+    }
+  }, [provider, tokenIn, tokenOut]);
+
   // Debounced quote with longer delay to reduce RPC calls
   useEffect(() => {
+    if (isExactOutput) return; // Skip if user is inputting output
     const timeout = setTimeout(() => {
       getQuote(amountIn);
     }, 600);
     return () => clearTimeout(timeout);
-  }, [amountIn, getQuote]);
+  }, [amountIn, getQuote, isExactOutput]);
+
+  // Debounced reverse quote for exact output
+  useEffect(() => {
+    if (!isExactOutput) return;
+    const timeout = setTimeout(() => {
+      getReverseQuote(amountOut);
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [amountOut, getReverseQuote, isExactOutput]);
+
+  // Handle input amount change
+  const handleAmountInChange = (value: string) => {
+    setIsExactOutput(false);
+    setAmountIn(value);
+  };
+
+  // Handle output amount change - triggers reverse calculation
+  const handleAmountOutChange = (value: string) => {
+    setIsExactOutput(true);
+    setAmountOut(value);
+  };
 
   const switchTokens = () => {
     const tempToken = tokenIn;
@@ -235,6 +330,7 @@ export function SwapCard() {
     setTokenOut(tempToken);
     setAmountIn(amountOut);
     setAmountOut(tempAmount);
+    setIsExactOutput(!isExactOutput);
   };
 
   const openSwapConfirmation = () => {
@@ -446,7 +542,10 @@ export function SwapCard() {
             <BalanceRetryButton onRetry={refetchBalances} loading={loadingBalances} className="ml-0.5" />
             {parseFloat(balanceIn || '0') > 0 && (
               <button
-                onClick={() => setAmountIn(balanceIn)}
+                onClick={() => {
+                  setIsExactOutput(false);
+                  setAmountIn(balanceIn);
+                }}
                 className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
               >
                 MAX
@@ -459,10 +558,15 @@ export function SwapCard() {
             type="number"
             inputMode="decimal"
             placeholder="0.0"
-            value={amountIn}
-            onChange={(e) => setAmountIn(e.target.value)}
+            value={quoting && isExactOutput ? '' : amountIn}
+            onChange={(e) => handleAmountInChange(e.target.value)}
             className="flex-1 text-2xl sm:text-3xl font-bold bg-transparent border-none p-0 h-12 focus-visible:ring-0 placeholder:text-muted-foreground/50"
           />
+          {quoting && isExactOutput && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+            </div>
+          )}
           <TokenSelect selected={tokenIn} onSelect={setTokenIn} excludeToken={tokenOut} />
         </div>
       </div>
@@ -500,13 +604,14 @@ export function SwapCard() {
         <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2">
             <Input
-              type="text"
+              type="number"
+              inputMode="decimal"
               placeholder="0.0"
-              value={quoting ? '' : amountOut}
-              readOnly
+              value={quoting && !isExactOutput ? '' : amountOut}
+              onChange={(e) => handleAmountOutChange(e.target.value)}
               className="flex-1 text-2xl sm:text-3xl font-bold bg-transparent border-none p-0 h-12 focus-visible:ring-0 placeholder:text-muted-foreground/50"
             />
-            {quoting && (
+            {quoting && !isExactOutput && (
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="text-sm hidden sm:inline">Calculating...</span>

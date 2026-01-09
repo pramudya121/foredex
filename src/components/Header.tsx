@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, X, QrCode, HelpCircle } from 'lucide-react';
+import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, QrCode, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
@@ -25,7 +25,6 @@ import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
 import { RpcStatusIndicator } from './RpcStatusIndicator';
-import { ContractEventNotifications } from './ContractEventNotifications';
 
 const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 
@@ -178,9 +177,6 @@ export function Header() {
 
         {/* Wallet & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Contract Event Notifications */}
-          <ContractEventNotifications />
-          
           {/* Price Alerts */}
           <Suspense fallback={null}>
             <PriceAlertManager />
