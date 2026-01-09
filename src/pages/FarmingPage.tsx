@@ -30,7 +30,8 @@ const StatsCard = memo(function StatsCard({
   value, 
   subValue,
   gradient = false,
-  iconColor = 'text-primary'
+  iconColor = 'text-primary',
+  delay = 0
 }: { 
   icon: React.ElementType; 
   label: string; 
@@ -38,16 +39,20 @@ const StatsCard = memo(function StatsCard({
   subValue?: string;
   gradient?: boolean;
   iconColor?: string;
+  delay?: number;
 }) {
   return (
-    <Card className={`overflow-hidden border-border/40 transition-all duration-300 hover:border-primary/30 ${
-      gradient 
-        ? 'bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border-primary/30' 
-        : 'bg-gradient-to-br from-card via-card to-card/80'
-    }`}>
+    <Card 
+      className={`overflow-hidden border-border/40 transition-all duration-300 hover-lift card-glow animate-scale-in opacity-0 ${
+        gradient 
+          ? 'bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border-primary/30' 
+          : 'bg-gradient-to-br from-card via-card to-card/80'
+      }`}
+      style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
+    >
       <CardContent className="p-5">
         <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-xl ${gradient ? 'bg-primary/20' : 'bg-muted/50'} ring-1 ${gradient ? 'ring-primary/30' : 'ring-border/50'}`}>
+          <div className={`p-3 rounded-xl ${gradient ? 'bg-primary/20' : 'bg-muted/50'} ring-1 ${gradient ? 'ring-primary/30' : 'ring-border/50'} transition-transform duration-300 hover:scale-110`}>
             <Icon className={`w-5 h-5 ${iconColor}`} />
           </div>
           <div className="flex-1 min-w-0">
@@ -260,11 +265,17 @@ export default function FarmingPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
+    <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8 relative">
+      {/* Ambient background effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-40 right-1/3 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 left-1/4 w-64 h-64 bg-green-500/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
+
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/20 p-6 lg:p-8">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/20 p-6 lg:p-8 animate-fade-in">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.15),transparent_50%)] pointer-events-none" />
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse" />
         
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -334,18 +345,21 @@ export default function FarmingPage() {
               value={pools.length.toString()}
               subValue={`${formatRewardPerBlock(stats?.rewardPerBlock)} FRDX/block`}
               iconColor="text-blue-400"
+              delay={100}
             />
             <StatsCard 
               icon={Coins} 
               label="Total Value Locked" 
               value={`${formatNumber(totalTVL, 2)} LP`}
               iconColor="text-green-400"
+              delay={200}
             />
             <StatsCard 
               icon={TrendingUp} 
               label="Your Stake" 
               value={`${formatNumber(totalUserStaked, 4)} LP`}
               iconColor="text-purple-400"
+              delay={300}
             />
             
             {/* Pending Rewards Card with Harvest All */}
