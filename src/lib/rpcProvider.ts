@@ -1,15 +1,23 @@
 import { ethers } from 'ethers';
 import { NEXUS_TESTNET } from '@/config/contracts';
 
-// Singleton RPC provider with robust error handling and adaptive throttling
+// Batched RPC request interface
+interface BatchedRequest {
+  method: string;
+  params: any[];
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+}
+
+// Singleton RPC provider with robust error handling, adaptive throttling, and request batching
 class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
   private currentRpcIndex = 0;
   private lastRequestTime = 0;
-  private minRequestInterval = 150;
+  private minRequestInterval = 100;
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTTL = 60000; // Cache for 60 seconds - reduce requests
+  private cacheTTL = 60000; // Cache for 60 seconds
   private errorCount = 0;
   private maxErrors = 50;
   private cooldownUntil = 0;
@@ -21,6 +29,12 @@ class RPCProviderService {
   private lastSuccessTime = Date.now();
   private providerReady = false;
   private initPromise: Promise<void> | null = null;
+  
+  // Batching state
+  private batchQueue: BatchedRequest[] = [];
+  private batchTimeout: NodeJS.Timeout | null = null;
+  private batchMaxSize = 10;
+  private batchDelayMs = 50;
 
   private constructor() {
     this.initPromise = this.initProvider();
@@ -34,15 +48,12 @@ class RPCProviderService {
       'https://api.allorigins.win/raw?url=',
     ];
     
-    // Build list: direct URLs first, then proxied versions
     const allUrls: string[] = [];
     
-    // Add direct URLs
     for (const url of directUrls) {
       allUrls.push(url);
     }
     
-    // Add CORS-proxied URLs as fallbacks
     for (const proxy of corsProxies) {
       for (const url of directUrls) {
         allUrls.push(`${proxy}${encodeURIComponent(url)}`);
@@ -67,13 +78,12 @@ class RPCProviderService {
         name: NEXUS_TESTNET.name,
       };
       
-      // Create provider with minimal config
       this.provider = new ethers.JsonRpcProvider(
         rpcUrl,
         network,
         {
           staticNetwork: ethers.Network.from(network),
-          batchMaxCount: 1,
+          batchMaxCount: 1, // We handle batching ourselves
           polling: false,
           cacheTimeout: -1,
         }
@@ -81,7 +91,6 @@ class RPCProviderService {
       
       this.provider.pollingInterval = 0;
 
-      // Override getFeeData to avoid unsupported calls
       this.provider.getFeeData = async () => {
         try {
           const gasPrice = await this.provider!.send('eth_gasPrice', []);
@@ -91,7 +100,6 @@ class RPCProviderService {
         }
       };
       
-      // Test connection silently
       try {
         await Promise.race([
           this.provider.getBlockNumber(),
@@ -100,10 +108,8 @@ class RPCProviderService {
         this.providerReady = true;
         this.lastSuccessTime = Date.now();
         this.consecutiveErrors = 0;
-        // Only log successful connection, not failures
         console.info(`RPC connected: ${rpcUrl.includes('corsproxy') ? 'via CORS proxy' : rpcUrl}`);
       } catch {
-        // Silently try next RPC without logging
         this.provider = null;
         if (rpcIndex < rpcUrls.length - 1) {
           this.isInitializing = false;
@@ -119,11 +125,9 @@ class RPCProviderService {
     }
   }
 
-  // Switch to next RPC URL on persistent errors - silently
   private async switchRpc() {
     const rpcUrls = this.getRpcUrls();
     const nextIndex = (this.currentRpcIndex + 1) % rpcUrls.length;
-    // Don't log RPC switching to reduce console spam
     this.provider = null;
     this.providerReady = false;
     await this.initProvider(nextIndex);
@@ -145,7 +149,6 @@ class RPCProviderService {
 
   isAvailable(): boolean {
     const now = Date.now();
-    // Auto-reset cooldown after it expires
     if (now >= this.cooldownUntil && this.cooldownUntil > 0) {
       this.cooldownUntil = 0;
       this.consecutiveErrors = 0;
@@ -153,7 +156,6 @@ class RPCProviderService {
       this.minRequestInterval = 100;
     }
     
-    // Check if we're in cooldown
     if (now < this.cooldownUntil) {
       return false;
     }
@@ -172,7 +174,6 @@ class RPCProviderService {
   private setCache(key: string, data: any) {
     this.cache.set(key, { data, timestamp: Date.now() });
     
-    // Clean old cache entries periodically
     if (this.cache.size > 200) {
       const now = Date.now();
       for (const [k, v] of this.cache.entries()) {
@@ -187,12 +188,10 @@ class RPCProviderService {
     const errorMessage = error?.message || String(error);
     this.consecutiveErrors++;
     
-    // Count errors
     if (this.consecutiveErrors > 5) {
       this.errorCount++;
     }
     
-    // Handle CORS and fetch errors - switch RPC
     if (errorMessage.includes('CORS') || 
         errorMessage.includes('Failed to fetch') ||
         errorMessage.includes('ERR_FAILED') ||
@@ -204,18 +203,15 @@ class RPCProviderService {
       return;
     }
     
-    // Rate limit handling
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
       this.cooldownUntil = Date.now() + 2000;
       this.minRequestInterval = Math.min(500, this.minRequestInterval * 1.5);
     }
   }
 
-  // Parse user-friendly error messages - returns null for transient errors that should be silent
   parseError(error: any, showTransient = false): string | null {
     const msg = error?.message || error?.reason || String(error);
     
-    // Transient network errors - ALWAYS suppress these, never show toast
     if (msg.includes('coalesce') || 
         msg.includes('CORS') || 
         msg.includes('ERR_FAILED') || 
@@ -225,7 +221,6 @@ class RPCProviderService {
         msg.includes('NetworkError') ||
         msg.includes('Timeout') ||
         msg.includes('429')) {
-      // Never show network busy message - just return null to suppress
       return null;
     }
     
@@ -266,7 +261,6 @@ class RPCProviderService {
       return 'Amount too large - try a smaller value';
     }
     if (msg.includes('execution reverted')) {
-      // Try to extract reason from reverted message
       const reasonMatch = msg.match(/reason="([^"]+)"/);
       if (reasonMatch) {
         return `Transaction failed: ${reasonMatch[1]}`;
@@ -280,7 +274,6 @@ class RPCProviderService {
       return 'Gas price too low - please wait for pending transaction';
     }
     
-    // For user-initiated actions, show generic error only when showTransient is true
     if (showTransient) {
       return error?.reason || 'Transaction failed - please try again';
     }
@@ -288,14 +281,159 @@ class RPCProviderService {
     return null;
   }
 
-  // Process request queue with rate limiting
+  // === BATCHING METHODS ===
+  
+  // Execute batch of RPC calls
+  private async executeBatch() {
+    if (this.batchQueue.length === 0) return;
+    
+    const batch = this.batchQueue.splice(0, this.batchMaxSize);
+    
+    if (!this.provider || !this.providerReady) {
+      batch.forEach(req => req.reject(new Error('Provider not available')));
+      return;
+    }
+    
+    try {
+      // Create JSON-RPC batch request
+      const batchRequest = batch.map((req, index) => ({
+        jsonrpc: '2.0',
+        id: index + 1,
+        method: req.method,
+        params: req.params
+      }));
+      
+      // Send batch request
+      const response = await fetch(this.provider._getConnection().url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batchRequest)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      
+      const results = await response.json();
+      
+      // Handle array response (batch)
+      if (Array.isArray(results)) {
+        results.forEach((result: any) => {
+          const req = batch[result.id - 1];
+          if (req) {
+            if (result.error) {
+              req.reject(result.error);
+            } else {
+              req.resolve(result.result);
+            }
+          }
+        });
+      } else if (results.error) {
+        // Single error response
+        batch.forEach(req => req.reject(results.error));
+      } else {
+        // Single result (shouldn't happen with batch)
+        batch[0]?.resolve(results.result);
+      }
+      
+      // Reset error count on success
+      this.consecutiveErrors = 0;
+      this.lastSuccessTime = Date.now();
+      
+    } catch (error) {
+      // Fallback to individual calls
+      await this.handleError(error);
+      
+      for (const req of batch) {
+        try {
+          const result = await this.provider!.send(req.method, req.params);
+          req.resolve(result);
+        } catch (e) {
+          req.reject(e);
+        }
+      }
+    }
+    
+    // Process remaining queue
+    if (this.batchQueue.length > 0) {
+      this.scheduleBatch();
+    }
+  }
+  
+  private scheduleBatch() {
+    if (this.batchTimeout) return;
+    
+    this.batchTimeout = setTimeout(() => {
+      this.batchTimeout = null;
+      this.executeBatch();
+    }, this.batchDelayMs);
+    
+    // Execute immediately if batch is full
+    if (this.batchQueue.length >= this.batchMaxSize) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+      this.executeBatch();
+    }
+  }
+  
+  // Batch RPC call
+  batchCall(method: string, params: any[] = []): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.batchQueue.push({ method, params, resolve, reject });
+      this.scheduleBatch();
+    });
+  }
+  
+  // Batch multiple contract calls together
+  async batchContractCalls<T>(
+    calls: Array<{ contract: ethers.Contract; method: string; args: any[] }>,
+    cacheKeyPrefix?: string
+  ): Promise<Array<T | null>> {
+    const results: Array<T | null> = [];
+    const pendingCalls: Array<{ index: number; call: () => Promise<T> }> = [];
+    
+    // Check cache first
+    for (let i = 0; i < calls.length; i++) {
+      const cacheKey = cacheKeyPrefix ? `${cacheKeyPrefix}_${i}` : null;
+      if (cacheKey) {
+        const cached = this.getFromCache(cacheKey);
+        if (cached !== null) {
+          results[i] = cached;
+          continue;
+        }
+      }
+      results[i] = null;
+      pendingCalls.push({
+        index: i,
+        call: () => calls[i].contract[calls[i].method](...calls[i].args)
+      });
+    }
+    
+    if (pendingCalls.length === 0) return results;
+    
+    // Execute pending calls in parallel batches
+    const batchSize = 5;
+    for (let i = 0; i < pendingCalls.length; i += batchSize) {
+      const batch = pendingCalls.slice(i, i + batchSize);
+      const batchResults = await Promise.allSettled(
+        batch.map(p => this.call(p.call, cacheKeyPrefix ? `${cacheKeyPrefix}_${p.index}` : undefined))
+      );
+      
+      batchResults.forEach((result, idx) => {
+        const originalIndex = batch[idx].index;
+        results[originalIndex] = result.status === 'fulfilled' ? result.value : null;
+      });
+    }
+    
+    return results;
+  }
+
   private async processQueue() {
     if (this.isProcessingQueue || this.requestQueue.length === 0) return;
     this.isProcessingQueue = true;
 
     while (this.requestQueue.length > 0) {
       if (!this.isAvailable()) {
-        // Wait for cooldown to end
         const wait = Math.max(1000, this.getCooldownRemaining());
         await new Promise(r => setTimeout(r, wait));
         continue;
@@ -311,8 +449,7 @@ class RPCProviderService {
       const nextRequest = this.requestQueue.shift();
       if (nextRequest) nextRequest();
       
-      // Small delay between queue items
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 50));
     }
 
     this.isProcessingQueue = false;
@@ -323,13 +460,11 @@ class RPCProviderService {
     cacheKey?: string,
     options?: { skipCache?: boolean; timeout?: number; retries?: number }
   ): Promise<T | null> {
-    // Check cache first
     if (cacheKey && !options?.skipCache) {
       const cached = this.getFromCache(cacheKey);
       if (cached !== null) return cached;
     }
 
-    // Dedupe identical pending requests
     if (cacheKey && this.pendingRequests.has(cacheKey)) {
       try {
         return await this.pendingRequests.get(cacheKey);
@@ -338,7 +473,6 @@ class RPCProviderService {
       }
     }
 
-    // If in cooldown, return cached value or null silently
     if (!this.isAvailable()) {
       if (cacheKey) {
         const cached = this.cache.get(cacheKey);
@@ -347,10 +481,9 @@ class RPCProviderService {
       return null;
     }
 
-    // Don't throttle - let requests go through faster
     this.lastRequestTime = Date.now();
 
-    const timeout = options?.timeout || 15000; // 15s default timeout
+    const timeout = options?.timeout || 15000;
     const maxRetries = options?.retries ?? 2;
 
     const executeCall = async (attempt: number): Promise<T | null> => {
@@ -366,7 +499,6 @@ class RPCProviderService {
           this.setCache(cacheKey, result);
         }
         
-        // Reset on success
         this.consecutiveErrors = 0;
         this.errorCount = Math.max(0, this.errorCount - 5);
         this.minRequestInterval = 100;
@@ -376,7 +508,6 @@ class RPCProviderService {
       } catch (error: any) {
         const errorMsg = error?.message || String(error);
         
-        // Identify transient/network errors
         const isTransient = errorMsg.includes('coalesce') || 
                            errorMsg.includes('CORS') || 
                            errorMsg.includes('429') ||
@@ -387,17 +518,14 @@ class RPCProviderService {
                            errorMsg.includes('ERR_FAILED') ||
                            errorMsg.includes('eth_maxPriorityFeePerGas');
         
-        // Retry on transient errors with backoff
         if (attempt < maxRetries && isTransient) {
           const delay = 800 * (attempt + 1);
           await new Promise(r => setTimeout(r, delay));
           return executeCall(attempt + 1);
         }
         
-        // Handle error (may switch RPC)
         await this.handleError(error);
         
-        // Return cached data if available
         if (cacheKey) {
           const cached = this.cache.get(cacheKey);
           if (cached) return cached.data;
@@ -416,7 +544,6 @@ class RPCProviderService {
     return promise;
   }
 
-  // Force reset all state
   reset() {
     this.errorCount = 0;
     this.consecutiveErrors = 0;
@@ -424,6 +551,11 @@ class RPCProviderService {
     this.minRequestInterval = 100;
     this.pendingRequests.clear();
     this.requestQueue = [];
+    this.batchQueue = [];
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+    }
   }
 
   clearCache() {
