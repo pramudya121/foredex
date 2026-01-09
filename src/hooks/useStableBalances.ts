@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { TokenInfo } from '@/config/contracts';
 import { ERC20_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
+import { sharedBalanceCache, SHARED_CACHE_TTL } from './useTokenBalances';
 
 interface BalanceCache {
   [key: string]: {
@@ -11,9 +12,9 @@ interface BalanceCache {
   };
 }
 
-// Global balance cache shared across all hook instances
-const globalBalanceCache: BalanceCache = {};
-const BALANCE_CACHE_TTL = 30000; // 30 seconds - shorter for faster updates
+// Use the shared balance cache from useTokenBalances
+const globalBalanceCache = sharedBalanceCache;
+const BALANCE_CACHE_TTL = SHARED_CACHE_TTL;
 const pendingRequests = new Map<string, Promise<string>>();
 
 // Consistent cache key format
@@ -249,21 +250,25 @@ export function useTokenPairBalances(
   const fetchCountRef = useRef(0);
   const lastFetchRef = useRef(0);
 
-  // Initialize from cache immediately
+  // Initialize from cache immediately and trigger fetch for new tokens
   useEffect(() => {
     if (tokenA) {
       const tokenAddr = tokenA.address === '0x0000000000000000000000000000000000000000' 
         ? '0x0000000000000000000000000000000000000000' 
         : tokenA.address;
       const cached = getCachedBalance(address, tokenAddr);
-      if (cached !== '0') setBalanceA(cached);
+      setBalanceA(cached);
+    } else {
+      setBalanceA('0');
     }
     if (tokenB) {
       const tokenAddr = tokenB.address === '0x0000000000000000000000000000000000000000' 
         ? '0x0000000000000000000000000000000000000000' 
         : tokenB.address;
       const cached = getCachedBalance(address, tokenAddr);
-      if (cached !== '0') setBalanceB(cached);
+      setBalanceB(cached);
+    } else {
+      setBalanceB('0');
     }
   }, [address, tokenA?.address, tokenB?.address]);
 
@@ -367,13 +372,18 @@ export function useTokenPairBalances(
     }
   }, [address, tokenA, tokenB]);
 
-  // Fetch when dependencies change
+  // Fetch immediately when dependencies change - with immediate execution
   useEffect(() => {
     mountedRef.current = true;
-    fetchBalances();
+    
+    // Immediate fetch when token changes (with short delay to avoid race conditions)
+    const timeout = setTimeout(() => {
+      fetchBalances(true); // Force fetch when token changes
+    }, 100);
     
     return () => {
       mountedRef.current = false;
+      clearTimeout(timeout);
     };
   }, [address, tokenA?.address, tokenB?.address]);
 
