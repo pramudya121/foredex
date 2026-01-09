@@ -4,7 +4,7 @@ import { useWeb3 } from '@/contexts/Web3Context';
 import { TokenSelect } from './TokenSelect';
 import { SlippageSettings } from './SlippageSettings';
 import { PriceImpactWarning, PriceImpactBadge, SlippageProtection, getPriceImpactSeverity } from './PriceImpactWarning';
-import { RouteDisplay, CompactRoute } from './RouteDisplay';
+import { RouteDisplay, CompactRoute, RouteComparison } from './RouteDisplay';
 import { SwapConfirmation } from './SwapConfirmation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +48,7 @@ export function SwapCard() {
   const [priceImpact, setPriceImpact] = useState(0);
   const [bestRoute, setBestRoute] = useState<SwapRoute | null>(null);
   const [allRoutes, setAllRoutes] = useState<SwapRoute[]>([]);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [reserves, setReserves] = useState<{ reserveA: bigint; reserveB: bigint }>({ reserveA: BigInt(0), reserveB: BigInt(0) });
   
   // Use stable balance hook
@@ -339,7 +340,7 @@ export function SwapCard() {
   };
 
   const handleSwap = async () => {
-    if (!signer || !tokenIn || !tokenOut || !amountIn || !provider) return;
+    if (!signer || !tokenIn || !tokenOut || !amountIn || !amountOut || !provider) return;
 
     // Check price impact and show warning
     const severity = getPriceImpactSeverity(priceImpact);
@@ -352,73 +353,132 @@ export function SwapCard() {
     setLoading(true);
     try {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
-      const amountInWei = ethers.parseUnits(amountIn, tokenIn.decimals);
-      const amountOutMin = ethers.parseUnits(
-        (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(tokenOut.decimals),
-        tokenOut.decimals
-      );
       
       // Use block timestamp to avoid clock sync issues
       const block = await provider.getBlock('latest');
       const txDeadline = (block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline;
       
-      // Use multi-hop path if available, otherwise direct path
-      const path = bestRoute && bestRoute.path.length > 2 
-        ? bestRoute.pathAddresses 
+      // Use selected route path if available, otherwise direct path
+      const selectedRoute = allRoutes[selectedRouteIndex] || bestRoute;
+      const path = selectedRoute && selectedRoute.path.length > 2 
+        ? selectedRoute.pathAddresses 
         : [getTokenAddress(tokenIn), getTokenAddress(tokenOut)];
 
       let tx;
 
-      if (isNativeToken(tokenIn)) {
-        // ETH -> Token (can be multi-hop)
-        tx = await router.swapExactETHForTokens(
-          amountOutMin,
-          path,
-          address,
-          txDeadline,
-          { value: amountInWei }
+      if (isExactOutput) {
+        // === EXACT OUTPUT SWAP ===
+        // User specifies exact amount they want to receive
+        const amountOutWei = ethers.parseUnits(amountOut, tokenOut.decimals);
+        const amountInMax = ethers.parseUnits(
+          (parseFloat(amountIn) * (1 + slippage / 100)).toFixed(tokenIn.decimals),
+          tokenIn.decimals
         );
-      } else if (isNativeToken(tokenOut)) {
-        // Token -> ETH
-        const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        if (allowance < amountInWei) {
-          const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-          toast.success('Token approved!');
-        }
-        
-        tx = await router.swapExactTokensForETH(
-          amountInWei,
-          amountOutMin,
-          path,
-          address,
-          txDeadline
-        );
-      } else {
-        // Token -> Token (can be multi-hop)
-        const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
-        if (allowance < amountInWei) {
-          const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-          toast.success('Token approved!');
-        }
 
-        tx = await router.swapExactTokensForTokens(
-          amountInWei,
-          amountOutMin,
-          path,
-          address,
-          txDeadline
+        if (isNativeToken(tokenIn)) {
+          // ETH -> Exact Token (swapETHForExactTokens)
+          tx = await router.swapETHForExactTokens(
+            amountOutWei,
+            path,
+            address,
+            txDeadline,
+            { value: amountInMax }
+          );
+        } else if (isNativeToken(tokenOut)) {
+          // Token -> Exact ETH (swapTokensForExactETH)
+          const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          if (allowance < amountInMax) {
+            const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+            await approveTx.wait();
+            toast.success('Token approved!');
+          }
+          
+          tx = await router.swapTokensForExactETH(
+            amountOutWei,
+            amountInMax,
+            path,
+            address,
+            txDeadline
+          );
+        } else {
+          // Token -> Exact Token (swapTokensForExactTokens)
+          const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          if (allowance < amountInMax) {
+            const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+            await approveTx.wait();
+            toast.success('Token approved!');
+          }
+
+          tx = await router.swapTokensForExactTokens(
+            amountOutWei,
+            amountInMax,
+            path,
+            address,
+            txDeadline
+          );
+        }
+      } else {
+        // === EXACT INPUT SWAP ===
+        // User specifies exact amount they want to spend
+        const amountInWei = ethers.parseUnits(amountIn, tokenIn.decimals);
+        const amountOutMin = ethers.parseUnits(
+          (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(tokenOut.decimals),
+          tokenOut.decimals
         );
+
+        if (isNativeToken(tokenIn)) {
+          // Exact ETH -> Token (swapExactETHForTokens)
+          tx = await router.swapExactETHForTokens(
+            amountOutMin,
+            path,
+            address,
+            txDeadline,
+            { value: amountInWei }
+          );
+        } else if (isNativeToken(tokenOut)) {
+          // Exact Token -> ETH (swapExactTokensForETH)
+          const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          if (allowance < amountInWei) {
+            const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+            await approveTx.wait();
+            toast.success('Token approved!');
+          }
+          
+          tx = await router.swapExactTokensForETH(
+            amountInWei,
+            amountOutMin,
+            path,
+            address,
+            txDeadline
+          );
+        } else {
+          // Exact Token -> Token (swapExactTokensForTokens)
+          const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
+          const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
+          if (allowance < amountInWei) {
+            const approveTx = await tokenContract.approve(CONTRACTS.ROUTER, ethers.MaxUint256);
+            await approveTx.wait();
+            toast.success('Token approved!');
+          }
+
+          tx = await router.swapExactTokensForTokens(
+            amountInWei,
+            amountOutMin,
+            path,
+            address,
+            txDeadline
+          );
+        }
       }
 
       // Add transaction to history
       addTransaction(address, {
         hash: tx.hash,
         type: 'swap',
-        description: `Swap ${amountIn} ${tokenIn.symbol} → ${tokenOut.symbol}`,
+        description: `Swap ${amountIn} ${tokenIn.symbol} → ${amountOut} ${tokenOut.symbol}`,
         timestamp: Date.now(),
         status: 'pending',
       });
@@ -435,6 +495,7 @@ export function SwapCard() {
       setShowConfirmation(false);
       setAmountIn('');
       setAmountOut('');
+      setIsExactOutput(false);
       
       // Force refresh balances after transaction
       setTimeout(() => {
@@ -450,6 +511,18 @@ export function SwapCard() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle route selection
+  const handleRouteSelect = (index: number) => {
+    setSelectedRouteIndex(index);
+    if (allRoutes[index]) {
+      const route = allRoutes[index];
+      setBestRoute(route);
+      const outAmount = ethers.formatUnits(route.amountOut, tokenOut?.decimals || 18);
+      setAmountOut(parseFloat(outAmount).toFixed(6));
+      setPriceImpact(route.priceImpact);
     }
   };
 
@@ -629,7 +702,19 @@ export function SwapCard() {
 
       {/* Route Display */}
       {bestRoute && amountIn && (
-        <RouteDisplay route={bestRoute} isLoading={quoting} className="mb-4" />
+        <RouteDisplay route={bestRoute} isLoading={quoting} className="mb-4" showDetails={false} />
+      )}
+
+      {/* Route Comparison - show when multiple routes available */}
+      {allRoutes.length > 1 && amountIn && tokenOut && (
+        <div className="mb-4">
+          <RouteComparison 
+            routes={allRoutes} 
+            selectedIndex={selectedRouteIndex}
+            onSelect={handleRouteSelect}
+            tokenOutDecimals={tokenOut.decimals}
+          />
+        </div>
       )}
 
       {/* Swap Button */}
@@ -687,9 +772,12 @@ export function SwapCard() {
             <span>{slippage}%</span>
           </div>
           <div className="flex justify-between text-muted-foreground">
-            <span>Minimum Received</span>
+            <span>{isExactOutput ? 'Maximum Spent' : 'Minimum Received'}</span>
             <span>
-              {(parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)} {tokenOut.symbol}
+              {isExactOutput 
+                ? `${(parseFloat(amountIn) * (1 + slippage / 100)).toFixed(6)} ${tokenIn.symbol}`
+                : `${(parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)} ${tokenOut.symbol}`
+              }
             </span>
           </div>
           
