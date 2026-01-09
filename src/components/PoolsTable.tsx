@@ -185,44 +185,61 @@ function PoolsTableInner() {
       const totalPairs = Number(pairCount);
       const fetchedPools: Pool[] = [];
 
-      // Fetch all pairs - no limit
-      const pairPromises = [];
+      // Use batch RPC to fetch all pair addresses efficiently
+      const pairAddressCalls = [];
       for (let i = 0; i < totalPairs; i++) {
-        pairPromises.push(
-          rpcProvider.call(() => factory.allPairs(i), `poolsTable_pair_${i}`)
+        pairAddressCalls.push(
+          rpcProvider.batchCall('eth_call', [
+            {
+              to: CONTRACTS.FACTORY,
+              data: factory.interface.encodeFunctionData('allPairs', [i])
+            },
+            'latest'
+          ])
         );
       }
 
-      const pairAddresses = await Promise.all(pairPromises);
+      const pairAddressResults = await Promise.all(pairAddressCalls);
+      const pairAddresses = pairAddressResults.map(result => {
+        if (!result) return null;
+        try {
+          return factory.interface.decodeFunctionResult('allPairs', result)[0];
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
 
-      // Fetch pair data in parallel batches
-      const BATCH_SIZE = 5; // Slightly larger batch for efficiency
+      // Fetch pair data using batchContractCalls for better efficiency
+      const BATCH_SIZE = 8; // Larger batch with batched RPC
       for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
         const batch = pairAddresses.slice(i, i + BATCH_SIZE);
+        
         const batchPromises = batch.map(async (pairAddress) => {
           if (!pairAddress) return null;
           
           try {
             const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
 
-            // Build promises array with optional user balance
-            const dataPromises: Promise<any>[] = [
-              rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
-              rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
-              rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`),
-              rpcProvider.call(() => pair.totalSupply(), `supply_${pairAddress}`),
+            // Use batchContractCalls for efficient data fetching
+            const calls = [
+              { contract: pair, method: 'token0', args: [] },
+              { contract: pair, method: 'token1', args: [] },
+              { contract: pair, method: 'getReserves', args: [] },
+              { contract: pair, method: 'totalSupply', args: [] },
             ];
 
-            // Add user balance fetch if connected
+            // Add user balance if connected
             if (userAddress && isConnected) {
-              dataPromises.push(
-                rpcProvider.call(() => pair.balanceOf(userAddress), `userLp_${pairAddress}_${userAddress}`)
-              );
+              calls.push({ contract: pair, method: 'balanceOf', args: [userAddress] });
             }
 
-            const results = await Promise.all(dataPromises);
-            const [token0Addr, token1Addr, reserves, totalSupply] = results;
-            const userLpBalanceRaw = results[4];
+            const results = await rpcProvider.batchContractCalls(
+              calls,
+              `pool_${pairAddress}`
+            );
+
+            const [token0Addr, token1Addr, reserves, totalSupply] = results as [string, string, any, bigint];
+            const userLpBalanceRaw = results[4] as bigint | undefined;
 
             if (!token0Addr || !token1Addr || !reserves || !totalSupply) return null;
 
@@ -282,9 +299,9 @@ function PoolsTableInner() {
           if (result) fetchedPools.push(result);
         });
         
-        // Small delay between batches to avoid rate limiting
+        // Minimal delay between batches - batch RPC is more efficient
         if (i + BATCH_SIZE < pairAddresses.length) {
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 100));
         }
       }
 
