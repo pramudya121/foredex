@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface PoolStats {
   totalPools: number;
@@ -21,54 +22,27 @@ export interface PoolData {
   tvl: number;
 }
 
-// Generate realistic fallback data based on known tokens
-function generateFallbackPools(): PoolData[] {
-  const tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
-  const pools: PoolData[] = [];
-  
-  // Realistic TVL values for testnet pools (in token units, assuming ~$1 per token for display)
-  const tvlValues = [150000, 95000, 72000, 58000, 45000, 32000];
-  let tvlIndex = 0;
-  
-  for (let i = 0; i < tokens.length - 1 && pools.length < 6; i++) {
-    for (let j = i + 1; j < tokens.length && pools.length < 6; j++) {
-      const tvl = tvlValues[tvlIndex++] || 25000;
-      pools.push({
-        address: `0x${String(pools.length).padStart(40, '0')}`,
-        token0: { address: tokens[i].address, symbol: tokens[i].symbol, name: tokens[i].name, logoURI: tokens[i].logoURI },
-        token1: { address: tokens[j].address, symbol: tokens[j].symbol, name: tokens[j].name, logoURI: tokens[j].logoURI },
-        reserve0: String(tvl / 2),
-        reserve1: String(tvl / 2),
-        totalSupply: String(tvl),
-        tvl,
-      });
-    }
-  }
-  return pools;
+// Cache for pool stats - global singleton
+interface PoolStatsCache {
+  stats: PoolStats;
+  pools: PoolData[];
+  timestamp: number;
+  poolCount: number; // Store actual pool count from chain
 }
 
-// Cache for pool stats
-let poolStatsCache: { stats: PoolStats; pools: PoolData[]; timestamp: number } | null = null;
+let poolStatsCache: PoolStatsCache | null = null;
 const CACHE_TTL = 30000; // 30 seconds
 
-// Precomputed fallback
-const FALLBACK_POOLS = generateFallbackPools();
-const FALLBACK_STATS: PoolStats = {
-  totalPools: 6,
-  totalTVL: FALLBACK_POOLS.reduce((sum, p) => sum + p.tvl, 0),
-  volume24h: FALLBACK_POOLS.reduce((sum, p) => sum + p.tvl, 0) * 0.15,
-  totalFees: FALLBACK_POOLS.reduce((sum, p) => sum + p.tvl, 0) * 0.15 * 0.003,
-  loading: false,
-};
+// Get token info helper
+function getTokenInfo(addr: string): { address: string; symbol: string; name: string; logoURI?: string } {
+  const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+  if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+  return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown', logoURI: undefined };
+}
 
-// Create direct provider
-function createProvider(): ethers.JsonRpcProvider {
-  const network = { chainId: NEXUS_TESTNET.chainId, name: NEXUS_TESTNET.name };
-  return new ethers.JsonRpcProvider(
-    NEXUS_TESTNET.rpcUrl,
-    network,
-    { staticNetwork: ethers.Network.from(network), batchMaxCount: 1 }
-  );
+// Clear cache function exported for use after adding liquidity
+export function clearPoolStatsCache() {
+  poolStatsCache = null;
 }
 
 export function usePoolStats() {
@@ -76,24 +50,26 @@ export function usePoolStats() {
     if (poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL * 2) {
       return { ...poolStatsCache.stats, loading: false };
     }
-    return { ...FALLBACK_STATS, loading: true };
+    return { totalPools: 0, totalTVL: 0, volume24h: 0, totalFees: 0, loading: true };
   });
   
   const [pools, setPools] = useState<PoolData[]>(() => {
     if (poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL * 2) {
       return poolStatsCache.pools;
     }
-    return FALLBACK_POOLS;
+    return [];
   });
   
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isFetchingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const retryCountRef = useRef(0);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (forceRefresh = false) => {
     if (isFetchingRef.current) return;
     
     // Check cache first
-    if (poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL) {
+    if (!forceRefresh && poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL) {
       setStats({ ...poolStatsCache.stats, loading: false });
       setPools(poolStatsCache.pools);
       return;
@@ -102,101 +78,194 @@ export function usePoolStats() {
     isFetchingRef.current = true;
     setIsRefreshing(true);
     
+    // Only show loading spinner on first load, not refreshes
+    if (pools.length === 0) {
+      setStats(prev => ({ ...prev, loading: true }));
+    }
+    
     try {
-      const provider = createProvider();
-      const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
-      
-      const pairCount = await factory.allPairsLength();
-      const totalPools = Number(pairCount);
-      
-      if (totalPools === 0) {
-        setStats(FALLBACK_STATS);
-        setPools(FALLBACK_POOLS);
-        setIsRefreshing(false);
-        isFetchingRef.current = false;
+      const provider = rpcProvider.getProvider();
+      if (!provider || !rpcProvider.isAvailable()) {
+        console.warn('[usePoolStats] RPC not available, retrying...');
+        if (retryCountRef.current < 3) {
+          retryCountRef.current++;
+          setTimeout(() => {
+            isFetchingRef.current = false;
+            fetchStats(forceRefresh);
+          }, 2000 * retryCountRef.current);
+        }
         return;
       }
 
-      let totalTVL = 0;
-      const validPools: PoolData[] = [];
-
-      // Fetch pools data
-      const poolsToFetch = Math.min(totalPools, 10);
+      const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
       
-      for (let i = 0; i < poolsToFetch; i++) {
+      // Get actual pool count with retry
+      let pairCount: bigint;
+      try {
+        pairCount = await rpcProvider.call(
+          () => factory.allPairsLength(),
+          'poolStats_allPairsLength',
+          { retries: 3, timeout: 15000, skipCache: forceRefresh }
+        );
+      } catch (e) {
+        console.error('[usePoolStats] Failed to get pair count:', e);
+        isFetchingRef.current = false;
+        setIsRefreshing(false);
+        return;
+      }
+      
+      if (pairCount === null || pairCount === undefined) {
+        isFetchingRef.current = false;
+        setIsRefreshing(false);
+        return;
+      }
+      
+      const totalPools = Number(pairCount);
+      console.log('[usePoolStats] Total pools from chain:', totalPools);
+      
+      if (totalPools === 0) {
+        const emptyStats = { totalPools: 0, totalTVL: 0, volume24h: 0, totalFees: 0, loading: false };
+        setStats(emptyStats);
+        setPools([]);
+        poolStatsCache = { stats: emptyStats, pools: [], timestamp: Date.now(), poolCount: 0 };
+        setIsRefreshing(false);
+        isFetchingRef.current = false;
+        retryCountRef.current = 0;
+        return;
+      }
+
+      // Fetch all pools - no limit
+      const validPools: PoolData[] = [];
+      let totalTVL = 0;
+
+      // Batch fetch pair addresses first
+      const pairAddresses: string[] = [];
+      for (let i = 0; i < totalPools; i++) {
         try {
-          const pairAddress = await factory.allPairs(i);
-          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-          
-          const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-            pair.token0(),
-            pair.token1(),
-            pair.getReserves(),
-            pair.totalSupply(),
-          ]);
-
-          const getTokenInfo = (addr: string) => {
-            const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-            if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
-            return { address: addr, symbol: addr.slice(0, 6), name: 'Unknown', logoURI: undefined };
-          };
-
-          const token0 = getTokenInfo(token0Addr);
-          const token1 = getTokenInfo(token1Addr);
-
-          const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-          const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-          const tvl = reserve0 + reserve1;
-
-          validPools.push({
-            address: pairAddress,
-            token0,
-            token1,
-            reserve0: ethers.formatEther(reserves[0]),
-            reserve1: ethers.formatEther(reserves[1]),
-            totalSupply: ethers.formatEther(totalSupply),
-            tvl,
-          });
-
-          totalTVL += tvl;
+          const pairAddress = await rpcProvider.call(
+            () => factory.allPairs(i),
+            `pool_address_${i}`,
+            { retries: 2, timeout: 10000 }
+          );
+          if (pairAddress && pairAddress !== ethers.ZeroAddress) {
+            pairAddresses.push(pairAddress);
+          }
         } catch {
-          continue;
+          console.warn(`[usePoolStats] Failed to get pair ${i}`);
         }
       }
 
-      if (validPools.length > 0) {
-        const volume24h = totalTVL * 0.15;
-        const totalFees = volume24h * 0.003;
+      console.log('[usePoolStats] Found pair addresses:', pairAddresses.length);
 
-        const newStats = {
-          totalPools,
-          totalTVL,
-          volume24h,
-          totalFees,
-          loading: false,
-        };
+      // Fetch pool data in batches
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
+        const batch = pairAddresses.slice(i, i + BATCH_SIZE);
+        
+        const batchResults = await Promise.all(
+          batch.map(async (pairAddress) => {
+            try {
+              const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+              
+              const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+                rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`, { retries: 2 }),
+                rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`, { retries: 2 }),
+                rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`, { retries: 2, skipCache: forceRefresh }),
+                rpcProvider.call(() => pair.totalSupply(), `supply_${pairAddress}`, { retries: 2, skipCache: forceRefresh }),
+              ]);
 
-        poolStatsCache = { stats: newStats, pools: validPools, timestamp: Date.now() };
-        setPools(validPools);
-        setStats(newStats);
-      } else {
-        setStats(FALLBACK_STATS);
-        setPools(FALLBACK_POOLS);
+              if (!token0Addr || !token1Addr || !reserves || !totalSupply) {
+                return null;
+              }
+
+              const token0 = getTokenInfo(token0Addr);
+              const token1 = getTokenInfo(token1Addr);
+
+              const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+              const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+              const tvl = reserve0 + reserve1;
+
+              return {
+                address: pairAddress,
+                token0,
+                token1,
+                reserve0: ethers.formatEther(reserves[0]),
+                reserve1: ethers.formatEther(reserves[1]),
+                totalSupply: ethers.formatEther(totalSupply),
+                tvl,
+              };
+            } catch (e) {
+              console.warn(`[usePoolStats] Failed to fetch pool ${pairAddress}:`, e);
+              return null;
+            }
+          })
+        );
+
+        batchResults.forEach(result => {
+          if (result) {
+            validPools.push(result);
+            totalTVL += result.tvl;
+          }
+        });
+
+        // Small delay between batches
+        if (i + BATCH_SIZE < pairAddresses.length) {
+          await new Promise(r => setTimeout(r, 100));
+        }
       }
-    } catch {
-      setStats(FALLBACK_STATS);
-      setPools(FALLBACK_POOLS);
+
+      console.log('[usePoolStats] Valid pools fetched:', validPools.length);
+
+      if (!mountedRef.current) return;
+
+      const volume24h = totalTVL * 0.15;
+      const totalFees = volume24h * 0.003;
+
+      const newStats: PoolStats = {
+        totalPools: validPools.length, // Use actual valid pool count
+        totalTVL,
+        volume24h,
+        totalFees,
+        loading: false,
+      };
+
+      // Update cache with actual pool count
+      poolStatsCache = { 
+        stats: newStats, 
+        pools: validPools, 
+        timestamp: Date.now(),
+        poolCount: totalPools
+      };
+      
+      setPools(validPools);
+      setStats(newStats);
+      retryCountRef.current = 0;
+      
+    } catch (error) {
+      console.error('[usePoolStats] Error fetching stats:', error);
+      // Keep existing data on error
     } finally {
       setIsRefreshing(false);
       isFetchingRef.current = false;
     }
-  }, []);
+  }, [pools.length]);
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchStats();
-    const interval = setInterval(fetchStats, 45000);
-    return () => clearInterval(interval);
+    
+    const interval = setInterval(() => fetchStats(), 60000);
+    
+    return () => {
+      mountedRef.current = false;
+      clearInterval(interval);
+    };
   }, [fetchStats]);
 
-  return { stats, pools, refetch: fetchStats, isRefreshing };
+  const refetch = useCallback(() => {
+    clearPoolStatsCache();
+    fetchStats(true);
+  }, [fetchStats]);
+
+  return { stats, pools, refetch, isRefreshing };
 }

@@ -4,6 +4,7 @@ import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
 import { FARMING_ABI } from '@/config/farmingAbi';
 import { ERC20_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
 
 export interface PoolInfo {
   pid: number;
@@ -30,17 +31,15 @@ interface FarmingCache {
   pools: PoolInfo[];
   stats: FarmingStats | null;
   timestamp: number;
+  poolCount: number;
 }
 
 const CACHE_TTL = 45000; // 45 seconds
 let farmingCache: FarmingCache | null = null;
 
-// Use centralized RPC provider
-import { rpcProvider } from '@/lib/rpcProvider';
-
-const getProvider = () => {
-  return rpcProvider.getProvider();
-};
+export function clearFarmingCache() {
+  farmingCache = null;
+}
 
 const getTokenSymbol = (tokenAddress: string): string => {
   const token = TOKEN_LIST.find(
@@ -48,22 +47,6 @@ const getTokenSymbol = (tokenAddress: string): string => {
   );
   return token?.symbol || tokenAddress.slice(0, 6) + '...';
 };
-
-// Retry helper
-async function retry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
-  let lastError: Error | null = null;
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err as Error;
-      if (i < retries - 1) {
-        await new Promise(r => setTimeout(r, delay * (i + 1)));
-      }
-    }
-  }
-  throw lastError;
-}
 
 export function useFarmingData() {
   const { address, signer } = useWeb3();
@@ -75,6 +58,7 @@ export function useFarmingData() {
   const fetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const initialFetchDone = useRef(false);
+  const retryCountRef = useRef(0);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     // Prevent concurrent fetches
@@ -89,226 +73,253 @@ export function useFarmingData() {
 
     fetchingRef.current = true;
     
-    // Only show loading on initial fetch, not refreshes
+    // Only show loading on initial fetch
     if (!initialFetchDone.current && pools.length === 0) {
       setLoading(true);
     }
     
     try {
       setError(null);
-      const provider = getProvider();
-      if (!provider) {
-        setError('RPC provider not available');
+      const provider = rpcProvider.getProvider();
+      if (!provider || !rpcProvider.isAvailable()) {
+        console.warn('[useFarmingData] RPC not available');
+        if (retryCountRef.current < 3) {
+          retryCountRef.current++;
+          setTimeout(() => {
+            fetchingRef.current = false;
+            fetchData(forceRefresh);
+          }, 2000 * retryCountRef.current);
+        }
         return;
       }
+      
       const farmingContract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, provider);
 
-      // Fetch basic contract info with retry
-      const contractInfo = await retry(async () => {
-        const [rewardToken, rewardPerBlock, totalAllocPoint, isPaused, poolLength, owner] = await Promise.all([
-          farmingContract.rewardToken(),
-          farmingContract.rewardPerBlock(),
-          farmingContract.totalAllocPoint(),
-          farmingContract.paused(),
-          farmingContract.poolLength(),
-          farmingContract.owner(),
+      // Fetch basic contract info with proper error handling
+      let rewardToken: string, rewardPerBlock: bigint, totalAllocPoint: bigint, isPaused: boolean, poolLength: bigint, owner: string;
+      
+      try {
+        [rewardToken, rewardPerBlock, totalAllocPoint, isPaused, poolLength, owner] = await Promise.all([
+          rpcProvider.call(() => farmingContract.rewardToken(), 'farming_rewardToken', { retries: 3 }),
+          rpcProvider.call(() => farmingContract.rewardPerBlock(), 'farming_rewardPerBlock', { retries: 3, skipCache: forceRefresh }),
+          rpcProvider.call(() => farmingContract.totalAllocPoint(), 'farming_totalAllocPoint', { retries: 3, skipCache: forceRefresh }),
+          rpcProvider.call(() => farmingContract.paused(), 'farming_paused', { retries: 2 }),
+          rpcProvider.call(() => farmingContract.poolLength(), 'farming_poolLength', { retries: 3, skipCache: forceRefresh }),
+          rpcProvider.call(() => farmingContract.owner(), 'farming_owner', { retries: 2 }),
         ]);
-        return { rewardToken, rewardPerBlock, totalAllocPoint, isPaused, poolLength, owner };
-      }, 3, 2000);
+      } catch (e) {
+        console.error('[useFarmingData] Failed to fetch contract info:', e);
+        fetchingRef.current = false;
+        setLoading(false);
+        return;
+      }
 
       if (!mountedRef.current) return;
 
       // Check owner status
       if (address) {
-        setIsOwner(contractInfo.owner.toLowerCase() === address.toLowerCase());
+        setIsOwner(owner?.toLowerCase() === address.toLowerCase());
       }
 
       // Get reward token symbol
       let rewardTokenSymbol = 'FRDX';
-      try {
-        const rewardTokenContract = new ethers.Contract(contractInfo.rewardToken, ERC20_ABI, provider);
-        rewardTokenSymbol = await rewardTokenContract.symbol();
-      } catch {
-        // Use default
+      if (rewardToken) {
+        try {
+          const rewardTokenContract = new ethers.Contract(rewardToken, ERC20_ABI, provider);
+          rewardTokenSymbol = await rpcProvider.call(
+            () => rewardTokenContract.symbol(),
+            'reward_token_symbol',
+            { retries: 2 }
+          ) || 'FRDX';
+        } catch {
+          // Use default
+        }
       }
 
       const newStats: FarmingStats = {
         rewardTokenSymbol,
-        rewardPerBlock: ethers.formatEther(contractInfo.rewardPerBlock),
-        totalAllocPoint: contractInfo.totalAllocPoint || BigInt(0),
-        isPaused: contractInfo.isPaused || false,
+        rewardPerBlock: rewardPerBlock ? ethers.formatEther(rewardPerBlock) : '0',
+        totalAllocPoint: totalAllocPoint || BigInt(0),
+        isPaused: isPaused || false,
       };
 
       setStats(newStats);
 
-      // Fetch all pools in parallel with better error handling
-      const poolCount = Number(contractInfo.poolLength);
-      const poolPromises: Promise<PoolInfo | null>[] = [];
-
-      for (let pid = 0; pid < poolCount; pid++) {
-        poolPromises.push(
-          (async () => {
-            try {
-              const poolInfo = await retry(() => farmingContract.poolInfo(pid), 2, 1000);
-              const lpToken = poolInfo.lpToken;
-              
-              // Skip if LP token is zero address
-              if (lpToken === ethers.ZeroAddress || !lpToken) {
-                return null;
-              }
-              
-              const lpContract = new ethers.Contract(lpToken, [...PAIR_ABI, ...ERC20_ABI], provider);
-
-              let token0Symbol = 'LP', token1Symbol = '';
-              let totalStaked = '0';
-              let lpValid = true;
-
-              // Verify LP token contract exists by checking code
-              try {
-                const code = await provider.getCode(lpToken);
-                if (code === '0x' || code === '0x0') {
-                  return null; // Skip this pool
-                }
-              } catch {
-                return null;
-              }
-
-              // Try to get pair tokens
-              try {
-                const [t0, t1] = await Promise.all([
-                  lpContract.token0(),
-                  lpContract.token1(),
-                ]);
-                token0Symbol = getTokenSymbol(t0);
-                token1Symbol = getTokenSymbol(t1);
-              } catch {
-                // Single token staking
-                try {
-                  token0Symbol = await lpContract.symbol();
-                } catch {
-                  token0Symbol = 'LP';
-                }
-              }
-
-              // Get total staked - if this fails, the LP token is likely invalid
-              try {
-                const staked = await lpContract.balanceOf(CONTRACTS.FARMING);
-                totalStaked = ethers.formatEther(staked);
-              } catch {
-                return null; // Skip pools where we can't even get total staked
-              }
-
-              // Get user info if connected - with better error handling
-              let userStaked = '0';
-              let pendingReward = '0';
-              let lpBalance = '0';
-
-              if (address) {
-                // Fetch user data separately with individual error handling
-                try {
-                  const userInfo = await farmingContract.userInfo(pid, address);
-                  userStaked = ethers.formatEther(userInfo.amount);
-                } catch (e) {
-                  // Silent fail - user just has 0 staked
-                  userStaked = '0';
-                }
-
-                try {
-                  const pending = await farmingContract.pendingReward(pid, address);
-                  pendingReward = ethers.formatEther(pending);
-                } catch (e) {
-                  // Silent fail - user just has 0 pending
-                  pendingReward = '0';
-                }
-
-                try {
-                  const balance = await lpContract.balanceOf(address);
-                  lpBalance = ethers.formatEther(balance);
-                } catch (e) {
-                  // Silent fail - user just has 0 balance
-                  lpBalance = '0';
-                }
-              }
-
-              // Calculate APR with better handling
-              const rewardPerBlockNum = parseFloat(ethers.formatEther(contractInfo.rewardPerBlock));
-              const totalStakedNum = parseFloat(totalStaked) || 0.001; // Avoid division by 0
-              const allocPointNum = Number(poolInfo.allocPoint);
-              const totalAllocNum = Number(contractInfo.totalAllocPoint) || 1;
-              const blocksPerYear = 15768000; // ~2 sec blocks
-              
-              // Calculate pool's share of rewards
-              const poolShareOfRewards = totalAllocNum > 0 ? allocPointNum / totalAllocNum : 0;
-              const poolRewardPerYear = rewardPerBlockNum * blocksPerYear * poolShareOfRewards;
-              
-              // APR = (rewards per year / total staked) * 100
-              // If total staked is very low, cap APR to prevent absurd numbers
-              let apr = totalStakedNum > 0.001 
-                ? (poolRewardPerYear / totalStakedNum) * 100 
-                : poolRewardPerYear > 0 ? 9999 : 0;
-
-              return {
-                pid,
-                lpToken,
-                allocPoint: poolInfo.allocPoint,
-                token0Symbol,
-                token1Symbol,
-                totalStaked,
-                userStaked,
-                pendingReward,
-                apr: Math.min(apr, 99999),
-                lpBalance,
-              };
-            } catch {
-              // Silent fail - skip problematic pools
-              return null;
-            }
-          })()
-        );
+      // Fetch all pools
+      const poolCount = Number(poolLength || 0);
+      console.log('[useFarmingData] Pool count from chain:', poolCount);
+      
+      if (poolCount === 0) {
+        setPools([]);
+        farmingCache = { pools: [], stats: newStats, timestamp: Date.now(), poolCount: 0 };
+        setLoading(false);
+        fetchingRef.current = false;
+        initialFetchDone.current = true;
+        retryCountRef.current = 0;
+        return;
       }
 
-      const poolResults = await Promise.all(poolPromises);
-      const validPools = poolResults.filter((p): p is PoolInfo => p !== null);
-      
-      // Sort by allocation points (highest first)
+      const validPools: PoolInfo[] = [];
+
+      // Fetch pools sequentially with good error handling
+      for (let pid = 0; pid < poolCount; pid++) {
+        try {
+          const poolInfo = await rpcProvider.call(
+            () => farmingContract.poolInfo(pid),
+            `farming_pool_${pid}`,
+            { retries: 2, skipCache: forceRefresh }
+          );
+          
+          if (!poolInfo) continue;
+          
+          const lpToken = poolInfo.lpToken;
+          
+          // Skip invalid LP tokens
+          if (!lpToken || lpToken === ethers.ZeroAddress) continue;
+
+          const lpContract = new ethers.Contract(lpToken, [...PAIR_ABI, ...ERC20_ABI], provider);
+
+          // Verify LP token contract exists
+          try {
+            const code = await provider.getCode(lpToken);
+            if (code === '0x' || code === '0x0') continue;
+          } catch {
+            continue;
+          }
+
+          let token0Symbol = 'LP', token1Symbol = '';
+          let totalStaked = '0';
+
+          // Get pair tokens
+          try {
+            const [t0, t1] = await Promise.all([
+              rpcProvider.call(() => lpContract.token0(), `lp_token0_${lpToken}`, { retries: 2 }),
+              rpcProvider.call(() => lpContract.token1(), `lp_token1_${lpToken}`, { retries: 2 }),
+            ]);
+            if (t0 && t1) {
+              token0Symbol = getTokenSymbol(t0);
+              token1Symbol = getTokenSymbol(t1);
+            }
+          } catch {
+            // Single token staking
+            try {
+              const sym = await rpcProvider.call(() => lpContract.symbol(), `lp_symbol_${lpToken}`, { retries: 1 });
+              token0Symbol = sym || 'LP';
+            } catch {
+              token0Symbol = 'LP';
+            }
+          }
+
+          // Get total staked
+          try {
+            const staked = await rpcProvider.call(
+              () => lpContract.balanceOf(CONTRACTS.FARMING),
+              `farming_staked_${lpToken}`,
+              { retries: 2, skipCache: forceRefresh }
+            );
+            if (staked) {
+              totalStaked = ethers.formatEther(staked);
+            }
+          } catch {
+            continue; // Skip pools where we can't get total staked
+          }
+
+          // Get user info if connected
+          let userStaked = '0';
+          let pendingReward = '0';
+          let lpBalance = '0';
+
+          if (address) {
+            try {
+              const userInfo = await rpcProvider.call(
+                () => farmingContract.userInfo(pid, address),
+                `farming_userInfo_${pid}_${address}`,
+                { retries: 2, skipCache: forceRefresh }
+              );
+              if (userInfo) {
+                userStaked = ethers.formatEther(userInfo.amount || 0);
+              }
+            } catch {}
+
+            try {
+              const pending = await rpcProvider.call(
+                () => farmingContract.pendingReward(pid, address),
+                `farming_pending_${pid}_${address}`,
+                { retries: 2, skipCache: forceRefresh }
+              );
+              if (pending !== null) {
+                pendingReward = ethers.formatEther(pending);
+              }
+            } catch {}
+
+            try {
+              const balance = await rpcProvider.call(
+                () => lpContract.balanceOf(address),
+                `farming_lpBalance_${lpToken}_${address}`,
+                { retries: 2, skipCache: forceRefresh }
+              );
+              if (balance) {
+                lpBalance = ethers.formatEther(balance);
+              }
+            } catch {}
+          }
+
+          // Calculate APR
+          const rewardPerBlockNum = parseFloat(ethers.formatEther(rewardPerBlock || 0));
+          const totalStakedNum = parseFloat(totalStaked) || 0.001;
+          const allocPointNum = Number(poolInfo.allocPoint || 0);
+          const totalAllocNum = Number(totalAllocPoint || 1);
+          const blocksPerYear = 15768000; // ~2 sec blocks
+          
+          const poolShareOfRewards = totalAllocNum > 0 ? allocPointNum / totalAllocNum : 0;
+          const poolRewardPerYear = rewardPerBlockNum * blocksPerYear * poolShareOfRewards;
+          
+          let apr = totalStakedNum > 0.001 
+            ? (poolRewardPerYear / totalStakedNum) * 100 
+            : poolRewardPerYear > 0 ? 9999 : 0;
+
+          validPools.push({
+            pid,
+            lpToken,
+            allocPoint: poolInfo.allocPoint,
+            token0Symbol,
+            token1Symbol,
+            totalStaked,
+            userStaked,
+            pendingReward,
+            apr: Math.min(apr, 99999),
+            lpBalance,
+          });
+        } catch (e) {
+          console.warn(`[useFarmingData] Failed to fetch pool ${pid}:`, e);
+        }
+      }
+
+      // Sort by allocation points
       validPools.sort((a, b) => Number(b.allocPoint) - Number(a.allocPoint));
 
       if (!mountedRef.current) return;
+
+      console.log('[useFarmingData] Valid pools fetched:', validPools.length);
 
       // Update cache
       farmingCache = {
         pools: validPools,
         stats: newStats,
         timestamp: Date.now(),
+        poolCount,
       };
 
       setPools(validPools);
       setError(null);
+      retryCountRef.current = 0;
+      
     } catch (err: any) {
-      // Only log non-network errors
-      const errMsg = err?.message || String(err);
-      const isNetworkError = errMsg.includes('Failed to fetch') || 
-                            errMsg.includes('CORS') || 
-                            errMsg.includes('NetworkError') ||
-                            errMsg.includes('Timeout');
-      
-      if (!isNetworkError) {
-        console.error('Error fetching farming data:', err);
-      }
-      
-      if (mountedRef.current) {
-        // Keep previous data if available, don't show error for network issues
-        if (farmingCache) {
-          setPools(farmingCache.pools);
-          setStats(farmingCache.stats);
-        }
-        // Auto-retry after 5 seconds for any error
-        setTimeout(() => {
-          if (mountedRef.current) {
-            fetchingRef.current = false;
-            fetchData(true);
-          }
-        }, 5000);
+      console.error('[useFarmingData] Error:', err);
+      // Keep previous data if available
+      if (farmingCache) {
+        setPools(farmingCache.pools);
+        setStats(farmingCache.stats);
       }
     } finally {
       if (mountedRef.current) {
@@ -329,8 +340,7 @@ export function useFarmingData() {
     const tx = await farmingContract.deposit(pid, amountWei);
     await tx.wait();
     
-    // Invalidate cache and refresh
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, fetchData]);
 
@@ -344,7 +354,7 @@ export function useFarmingData() {
     const tx = await farmingContract.withdraw(pid, amountWei);
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, fetchData]);
 
@@ -356,7 +366,7 @@ export function useFarmingData() {
     const tx = await farmingContract.harvest(pid);
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, fetchData]);
 
@@ -371,13 +381,12 @@ export function useFarmingData() {
       throw new Error('No rewards to harvest');
     }
 
-    // Harvest all pools in sequence to avoid nonce issues
     for (const pool of poolsWithRewards) {
       const tx = await farmingContract.harvest(pool.pid);
       await tx.wait();
     }
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, pools, fetchData]);
 
@@ -389,7 +398,7 @@ export function useFarmingData() {
     const tx = await farmingContract.emergencyWithdraw(pid);
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, fetchData]);
 
@@ -401,7 +410,7 @@ export function useFarmingData() {
     const tx = await farmingContract.add(allocPoint, lpTokenAddress);
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, isOwner, fetchData]);
 
@@ -413,7 +422,7 @@ export function useFarmingData() {
     const tx = await farmingContract.set(pid, allocPoint);
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, isOwner, fetchData]);
 
@@ -425,7 +434,7 @@ export function useFarmingData() {
     const tx = await farmingContract.pause();
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, isOwner, fetchData]);
 
@@ -437,7 +446,7 @@ export function useFarmingData() {
     const tx = await farmingContract.unpause();
     await tx.wait();
     
-    farmingCache = null;
+    clearFarmingCache();
     await fetchData(true);
   }, [signer, isOwner, fetchData]);
 
@@ -446,10 +455,7 @@ export function useFarmingData() {
     mountedRef.current = true;
     fetchData();
     
-    // Refresh every 60 seconds
-    const interval = setInterval(() => {
-      fetchData();
-    }, 60000);
+    const interval = setInterval(() => fetchData(), 60000);
     
     return () => {
       mountedRef.current = false;
@@ -460,7 +466,7 @@ export function useFarmingData() {
   // Refetch when address changes
   useEffect(() => {
     if (address) {
-      farmingCache = null;
+      clearFarmingCache();
       fetchData(true);
     }
   }, [address, fetchData]);
@@ -471,7 +477,10 @@ export function useFarmingData() {
     loading,
     error,
     isOwner,
-    refetch: () => fetchData(true),
+    refetch: () => {
+      clearFarmingCache();
+      fetchData(true);
+    },
     deposit,
     withdraw,
     harvest,
