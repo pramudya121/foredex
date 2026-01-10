@@ -2,12 +2,13 @@ import { memo, useMemo, useCallback, useState } from 'react';
 import { PoolsTable } from '@/components/PoolsTable';
 import { FactoryInfo } from '@/components/FactoryInfo';
 import { FactoryAdminPanel } from '@/components/FactoryAdminPanel';
-import { Droplets, TrendingUp, BarChart3, Coins, RefreshCw, Flame, Settings2, Shield, Sparkles } from 'lucide-react';
+import { Droplets, TrendingUp, BarChart3, Coins, Flame, Settings2, Shield, Sparkles } from 'lucide-react';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AutoRefreshTimer } from '@/components/AutoRefreshTimer';
 import {
   Collapsible,
   CollapsibleContent,
@@ -112,16 +113,13 @@ const Pools = () => {
             <Settings2 className="w-4 h-4" />
             <span className="hidden sm:inline">Factory</span>
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={refetch}
-            disabled={isRefreshing}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </Button>
+          <AutoRefreshTimer
+            intervalSeconds={45}
+            onRefresh={refetch}
+            isRefreshing={isRefreshing}
+            showProgress={true}
+            size="sm"
+          />
         </div>
       </div>
 
