@@ -8,17 +8,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AutoRefreshTimer } from '@/components/AutoRefreshTimer';
 import { 
   Sprout, 
   TrendingUp, 
   Coins, 
-  RefreshCw, 
   Gift,
   Shield,
   Wallet,
   Zap,
   BarChart3,
   Settings,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PoolInfo } from '@/components/farming/FarmCard';
@@ -309,16 +310,13 @@ export default function FarmingPage() {
               </Link>
             )}
             
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refetch()} 
-              disabled={loading}
-              className="border-primary/30 hover:bg-primary/10"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <AutoRefreshTimer
+              intervalSeconds={45}
+              onRefresh={() => refetch()}
+              isRefreshing={loading}
+              showProgress={true}
+              size="sm"
+            />
             
             {!isConnected && (
               <Button 
