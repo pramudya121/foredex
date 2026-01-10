@@ -9,6 +9,8 @@ import { BalanceRetryButton } from './BalanceRetryButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI, PAIR_ABI } from '@/config/abis';
 import { Plus, Minus, Loader2, Info, AlertCircle } from 'lucide-react';
@@ -940,28 +942,40 @@ export function LiquidityPanel() {
           </div>
 
           {/* LP Balance Display Card */}
-          <div className="p-3 sm:p-4 rounded-lg bg-muted/30 border border-border">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-muted-foreground">Your LP Balance</span>
+          <div className="p-3 sm:p-4 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-sm text-muted-foreground font-medium">Your LP Balance</span>
               <BalanceRetryButton onRetry={fetchPairData} loading={lpBalanceLoading} />
             </div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-1">
-                  <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" />
-                  <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" />
+              <div className="flex items-center gap-2.5">
+                <div className="flex -space-x-1.5">
+                  <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" className="ring-2 ring-background" />
+                  <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" className="ring-2 ring-background" />
                 </div>
                 <span className="text-sm font-medium">{tokenA?.symbol}/{tokenB?.symbol} LP</span>
               </div>
               {lpBalanceLoading ? (
-                <span className="text-lg font-bold animate-pulse">...</span>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-6 w-24" />
+                </div>
               ) : (
-                <span className="text-lg font-bold">{parseFloat(lpBalance).toFixed(6)}</span>
+                <span className="text-xl font-bold text-primary">{parseFloat(lpBalance).toFixed(6)}</span>
               )}
             </div>
-            {poolShare > 0 && (
-              <div className="text-xs text-muted-foreground mt-1 text-right">
-                Pool share: {poolShare.toFixed(2)}%
+            {poolShare > 0 && !lpBalanceLoading && (
+              <div className="mt-2 pt-2 border-t border-border/50 flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Your pool share</span>
+                <Badge variant="secondary" className="text-xs">
+                  {poolShare.toFixed(2)}%
+                </Badge>
+              </div>
+            )}
+            {parseFloat(lpBalance) === 0 && !lpBalanceLoading && pairAddress && (
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <p className="text-xs text-muted-foreground text-center">
+                  You don't have any LP tokens for this pair
+                </p>
               </div>
             )}
           </div>
@@ -1018,27 +1032,67 @@ export function LiquidityPanel() {
             )}
           </div>
 
-          {/* Expected output */}
+          {/* Expected output with price impact warning */}
           {lpToRemove && parseFloat(lpToRemove) > 0 && pairAddress && (
-            <div className="p-3 sm:p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground mb-2">
+            <div className="p-3 sm:p-4 rounded-lg bg-muted/30 space-y-3 text-sm animate-fade-in">
+              <div className="flex items-center gap-2 text-muted-foreground">
                 <Info className="w-4 h-4 shrink-0" />
-                <span>You will receive</span>
+                <span className="font-medium">You will receive (estimated)</span>
               </div>
-              <div className="flex justify-between items-center gap-2">
+              
+              {/* Token A output */}
+              <div className="flex justify-between items-center gap-2 p-2 rounded-lg bg-background/50">
                 <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenA?.symbol || ''} logoURI={tokenA?.logoURI} size="sm" />
                   <span className="truncate font-medium">{tokenA?.symbol}</span>
                 </div>
-                <span className="font-mono font-semibold">{parseFloat(removeAmounts.amountA).toFixed(6)}</span>
+                <span className="font-mono font-semibold text-primary">
+                  {parseFloat(removeAmounts.amountA).toFixed(6)}
+                </span>
               </div>
-              <div className="flex justify-between items-center gap-2">
+              
+              {/* Token B output */}
+              <div className="flex justify-between items-center gap-2 p-2 rounded-lg bg-background/50">
                 <div className="flex items-center gap-2 min-w-0">
                   <TokenLogo symbol={tokenB?.symbol || ''} logoURI={tokenB?.logoURI} size="sm" />
                   <span className="truncate font-medium">{tokenB?.symbol}</span>
                 </div>
-                <span className="font-mono font-semibold">{parseFloat(removeAmounts.amountB).toFixed(6)}</span>
+                <span className="font-mono font-semibold text-primary">
+                  {parseFloat(removeAmounts.amountB).toFixed(6)}
+                </span>
               </div>
+              
+              {/* Slippage info */}
+              <div className="pt-2 border-t border-border/50 space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Slippage tolerance</span>
+                  <span className="font-medium">{slippage}%</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Min. {tokenA?.symbol} received</span>
+                  <span className="font-mono">
+                    {(parseFloat(removeAmounts.amountA) * (1 - slippage / 100)).toFixed(6)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Min. {tokenB?.symbol} received</span>
+                  <span className="font-mono">
+                    {(parseFloat(removeAmounts.amountB) * (1 - slippage / 100)).toFixed(6)}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Warning if removing large share */}
+              {poolShare > 0 && (parseFloat(lpToRemove) / parseFloat(lpBalance)) > 0.5 && (
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="text-xs">
+                    You are removing {((parseFloat(lpToRemove) / parseFloat(lpBalance)) * 100).toFixed(0)}% of your position.
+                    This will reduce your pool share from {poolShare.toFixed(2)}% to approximately{' '}
+                    {(poolShare * (1 - parseFloat(lpToRemove) / parseFloat(lpBalance))).toFixed(2)}%.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

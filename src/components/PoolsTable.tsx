@@ -65,21 +65,35 @@ const generateMiniChartData = (tvl: number, seed: number): number[] => {
 };
 
 const PoolSkeleton = memo(() => (
-  <div className="glass-card p-4">
+  <div className="glass-card p-4 animate-pulse">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
         <div className="flex -space-x-2">
-          <Skeleton className="w-10 h-10 rounded-full" />
-          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="w-10 h-10 rounded-full bg-muted/60" />
+          <Skeleton className="w-10 h-10 rounded-full bg-muted/60" />
         </div>
         <div className="space-y-2">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-5 w-28 bg-muted/60" />
+          <Skeleton className="h-4 w-20 bg-muted/60" />
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-5 w-16" />
-        <Skeleton className="w-8 h-8 rounded-lg" />
+      <div className="hidden lg:flex items-center gap-6">
+        <div className="space-y-1.5 text-right">
+          <Skeleton className="h-3 w-10 bg-muted/50" />
+          <Skeleton className="h-5 w-16 bg-muted/60" />
+        </div>
+        <div className="space-y-1.5 text-right">
+          <Skeleton className="h-3 w-8 bg-muted/50" />
+          <Skeleton className="h-5 w-12 bg-muted/60" />
+        </div>
+        <div className="space-y-1.5 text-right">
+          <Skeleton className="h-3 w-12 bg-muted/50" />
+          <Skeleton className="h-5 w-14 bg-muted/60" />
+        </div>
+        <Skeleton className="h-8 w-20 rounded-lg bg-muted/60" />
+      </div>
+      <div className="lg:hidden flex items-center gap-2">
+        <Skeleton className="h-8 w-16 rounded-lg bg-muted/60" />
       </div>
     </div>
   </div>
@@ -87,9 +101,28 @@ const PoolSkeleton = memo(() => (
 
 PoolSkeleton.displayName = 'PoolSkeleton';
 
+// Enhanced loading skeleton with multiple items
+const LoadingSkeletons = memo(() => (
+  <div className="space-y-3">
+    {[...Array(6)].map((_, i) => (
+      <div key={i} style={{ animationDelay: `${i * 100}ms` }}>
+        <PoolSkeleton />
+      </div>
+    ))}
+  </div>
+));
+
+LoadingSkeletons.displayName = 'LoadingSkeletons';
+
 // Cache for pools table
-let poolsTableCache: { pools: Pool[]; timestamp: number } | null = null;
-const CACHE_TTL = 20000; // 20 seconds
+interface PoolsTableCache {
+  pools: Pool[];
+  timestamp: number;
+  poolCount: number;
+}
+
+let poolsTableCache: PoolsTableCache | null = null;
+const CACHE_TTL = 30000; // 30 seconds
 
 export const clearPoolsTableCache = () => {
   poolsTableCache = null;
@@ -307,7 +340,7 @@ function PoolsTableInner() {
 
       if (fetchedPools.length > 0) {
         setPools(fetchedPools);
-        poolsTableCache = { pools: fetchedPools, timestamp: Date.now() };
+        poolsTableCache = { pools: fetchedPools, timestamp: Date.now(), poolCount: fetchedPools.length };
       }
     } catch {
       // Silent fail - will retry automatically
@@ -459,13 +492,7 @@ function PoolsTableInner() {
       </div>
 
       {/* Loading State */}
-      {loading && (
-        <div className="space-y-3">
-          {[...Array(6)].map((_, i) => (
-            <PoolSkeleton key={i} />
-          ))}
-        </div>
-      )}
+      {loading && <LoadingSkeletons />}
 
       {/* Empty State */}
       {!loading && pools.length === 0 && (
