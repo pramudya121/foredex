@@ -37,7 +37,6 @@ import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import { toast } from 'sonner';
 import { PoolMiniChart } from './pools/PoolMiniChart';
 import { PoolCard } from './pools/PoolCard';
-import { AutoRefreshTimer } from './AutoRefreshTimer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -473,7 +472,7 @@ function PoolsTableInner() {
     <div className="space-y-4">
       {/* Enhanced Filter Bar */}
       <div className="flex flex-col gap-3">
-        {/* Search and Auto-refresh Row */}
+        {/* Search Row */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           {/* Search Input */}
           <div className="relative flex-1 max-w-xs">
@@ -486,14 +485,16 @@ function PoolsTableInner() {
             />
           </div>
           
-          {/* Auto-refresh Timer */}
-          <AutoRefreshTimer
-            intervalSeconds={30}
-            onRefresh={() => fetchPools(true)}
-            isRefreshing={isRefreshing}
-            showProgress={true}
+          {/* Refresh Button */}
+          <Button
+            variant="ghost"
             size="sm"
-          />
+            onClick={() => fetchPools(true)}
+            disabled={isRefreshing}
+            className="h-9 px-3"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
 
         {/* Filters and Sort Row */}
