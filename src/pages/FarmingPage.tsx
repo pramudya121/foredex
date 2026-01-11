@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AutoRefreshTimer } from '@/components/AutoRefreshTimer';
 import { 
   Sprout, 
   TrendingUp, 
@@ -310,13 +309,15 @@ export default function FarmingPage() {
               </Link>
             )}
             
-            <AutoRefreshTimer
-              intervalSeconds={45}
-              onRefresh={() => refetch()}
-              isRefreshing={loading}
-              showProgress={true}
+            <Button
+              variant="ghost"
               size="sm"
-            />
+              onClick={() => refetch()}
+              disabled={loading}
+              className="h-9 px-3"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
             
             {!isConnected && (
               <Button 
