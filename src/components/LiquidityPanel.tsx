@@ -584,7 +584,7 @@ export function LiquidityPanel() {
   };
 
   const handleRemoveLiquidity = async () => {
-    if (!signer || !tokenA || !tokenB || !lpToRemove || !pairAddress || !provider || !address) return;
+    if (!signer || !tokenA || !tokenB || !lpToRemove || !pairAddress || !address) return;
 
     // Validate LP amount
     const lpAmount = parseFloat(lpToRemove);
@@ -603,15 +603,20 @@ export function LiquidityPanel() {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
       const lpWei = ethers.parseUnits(lpToRemove, 18);
       
-      // Use block timestamp to avoid clock sync issues
-      const block = await provider.getBlock('latest');
-      const txDeadline = BigInt((block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline);
+      // Use current timestamp with buffer for deadline - more reliable than block timestamp
+      const txDeadline = BigInt(Math.floor(Date.now() / 1000) + 60 * deadline);
 
       // Check and approve LP tokens if needed
       const pairContract = new ethers.Contract(pairAddress, ERC20_ABI, signer);
       
       console.log('[LiquidityPanel] Checking LP token allowance...');
-      const allowance = await pairContract.allowance(address, CONTRACTS.ROUTER);
+      let allowance;
+      try {
+        allowance = await pairContract.allowance(address, CONTRACTS.ROUTER);
+      } catch (e) {
+        console.warn('[LiquidityPanel] Failed to check allowance, assuming needs approval');
+        allowance = BigInt(0);
+      }
       console.log('[LiquidityPanel] LP allowance:', allowance.toString(), 'needed:', lpWei.toString());
       
       if (BigInt(allowance) < lpWei) {
@@ -628,6 +633,14 @@ export function LiquidityPanel() {
       
       // Calculate minimum amounts with slippage tolerance
       const slippageMultiplier = BigInt(Math.floor((100 - slippage) * 100));
+      
+      // Ensure reserves are valid before calculation
+      if (reserves.reserveA === BigInt(0) || reserves.reserveB === BigInt(0) || totalSupply === BigInt(0)) {
+        toast.error('Unable to calculate amounts - pool data not loaded');
+        setLoading(false);
+        return;
+      }
+      
       const amountAMin = (reserves.reserveA * lpWei / totalSupply) * slippageMultiplier / BigInt(10000);
       const amountBMin = (reserves.reserveB * lpWei / totalSupply) * slippageMultiplier / BigInt(10000);
 
@@ -642,26 +655,25 @@ export function LiquidityPanel() {
 
       if (isNativeToken(tokenA)) {
         // Token A is native (ETH/NEX), Token B is ERC20
-        // removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, to, deadline)
         console.log('[LiquidityPanel] Using removeLiquidityETH with token:', tokenBAddr);
         tx = await router.removeLiquidityETH(
-          tokenBAddr,    // ERC20 token address
-          lpWei,         // liquidity amount
-          amountBMin,    // amountTokenMin (for the ERC20)
-          amountAMin,    // amountETHMin (for native token)
-          address,       // recipient
-          txDeadline     // deadline
+          tokenBAddr,
+          lpWei,
+          amountBMin,
+          amountAMin,
+          address,
+          txDeadline
         );
       } else if (isNativeToken(tokenB)) {
         // Token B is native (ETH/NEX), Token A is ERC20
         console.log('[LiquidityPanel] Using removeLiquidityETH with token:', tokenAAddr);
         tx = await router.removeLiquidityETH(
-          tokenAAddr,    // ERC20 token address
-          lpWei,         // liquidity amount
-          amountAMin,    // amountTokenMin (for the ERC20)
-          amountBMin,    // amountETHMin (for native token)
-          address,       // recipient
-          txDeadline     // deadline
+          tokenAAddr,
+          lpWei,
+          amountAMin,
+          amountBMin,
+          address,
+          txDeadline
         );
       } else {
         // Both are ERC20 tokens
@@ -702,9 +714,16 @@ export function LiquidityPanel() {
       }, 3000);
     } catch (error: any) {
       console.error('[LiquidityPanel] Remove liquidity error:', error);
-      // Use rpcProvider to parse user-friendly error messages
-      const errorMsg = rpcProvider.parseError(error, true);
-      toast.error(errorMsg || 'Failed to remove liquidity');
+      // Suppress network/coalesce errors, only show actionable errors
+      const errorMsg = rpcProvider.parseError(error, false);
+      if (errorMsg) {
+        toast.error(errorMsg);
+      } else if (error?.message && !error.message.includes('coalesce')) {
+        // Check for user rejection
+        if (error.message.includes('user rejected') || error.message.includes('User denied')) {
+          toast.error('Transaction cancelled');
+        }
+      }
     } finally {
       setLoading(false);
     }

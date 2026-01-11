@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,7 +23,8 @@ interface ExportAnalyticsProps {
   tvlData?: { date: string; tvl: number }[];
 }
 
-export function ExportAnalytics({ pools = [], volumeData = [], tvlData = [] }: ExportAnalyticsProps) {
+const ExportAnalyticsInner = forwardRef<HTMLDivElement, ExportAnalyticsProps>(
+  function ExportAnalyticsInner({ pools = [], volumeData = [], tvlData = [] }, ref) {
   const [exporting, setExporting] = useState(false);
 
   const formatDate = () => {
@@ -176,4 +177,6 @@ export function ExportAnalytics({ pools = [], volumeData = [], tvlData = [] }: E
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
+});
+
+export const ExportAnalytics = memo(ExportAnalyticsInner);

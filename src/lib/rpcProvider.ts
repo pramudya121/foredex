@@ -212,7 +212,9 @@ class RPCProviderService {
   parseError(error: any, showTransient = false): string | null {
     const msg = error?.message || error?.reason || String(error);
     
+    // Network and transient errors - suppress these completely
     if (msg.includes('coalesce') || 
+        msg.includes('could not coalesce') ||
         msg.includes('CORS') || 
         msg.includes('ERR_FAILED') || 
         msg.includes('Failed to fetch') ||
@@ -220,7 +222,15 @@ class RPCProviderService {
         msg.includes('rate limit') ||
         msg.includes('NetworkError') ||
         msg.includes('Timeout') ||
-        msg.includes('429')) {
+        msg.includes('timeout') ||
+        msg.includes('ETIMEDOUT') ||
+        msg.includes('ECONNREFUSED') ||
+        msg.includes('429') ||
+        msg.includes('502') ||
+        msg.includes('503') ||
+        msg.includes('504') ||
+        msg.includes('network changed') ||
+        msg.includes('underlying network changed')) {
       return null;
     }
     
