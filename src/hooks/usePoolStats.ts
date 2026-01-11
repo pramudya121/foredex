@@ -68,32 +68,42 @@ export function usePoolStats() {
   const fetchStats = useCallback(async (forceRefresh = false) => {
     if (isFetchingRef.current) return;
     
-    // Check cache first
+    // Check cache first - use cache if valid
     if (!forceRefresh && poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL) {
-      setStats({ ...poolStatsCache.stats, loading: false });
-      setPools(poolStatsCache.pools);
-      return;
+      if (poolStatsCache.pools.length > 0) {
+        setStats({ ...poolStatsCache.stats, loading: false });
+        setPools(poolStatsCache.pools);
+        return;
+      }
     }
 
     isFetchingRef.current = true;
     setIsRefreshing(true);
     
     // Only show loading spinner on first load, not refreshes
-    if (pools.length === 0) {
+    if (pools.length === 0 && !poolStatsCache?.pools.length) {
       setStats(prev => ({ ...prev, loading: true }));
     }
     
     try {
-      const provider = rpcProvider.getProvider();
+      // Wait for provider to be ready
+      let provider = rpcProvider.getProvider();
+      let attempts = 0;
+      while ((!provider || !rpcProvider.isAvailable()) && attempts < 5) {
+        await new Promise(r => setTimeout(r, 1000));
+        provider = rpcProvider.getProvider();
+        attempts++;
+      }
+      
       if (!provider || !rpcProvider.isAvailable()) {
-        console.warn('[usePoolStats] RPC not available, retrying...');
-        if (retryCountRef.current < 3) {
-          retryCountRef.current++;
-          setTimeout(() => {
-            isFetchingRef.current = false;
-            fetchStats(forceRefresh);
-          }, 2000 * retryCountRef.current);
+        console.warn('[usePoolStats] RPC not available after retries');
+        // Use cached data if available
+        if (poolStatsCache?.pools.length) {
+          setStats({ ...poolStatsCache.stats, loading: false });
+          setPools(poolStatsCache.pools);
         }
+        isFetchingRef.current = false;
+        setIsRefreshing(false);
         return;
       }
 

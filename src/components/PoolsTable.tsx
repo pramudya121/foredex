@@ -223,30 +223,45 @@ function PoolsTableInner() {
   const fetchPools = useCallback(async (force: boolean = false) => {
     if (isFetchingRef.current) return;
     
-    // Use cache if valid and not forced (but still update LP balances if connected)
+    // Use cache if valid and not forced
     if (!force && poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL) {
-      // If user is connected, update LP balances on cached pools
-      if (userAddress && isConnected) {
-        await updateUserLpBalances(poolsTableCache.pools);
-      } else {
-        setPools(poolsTableCache.pools);
+      if (poolsTableCache.pools.length > 0) {
+        // If user is connected, update LP balances on cached pools
+        if (userAddress && isConnected) {
+          await updateUserLpBalances(poolsTableCache.pools);
+        } else {
+          setPools(poolsTableCache.pools);
+        }
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-      return;
     }
 
     isFetchingRef.current = true;
     if (force) setIsRefreshing(true);
-    setLoading(pools.length === 0);
-
-    const provider = rpcProvider.getProvider();
     
-    // Don't fail if provider is temporarily unavailable - just wait
+    // Only show loading if no cached data
+    if (pools.length === 0 && !poolsTableCache?.pools.length) {
+      setLoading(true);
+    }
+
+    // Wait for provider to be ready
+    let provider = rpcProvider.getProvider();
+    let attempts = 0;
+    while ((!provider || !rpcProvider.isAvailable()) && attempts < 5) {
+      await new Promise(r => setTimeout(r, 1000));
+      provider = rpcProvider.getProvider();
+      attempts++;
+    }
+    
     if (!provider) {
-      setTimeout(() => {
-        isFetchingRef.current = false;
-        fetchPools(force);
-      }, 2000);
+      // Use cached data if available
+      if (poolsTableCache?.pools.length) {
+        setPools(poolsTableCache.pools);
+      }
+      isFetchingRef.current = false;
+      setLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
@@ -255,10 +270,15 @@ function PoolsTableInner() {
       
       const pairCount = await rpcProvider.call(
         () => factory.allPairsLength(),
-        'poolsTable_allPairsLength'
+        'poolsTable_allPairsLength',
+        { retries: 3, timeout: 15000, skipCache: force }
       );
       
       if (pairCount === null) {
+        // Use cached data if available
+        if (poolsTableCache?.pools.length) {
+          setPools(poolsTableCache.pools);
+        }
         isFetchingRef.current = false;
         setLoading(false);
         setIsRefreshing(false);

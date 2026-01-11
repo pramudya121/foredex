@@ -64,32 +64,43 @@ export function useFarmingData() {
     // Prevent concurrent fetches
     if (fetchingRef.current) return;
     
-    // Check cache validity
+    // Check cache validity - use cache if valid
     if (!forceRefresh && farmingCache && Date.now() - farmingCache.timestamp < CACHE_TTL) {
-      setPools(farmingCache.pools);
-      setStats(farmingCache.stats);
-      return;
+      if (farmingCache.pools.length > 0 || farmingCache.stats) {
+        setPools(farmingCache.pools);
+        setStats(farmingCache.stats);
+        return;
+      }
     }
 
     fetchingRef.current = true;
     
-    // Only show loading on initial fetch
-    if (!initialFetchDone.current && pools.length === 0) {
+    // Only show loading on initial fetch when no cached data
+    if (!initialFetchDone.current && pools.length === 0 && !farmingCache?.pools.length) {
       setLoading(true);
     }
     
     try {
       setError(null);
-      const provider = rpcProvider.getProvider();
+      
+      // Wait for provider to be ready
+      let provider = rpcProvider.getProvider();
+      let attempts = 0;
+      while ((!provider || !rpcProvider.isAvailable()) && attempts < 5) {
+        await new Promise(r => setTimeout(r, 1000));
+        provider = rpcProvider.getProvider();
+        attempts++;
+      }
+      
       if (!provider || !rpcProvider.isAvailable()) {
-        console.warn('[useFarmingData] RPC not available');
-        if (retryCountRef.current < 3) {
-          retryCountRef.current++;
-          setTimeout(() => {
-            fetchingRef.current = false;
-            fetchData(forceRefresh);
-          }, 2000 * retryCountRef.current);
+        console.warn('[useFarmingData] RPC not available after retries');
+        // Use cached data if available
+        if (farmingCache?.pools.length || farmingCache?.stats) {
+          setPools(farmingCache.pools);
+          setStats(farmingCache.stats);
         }
+        fetchingRef.current = false;
+        setLoading(false);
         return;
       }
       
