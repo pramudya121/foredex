@@ -28,6 +28,7 @@ import { RpcStatusIndicator } from './RpcStatusIndicator';
 import { QRCodeSVG } from 'qrcode.react';
 
 const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
+const LanguageSelector = lazy(() => import('./LanguageSelector'));
 
 const NAV_ITEMS = [
   { path: '/', label: 'Swap' },
@@ -212,6 +213,11 @@ export function Header() {
           {/* Price Alerts */}
           <Suspense fallback={null}>
             <PriceAlertManager />
+          </Suspense>
+
+          {/* Language Selector */}
+          <Suspense fallback={null}>
+            <LanguageSelector />
           </Suspense>
 
           {/* Theme Toggle */}

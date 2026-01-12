@@ -172,36 +172,34 @@ export function useFarmingData() {
 
       const validPools: PoolInfo[] = [];
 
-      // Fetch pools sequentially with good error handling
-      for (let pid = 0; pid < poolCount; pid++) {
+      // Fetch all pool info in parallel batches for better performance
+      const fetchPool = async (pid: number): Promise<PoolInfo | null> => {
         try {
           const poolInfo = await rpcProvider.call(
             () => farmingContract.poolInfo(pid),
             `farming_pool_${pid}`,
-            { retries: 2, skipCache: forceRefresh }
+            { retries: 3, skipCache: forceRefresh }
           );
           
-          if (!poolInfo) continue;
+          if (!poolInfo) {
+            console.warn(`[useFarmingData] Pool ${pid} returned null`);
+            return null;
+          }
           
           const lpToken = poolInfo.lpToken;
           
           // Skip invalid LP tokens
-          if (!lpToken || lpToken === ethers.ZeroAddress) continue;
+          if (!lpToken || lpToken === ethers.ZeroAddress) {
+            console.warn(`[useFarmingData] Pool ${pid} has invalid lpToken`);
+            return null;
+          }
 
           const lpContract = new ethers.Contract(lpToken, [...PAIR_ABI, ...ERC20_ABI], provider);
-
-          // Verify LP token contract exists
-          try {
-            const code = await provider.getCode(lpToken);
-            if (code === '0x' || code === '0x0') continue;
-          } catch {
-            continue;
-          }
 
           let token0Symbol = 'LP', token1Symbol = '';
           let totalStaked = '0';
 
-          // Get pair tokens
+          // Get pair tokens with fallback
           try {
             const [t0, t1] = await Promise.all([
               rpcProvider.call(() => lpContract.token0(), `lp_token0_${lpToken}`, { retries: 2 }),
@@ -212,7 +210,7 @@ export function useFarmingData() {
               token1Symbol = getTokenSymbol(t1);
             }
           } catch {
-            // Single token staking
+            // Single token staking - try to get symbol
             try {
               const sym = await rpcProvider.call(() => lpContract.symbol(), `lp_symbol_${lpToken}`, { retries: 1 });
               token0Symbol = sym || 'LP';
@@ -221,18 +219,19 @@ export function useFarmingData() {
             }
           }
 
-          // Get total staked
+          // Get total staked with better error handling
           try {
             const staked = await rpcProvider.call(
               () => lpContract.balanceOf(CONTRACTS.FARMING),
               `farming_staked_${lpToken}`,
-              { retries: 2, skipCache: forceRefresh }
+              { retries: 3, skipCache: forceRefresh }
             );
             if (staked) {
               totalStaked = ethers.formatEther(staked);
             }
-          } catch {
-            continue; // Skip pools where we can't get total staked
+          } catch (e) {
+            console.warn(`[useFarmingData] Could not get total staked for pool ${pid}, using 0`);
+            totalStaked = '0';
           }
 
           // Get user info if connected
@@ -289,7 +288,7 @@ export function useFarmingData() {
             ? (poolRewardPerYear / totalStakedNum) * 100 
             : poolRewardPerYear > 0 ? 9999 : 0;
 
-          validPools.push({
+          return {
             pid,
             lpToken,
             allocPoint: poolInfo.allocPoint,
@@ -300,9 +299,31 @@ export function useFarmingData() {
             pendingReward,
             apr: Math.min(apr, 99999),
             lpBalance,
-          });
+          };
         } catch (e) {
           console.warn(`[useFarmingData] Failed to fetch pool ${pid}:`, e);
+          return null;
+        }
+      };
+
+      // Fetch pools in parallel batches of 3 to avoid rate limiting
+      const batchSize = 3;
+      for (let i = 0; i < poolCount; i += batchSize) {
+        const batch = [];
+        for (let j = i; j < Math.min(i + batchSize, poolCount); j++) {
+          batch.push(fetchPool(j));
+        }
+        
+        const results = await Promise.all(batch);
+        for (const pool of results) {
+          if (pool) {
+            validPools.push(pool);
+          }
+        }
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + batchSize < poolCount) {
+          await new Promise(r => setTimeout(r, 200));
         }
       }
 
