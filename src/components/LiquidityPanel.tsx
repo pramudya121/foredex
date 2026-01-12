@@ -603,8 +603,15 @@ export function LiquidityPanel() {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
       const lpWei = ethers.parseUnits(lpToRemove, 18);
       
-      // Use current timestamp with buffer for deadline - more reliable than block timestamp
-      const txDeadline = BigInt(Math.floor(Date.now() / 1000) + 60 * deadline);
+      // Use block timestamp to avoid clock sync issues (same as addLiquidity)
+      const provider = signer.provider;
+      if (!provider) {
+        toast.error('Provider not available');
+        setLoading(false);
+        return;
+      }
+      const block = await provider.getBlock('latest');
+      const txDeadline = BigInt((block?.timestamp || Math.floor(Date.now() / 1000)) + 60 * deadline);
 
       // Check and approve LP tokens if needed
       const pairContract = new ethers.Contract(pairAddress, ERC20_ABI, signer);

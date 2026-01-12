@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Check, ExternalLink, Plus, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { rpcProvider } from '@/lib/rpcProvider';
 import type { PoolInfo } from './FarmCard';
 
 interface DepositDialogProps {
@@ -113,8 +114,13 @@ export function DepositDialog({ pool, isOpen, onClose, mode, onDeposit, onWithdr
       setIsApproved(true);
     } catch (error: any) {
       console.error('Approval error:', error);
-      const msg = error?.reason || error?.message || 'Approval failed';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'approve' });
+      // Use rpcProvider to parse user-friendly error messages
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'approve' });
+      } else if (error?.message?.includes('user rejected') || error?.message?.includes('User denied')) {
+        toast.error('Transaction cancelled', { id: 'approve' });
+      }
     } finally {
       setApproving(false);
     }
@@ -145,9 +151,14 @@ export function DepositDialog({ pool, isOpen, onClose, mode, onDeposit, onWithdr
       onClose();
     } catch (error: any) {
       console.error('Transaction error:', error);
-      const msg = error?.reason || error?.message || 'Transaction failed';
       const toastId = mode === 'deposit' ? 'deposit' : 'withdraw';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: toastId });
+      // Use rpcProvider to parse user-friendly error messages
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: toastId });
+      } else if (error?.message?.includes('user rejected') || error?.message?.includes('User denied')) {
+        toast.error('Transaction cancelled', { id: toastId });
+      }
     } finally {
       setLoading(false);
     }
