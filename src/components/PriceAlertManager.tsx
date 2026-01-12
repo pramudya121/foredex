@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, forwardRef } from 'react';
 import { Bell, BellRing, Plus, Trash2, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +67,7 @@ const AlertItem = memo(({ alert, onRemove }: { alert: PriceAlert; onRemove: (id:
 
 AlertItem.displayName = 'AlertItem';
 
-function PriceAlertManager() {
+const PriceAlertManager = forwardRef<HTMLDivElement>(function PriceAlertManager(_, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
@@ -130,123 +130,130 @@ function PriceAlertManager() {
   const triggeredAlerts = getTriggeredAlerts();
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="relative">
-          {triggeredAlerts.length > 0 ? (
-            <BellRing className="w-4 h-4 text-primary animate-pulse" />
-          ) : (
-            <Bell className="w-4 h-4" />
-          )}
-          {(activeAlerts.length + triggeredAlerts.length) > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
-              {activeAlerts.length + triggeredAlerts.length}
-            </span>
-          )}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            Price Alerts
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Create Alert Form */}
-        <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Token</Label>
-              <Select value={selectedToken} onValueChange={setSelectedToken}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select token" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TOKEN_LIST
-                    .filter(t => t.address !== '0x0000000000000000000000000000000000000000')
-                    .map(token => (
-                      <SelectItem key={token.address} value={token.address}>
-                        <div className="flex items-center gap-2">
-                          <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="sm" />
-                          {token.symbol}
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Condition</Label>
-              <Select value={condition} onValueChange={(v: 'above' | 'below') => setCondition(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="above">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-green-500" />
-                      Above
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="below">
-                    <div className="flex items-center gap-2">
-                      <TrendingDown className="w-4 h-4 text-red-500" />
-                      Below
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Target Price ($)</Label>
-            <Input
-              type="number"
-              placeholder="0.00"
-              value={targetPrice}
-              onChange={(e) => setTargetPrice(e.target.value)}
-              step="0.0001"
-            />
-          </div>
-          <Button onClick={handleAddAlert} className="w-full">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Alert
+    <div ref={ref}>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="icon" className="relative">
+            {triggeredAlerts.length > 0 ? (
+              <BellRing className="w-4 h-4 text-primary animate-pulse" />
+            ) : (
+              <Bell className="w-4 h-4" />
+            )}
+            {(activeAlerts.length + triggeredAlerts.length) > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
+                {activeAlerts.length + triggeredAlerts.length}
+              </span>
+            )}
           </Button>
-        </div>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Price Alerts
+            </DialogTitle>
+          </DialogHeader>
 
-        {/* Active Alerts */}
-        {activeAlerts.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">Active Alerts</h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {activeAlerts.map(alert => (
-                <AlertItem key={alert.id} alert={alert} onRemove={removeAlert} />
-              ))}
+          {/* Create Alert Form */}
+          <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Token</Label>
+                <Select value={selectedToken} onValueChange={setSelectedToken}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select token" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TOKEN_LIST
+                      .filter(t => t.address !== '0x0000000000000000000000000000000000000000')
+                      .map(token => (
+                        <SelectItem key={token.address} value={token.address}>
+                          <div className="flex items-center gap-2">
+                            <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="sm" />
+                            {token.symbol}
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Condition</Label>
+                <Select value={condition} onValueChange={(v) => setCondition(v as 'above' | 'below')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="above">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-green-500" />
+                        Above
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="below">
+                      <div className="flex items-center gap-2">
+                        <TrendingDown className="w-4 h-4 text-red-500" />
+                        Below
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Target Price (USD)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="0.0001"
+                  placeholder="0.00"
+                  value={targetPrice}
+                  onChange={(e) => setTargetPrice(e.target.value)}
+                  className="flex-1"
+                />
+                <Button onClick={handleAddAlert} size="icon">
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Triggered Alerts */}
-        {triggeredAlerts.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-green-500">Triggered Alerts</h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {triggeredAlerts.map(alert => (
-                <AlertItem key={alert.id} alert={alert} onRemove={removeAlert} />
-              ))}
+          {/* Active Alerts */}
+          {activeAlerts.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Active Alerts</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {activeAlerts.map(alert => (
+                  <AlertItem key={alert.id} alert={alert} onRemove={removeAlert} />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {alerts.length === 0 && (
-          <p className="text-center text-muted-foreground py-4">
-            No alerts set. Create one above!
-          </p>
-        )}
-      </DialogContent>
-    </Dialog>
+          {/* Triggered Alerts */}
+          {triggeredAlerts.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-green-500">Triggered Alerts</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {triggeredAlerts.map(alert => (
+                  <AlertItem key={alert.id} alert={alert} onRemove={removeAlert} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {alerts.length === 0 && (
+            <p className="text-center text-muted-foreground py-4">
+              No alerts set. Create one above!
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
-}
+});
+
+PriceAlertManager.displayName = 'PriceAlertManager';
 
 export default memo(PriceAlertManager);

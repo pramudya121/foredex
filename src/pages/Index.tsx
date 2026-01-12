@@ -1,30 +1,52 @@
-import { memo } from 'react';
+import { memo, forwardRef } from 'react';
 import { SwapCard } from '@/components/SwapCard';
 import { Zap, Shield, TrendingUp, Sparkles } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import wolfLogo from '@/assets/wolf-logo.png';
 
-const FeatureBadge = memo(({ icon: Icon, text, delay = 0 }: { icon: React.ElementType; text: string; delay?: number }) => (
-  <div 
-    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm hover-lift animate-slide-up opacity-0"
-    style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
-  >
-    <Icon className="w-3.5 h-3.5 text-primary" />
-    <span className="text-muted-foreground">{text}</span>
-  </div>
+interface FeatureBadgeProps {
+  icon: React.ElementType;
+  text: string;
+  delay?: number;
+}
+
+const FeatureBadge = memo(forwardRef<HTMLDivElement, FeatureBadgeProps>(
+  function FeatureBadge({ icon: Icon, text, delay = 0 }, ref) {
+    return (
+      <div 
+        ref={ref}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm hover-lift animate-slide-up opacity-0"
+        style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
+      >
+        <Icon className="w-3.5 h-3.5 text-primary" />
+        <span className="text-muted-foreground">{text}</span>
+      </div>
+    );
+  }
 ));
 
 FeatureBadge.displayName = 'FeatureBadge';
 
-const StatCard = memo(({ value, label, delay = 0 }: { value: string; label: string; delay?: number }) => (
-  <div 
-    className="glass-card p-4 text-center hover-lift card-glow animate-scale-in opacity-0"
-    style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
-  >
-    <p className="text-xl sm:text-2xl font-bold text-primary animate-pulse-ring inline-block">{value}</p>
-    <p className="text-xs text-muted-foreground mt-1">{label}</p>
-  </div>
+interface StatCardProps {
+  value: string;
+  label: string;
+  delay?: number;
+}
+
+const StatCard = memo(forwardRef<HTMLDivElement, StatCardProps>(
+  function StatCard({ value, label, delay = 0 }, ref) {
+    return (
+      <div 
+        ref={ref}
+        className="glass-card p-4 text-center hover-lift card-glow animate-scale-in opacity-0"
+        style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
+      >
+        <p className="text-xl sm:text-2xl font-bold text-primary animate-pulse-ring inline-block">{value}</p>
+        <p className="text-xs text-muted-foreground mt-1">{label}</p>
+      </div>
+    );
+  }
 ));
 
 StatCard.displayName = 'StatCard';
