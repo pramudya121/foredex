@@ -1,4 +1,4 @@
-import { useState, useEffect, memo, forwardRef } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Bell, BellRing, Plus, Trash2, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +67,7 @@ const AlertItem = memo(({ alert, onRemove }: { alert: PriceAlert; onRemove: (id:
 
 AlertItem.displayName = 'AlertItem';
 
-const PriceAlertManager = forwardRef<HTMLDivElement>(function PriceAlertManager(_, ref) {
+function PriceAlertManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
@@ -130,7 +130,7 @@ const PriceAlertManager = forwardRef<HTMLDivElement>(function PriceAlertManager(
   const triggeredAlerts = getTriggeredAlerts();
 
   return (
-    <div ref={ref}>
+    <div>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
           <Button variant="outline" size="icon" className="relative">
@@ -252,8 +252,6 @@ const PriceAlertManager = forwardRef<HTMLDivElement>(function PriceAlertManager(
       </Dialog>
     </div>
   );
-});
+}
 
-PriceAlertManager.displayName = 'PriceAlertManager';
-
-export default memo(PriceAlertManager);
+export default PriceAlertManager;
