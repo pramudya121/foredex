@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { CONTRACTS, NEXUS_TESTNET } from '@/config/contracts';
+import { CONTRACTS } from '@/config/contracts';
 import { FARMING_ABI } from '@/config/farmingAbi';
 import { FarmingOwnershipTransfer } from '@/components/FarmingOwnershipTransfer';
+import { rpcProvider } from '@/lib/rpcProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { 
   Shield, 
   Plus, 
@@ -39,7 +39,7 @@ export default function FarmingAdminPage() {
   const [editPid, setEditPid] = useState('');
   const [editAlloc, setEditAlloc] = useState('');
 
-  // Check owner status
+  // Check owner status using rpcProvider to avoid CORS issues
   useEffect(() => {
     const checkOwner = async () => {
       if (!address) {
@@ -49,18 +49,27 @@ export default function FarmingAdminPage() {
       }
 
       try {
-        const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
+        const provider = rpcProvider.getProvider();
+        if (!provider) {
+          setLoading(false);
+          return;
+        }
+        
         const contract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, provider);
         
         const [owner, paused] = await Promise.all([
-          contract.owner(),
-          contract.paused(),
+          rpcProvider.call(() => contract.owner(), 'farming_owner'),
+          rpcProvider.call(() => contract.paused(), 'farming_paused'),
         ]);
         
-        setIsOwner(owner.toLowerCase() === address.toLowerCase());
-        setIsPaused(paused);
+        setIsOwner(owner?.toLowerCase() === address.toLowerCase());
+        setIsPaused(paused ?? false);
       } catch (error) {
-        console.error('Error checking owner:', error);
+        // Silently handle CORS/network errors
+        const errorMsg = rpcProvider.parseError(error);
+        if (errorMsg) {
+          console.error('Error checking owner:', errorMsg);
+        }
         setIsOwner(false);
       } finally {
         setLoading(false);
@@ -100,9 +109,14 @@ export default function FarmingAdminPage() {
       setNewPoolLP('');
       setNewPoolAlloc('100');
     } catch (error: any) {
-      console.error('Error adding pool:', error);
-      const msg = error?.reason || error?.message || 'Failed to add pool';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'add-pool' });
+      // Use rpcProvider to parse and filter errors
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'add-pool' });
+      } else {
+        // Only log if it's not a network/CORS error
+        toast.dismiss('add-pool');
+      }
     } finally {
       setActionLoading(null);
     }
@@ -138,9 +152,12 @@ export default function FarmingAdminPage() {
       setEditPid('');
       setEditAlloc('');
     } catch (error: any) {
-      console.error('Error setting allocation:', error);
-      const msg = error?.reason || error?.message || 'Failed to update allocation';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'set-alloc' });
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'set-alloc' });
+      } else {
+        toast.dismiss('set-alloc');
+      }
     } finally {
       setActionLoading(null);
     }
@@ -170,9 +187,12 @@ export default function FarmingAdminPage() {
         setIsPaused(true);
       }
     } catch (error: any) {
-      console.error('Error toggling pause:', error);
-      const msg = error?.reason || error?.message || 'Failed to toggle pause';
-      toast.error(msg.includes('user rejected') ? 'Transaction cancelled' : msg, { id: 'pause' });
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'pause' });
+      } else {
+        toast.dismiss('pause');
+      }
     } finally {
       setActionLoading(null);
     }
