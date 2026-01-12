@@ -720,16 +720,12 @@ export function LiquidityPanel() {
         fetchPairData();
       }, 3000);
     } catch (error: any) {
-      console.error('[LiquidityPanel] Remove liquidity error:', error);
-      // Suppress network/coalesce errors, only show actionable errors
-      const errorMsg = rpcProvider.parseError(error, false);
+      // Use rpcProvider.parseError with showTransient=true to:
+      // - Show "Transaction cancelled" for user rejected action
+      // - Suppress "could not coalesce" and 429 rate limit errors (returns null)
+      const errorMsg = rpcProvider.parseError(error, true);
       if (errorMsg) {
         toast.error(errorMsg);
-      } else if (error?.message && !error.message.includes('coalesce')) {
-        // Check for user rejection
-        if (error.message.includes('user rejected') || error.message.includes('User denied')) {
-          toast.error('Transaction cancelled');
-        }
       }
     } finally {
       setLoading(false);
