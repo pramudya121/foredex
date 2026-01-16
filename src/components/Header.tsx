@@ -31,7 +31,8 @@ const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
 const LanguageSelector = lazy(() => import('./LanguageSelector'));
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Swap' },
+  { path: '/', label: 'Home' },
+  { path: '/swap', label: 'Swap' },
   { path: '/liquidity', label: 'Liquidity' },
   { path: '/pools', label: 'Pools' },
   { path: '/farming', label: 'Farming' },

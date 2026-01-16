@@ -10,7 +10,8 @@ import {
   FileText, 
   Settings,
   Coins,
-  Sprout
+  Sprout,
+  Home
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,8 @@ import {
 import wolfLogo from '@/assets/wolf-logo.png';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Swap', icon: ArrowLeftRight },
+  { path: '/', label: 'Home', icon: Home },
+  { path: '/swap', label: 'Swap', icon: ArrowLeftRight },
   { path: '/liquidity', label: 'Liquidity', icon: Droplets },
   { path: '/pools', label: 'Pools', icon: LayoutGrid },
   { path: '/farming', label: 'Farming', icon: Sprout },
