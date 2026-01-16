@@ -224,34 +224,42 @@ export default function LiquidityPoolDetailPage() {
   const pairName = `${pool.token0.symbol}/${pool.token1.symbol}`;
 
   return (
-    <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
-      <Button variant="ghost" onClick={() => navigate('/pools')} className="mb-6">
+    <main className="flex-1 container mx-auto px-4 py-6 sm:py-8 max-w-6xl relative">
+      {/* Ambient background effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-20 right-1/4 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 left-1/4 w-64 h-64 bg-green-500/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
+
+      <Button variant="ghost" onClick={() => navigate('/pools')} className="mb-6 hover-lift">
         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Pools
       </Button>
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div className="flex items-center gap-4">
-          <div className="flex -space-x-3">
-            <TokenLogo symbol={pool.token0.symbol} logoURI={pool.token0.logoURI} size="xl" className="border-2 border-card z-10" />
-            <TokenLogo symbol={pool.token1.symbol} logoURI={pool.token1.logoURI} size="xl" className="border-2 border-card" />
-          </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold">{pairName}</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="text-xs">
-                <Percent className="w-3 h-3 mr-1" />
-                0.3% fee
-              </Badge>
-              <Badge className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border-green-500/30">
-                <Flame className="w-3 h-3 mr-1" />
-                {pool.apr.toFixed(1)}% APR
-              </Badge>
+      <div className="glass-card p-6 mb-6 animate-fade-in">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex -space-x-3 relative">
+              <TokenLogo symbol={pool.token0.symbol} logoURI={pool.token0.logoURI} size="xl" className="border-2 border-card z-10 ring-2 ring-primary/20" />
+              <TokenLogo symbol={pool.token1.symbol} logoURI={pool.token1.logoURI} size="xl" className="border-2 border-card ring-2 ring-primary/20" />
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full -z-10 animate-pulse" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold">{pairName}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="text-xs">
+                  <Percent className="w-3 h-3 mr-1" />
+                  0.3% fee
+                </Badge>
+                <Badge className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border-green-500/30">
+                  <Flame className="w-3 h-3 mr-1" />
+                  {pool.apr.toFixed(1)}% APR
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
+          
+          <div className="flex items-center gap-2">
           <Link to={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}`}>
             <Button className="bg-gradient-wolf">
               <Plus className="w-4 h-4 mr-2" />
@@ -277,69 +285,62 @@ export default function LiquidityPoolDetailPage() {
           </a>
         </div>
       </div>
+    </div>
 
-      {/* Stats Grid */}
+    {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Card className="bg-card/50 backdrop-blur">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-500/10">
-                <Layers className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Value Locked</p>
-                <p className="text-xl font-bold">{formatNumber(pool.tvl)}</p>
-              </div>
+        <div className="glass-card p-5 hover-lift card-glow animate-scale-in" style={{ animationDelay: '100ms', animationFillMode: 'forwards' }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 transition-transform duration-300 hover:scale-110">
+              <Layers className="w-5 h-5 text-blue-500" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Value Locked</p>
+              <p className="text-xl font-bold">{formatNumber(pool.tvl)}</p>
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-card/50 backdrop-blur">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-green-500/10">
-                <TrendingUp className="w-6 h-6 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">24h Volume</p>
-                <p className="text-xl font-bold">{formatNumber(pool.volume24h)}</p>
-              </div>
+        <div className="glass-card p-5 hover-lift card-glow animate-scale-in" style={{ animationDelay: '200ms', animationFillMode: 'forwards' }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-green-500/10 transition-transform duration-300 hover:scale-110">
+              <TrendingUp className="w-5 h-5 text-green-500" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-xs text-muted-foreground">24h Volume</p>
+              <p className="text-xl font-bold">{formatNumber(pool.volume24h)}</p>
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-card/50 backdrop-blur">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-purple-500/10">
-                <DollarSign className="w-6 h-6 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">24h Fees</p>
-                <p className="text-xl font-bold text-green-500">{formatNumber(pool.fees24h)}</p>
-              </div>
+        <div className="glass-card p-5 hover-lift card-glow animate-scale-in" style={{ animationDelay: '300ms', animationFillMode: 'forwards' }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-500/10 transition-transform duration-300 hover:scale-110">
+              <DollarSign className="w-5 h-5 text-purple-500" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-xs text-muted-foreground">24h Fees</p>
+              <p className="text-xl font-bold text-green-500">{formatNumber(pool.fees24h)}</p>
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-card/50 backdrop-blur">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-orange-500/10">
-                <Flame className="w-6 h-6 text-orange-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">APR</p>
-                <p className={cn(
-                  'text-xl font-bold',
-                  pool.apr > 50 ? 'text-green-500' : 'text-foreground'
-                )}>
-                  {pool.apr.toFixed(2)}%
-                </p>
-              </div>
+        <div className="glass-card p-5 hover-lift card-glow animate-scale-in" style={{ animationDelay: '400ms', animationFillMode: 'forwards' }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-orange-500/10 transition-transform duration-300 hover:scale-110">
+              <Flame className="w-5 h-5 text-orange-500" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-xs text-muted-foreground">APR</p>
+              <p className={cn(
+                'text-xl font-bold',
+                pool.apr > 50 ? 'text-green-500' : 'text-foreground'
+              )}>
+                {pool.apr.toFixed(2)}%
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Interactive Chart Section */}

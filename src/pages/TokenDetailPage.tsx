@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
@@ -116,6 +116,40 @@ function generateHistoricalData(basePrice: number, points: number, timeRange: Ti
   
   return data;
 }
+
+// Stat Card Component
+const StatCard = memo(({ 
+  icon: Icon, 
+  iconColor, 
+  bgColor,
+  label, 
+  value, 
+  valueColor,
+  delay = 0 
+}: {
+  icon: React.ElementType;
+  iconColor: string;
+  bgColor: string;
+  label: string;
+  value: string | React.ReactNode;
+  valueColor?: string;
+  delay?: number;
+}) => (
+  <div 
+    className="glass-card p-4 hover-lift card-glow animate-scale-in opacity-0"
+    style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
+  >
+    <div className="flex items-center gap-2 mb-1">
+      <div className={`p-1.5 rounded-lg ${bgColor}`}>
+        <Icon className={`w-4 h-4 ${iconColor}`} />
+      </div>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+    <p className={`text-lg font-bold ${valueColor || ''}`}>{value}</p>
+  </div>
+));
+
+StatCard.displayName = 'StatCard';
 
 export default function TokenDetailPage() {
   const { address } = useParams<{ address: string }>();
@@ -249,31 +283,42 @@ export default function TokenDetailPage() {
 
   if (!token) {
     return (
-      <main className="container py-8 max-w-7xl">
-        <Button variant="ghost" onClick={() => navigate('/tokens')} className="mb-6">
+      <main className="container py-6 sm:py-8 max-w-7xl px-4 relative">
+        <Button variant="ghost" onClick={() => navigate('/tokens')} className="mb-6 hover-lift">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Tokens
         </Button>
-        <div className="glass-card p-12 text-center">
-          <p className="text-muted-foreground">Token not found</p>
+        <div className="glass-card p-12 text-center animate-scale-in">
+          <Layers className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+          <h2 className="text-xl font-semibold mb-2">Token Not Found</h2>
+          <p className="text-muted-foreground mb-6">The token you're looking for doesn't exist.</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="container py-8 max-w-7xl">
+    <main className="container py-6 sm:py-8 max-w-7xl px-4 relative">
+      {/* Ambient background effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-20 right-1/4 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 left-1/4 w-64 h-64 bg-primary/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
+
       {/* Back Button */}
-      <Button variant="ghost" onClick={() => navigate('/tokens')} className="mb-6">
+      <Button variant="ghost" onClick={() => navigate('/tokens')} className="mb-6 hover-lift">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Back to Tokens
       </Button>
 
       {/* Token Header */}
-      <div className="glass-card p-6 mb-6">
+      <div className="glass-card p-6 mb-6 animate-fade-in">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="lg" />
+            <div className="relative">
+              <TokenLogo symbol={token.symbol} logoURI={token.logoURI} size="lg" className="ring-2 ring-primary/20" />
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full -z-10 animate-pulse" />
+            </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl md:text-3xl font-bold">{token.name}</h1>
@@ -281,7 +326,7 @@ export default function TokenDetailPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 hover-lift"
                   onClick={toggleFavorite}
                 >
                   <Star className={cn(
@@ -301,7 +346,7 @@ export default function TokenDetailPage() {
                   href={`${NEXUS_TESTNET.blockExplorer}/address/${address}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary"
+                  className="text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
@@ -331,7 +376,7 @@ export default function TokenDetailPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {loading ? (
           Array(8).fill(0).map((_, i) => (
             <div key={i} className="glass-card p-4">
@@ -341,73 +386,77 @@ export default function TokenDetailPage() {
           ))
         ) : metrics && (
           <>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <DollarSign className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Market Cap</span>
-              </div>
-              <p className="text-lg font-bold">{formatNumber(metrics.marketCap)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="w-4 h-4 text-blue-500" />
-                <span className="text-xs text-muted-foreground">24h Volume</span>
-              </div>
-              <p className="text-lg font-bold">{formatNumber(metrics.volume24h)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Layers className="w-4 h-4 text-green-500" />
-                <span className="text-xs text-muted-foreground">TVL</span>
-              </div>
-              <p className="text-lg font-bold">{formatNumber(metrics.tvl)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="w-4 h-4 text-purple-500" />
-                <span className="text-xs text-muted-foreground">7d Change</span>
-              </div>
-              <p className={cn(
-                'text-lg font-bold',
-                metrics.priceChange7d >= 0 ? 'text-green-500' : 'text-red-500'
-              )}>
-                {metrics.priceChange7d >= 0 ? '+' : ''}{metrics.priceChange7d.toFixed(2)}%
-              </p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <BarChart3 className="w-4 h-4 text-orange-500" />
-                <span className="text-xs text-muted-foreground">Circulating Supply</span>
-              </div>
-              <p className="text-lg font-bold">{formatSupply(metrics.circulatingSupply)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Layers className="w-4 h-4 text-cyan-500" />
-                <span className="text-xs text-muted-foreground">Total Supply</span>
-              </div>
-              <p className="text-lg font-bold">{formatSupply(metrics.totalSupply)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-green-500" />
-                <span className="text-xs text-muted-foreground">All-Time High</span>
-              </div>
-              <p className="text-lg font-bold">${metrics.allTimeHigh.toFixed(4)}</p>
-            </div>
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingDown className="w-4 h-4 text-red-500" />
-                <span className="text-xs text-muted-foreground">All-Time Low</span>
-              </div>
-              <p className="text-lg font-bold">${metrics.allTimeLow.toFixed(4)}</p>
-            </div>
+            <StatCard
+              icon={DollarSign}
+              iconColor="text-primary"
+              bgColor="bg-primary/10"
+              label="Market Cap"
+              value={formatNumber(metrics.marketCap)}
+              delay={100}
+            />
+            <StatCard
+              icon={Activity}
+              iconColor="text-blue-500"
+              bgColor="bg-blue-500/10"
+              label="24h Volume"
+              value={formatNumber(metrics.volume24h)}
+              delay={150}
+            />
+            <StatCard
+              icon={Layers}
+              iconColor="text-green-500"
+              bgColor="bg-green-500/10"
+              label="TVL"
+              value={formatNumber(metrics.tvl)}
+              delay={200}
+            />
+            <StatCard
+              icon={Clock}
+              iconColor="text-purple-500"
+              bgColor="bg-purple-500/10"
+              label="7d Change"
+              value={`${metrics.priceChange7d >= 0 ? '+' : ''}${metrics.priceChange7d.toFixed(2)}%`}
+              valueColor={metrics.priceChange7d >= 0 ? 'text-green-500' : 'text-red-500'}
+              delay={250}
+            />
+            <StatCard
+              icon={BarChart3}
+              iconColor="text-orange-500"
+              bgColor="bg-orange-500/10"
+              label="Circulating Supply"
+              value={formatSupply(metrics.circulatingSupply)}
+              delay={300}
+            />
+            <StatCard
+              icon={Layers}
+              iconColor="text-cyan-500"
+              bgColor="bg-cyan-500/10"
+              label="Total Supply"
+              value={formatSupply(metrics.totalSupply)}
+              delay={350}
+            />
+            <StatCard
+              icon={TrendingUp}
+              iconColor="text-green-500"
+              bgColor="bg-green-500/10"
+              label="All-Time High"
+              value={`$${metrics.allTimeHigh.toFixed(4)}`}
+              delay={400}
+            />
+            <StatCard
+              icon={TrendingDown}
+              iconColor="text-red-500"
+              bgColor="bg-red-500/10"
+              label="All-Time Low"
+              value={`$${metrics.allTimeLow.toFixed(4)}`}
+              delay={450}
+            />
           </>
         )}
       </div>
 
       {/* Charts */}
-      <div className="glass-card p-6">
+      <div className="glass-card p-6 animate-scale-in" style={{ animationDelay: '500ms', animationFillMode: 'forwards' }}>
         <Tabs defaultValue="price" className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <TabsList>
@@ -528,31 +577,31 @@ export default function TokenDetailPage() {
 
       {/* Additional Info */}
       <div className="grid md:grid-cols-2 gap-6 mt-6">
-        <div className="glass-card p-6">
+        <div className="glass-card p-6 hover-lift animate-slide-up" style={{ animationDelay: '600ms', animationFillMode: 'forwards' }}>
           <h3 className="text-lg font-semibold mb-4">Token Information</h3>
           <div className="space-y-3">
-            <div className="flex justify-between">
+            <div className="flex justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">Contract Address</span>
               <code className="text-xs bg-muted px-2 py-1 rounded">
                 {address?.slice(0, 10)}...{address?.slice(-8)}
               </code>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">Network</span>
               <span className="font-medium">Nexus Testnet</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">Decimals</span>
               <span className="font-medium">18</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between py-2">
               <span className="text-muted-foreground">Token Type</span>
               <span className="font-medium">ERC-20</span>
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-6">
+        <div className="glass-card p-6 hover-lift animate-slide-up" style={{ animationDelay: '700ms', animationFillMode: 'forwards' }}>
           <h3 className="text-lg font-semibold mb-4">Market Statistics</h3>
           {loading ? (
             <div className="space-y-3">
@@ -562,21 +611,21 @@ export default function TokenDetailPage() {
             </div>
           ) : metrics && (
             <div className="space-y-3">
-              <div className="flex justify-between">
+              <div className="flex justify-between py-2 border-b border-border/50">
                 <span className="text-muted-foreground">Holders</span>
                 <span className="font-medium">{metrics.holders.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between py-2 border-b border-border/50">
                 <span className="text-muted-foreground">24h Transactions</span>
                 <span className="font-medium">{metrics.transactions24h.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between py-2 border-b border-border/50">
                 <span className="text-muted-foreground">Volume/Market Cap</span>
                 <span className="font-medium">
                   {((metrics.volume24h / metrics.marketCap) * 100).toFixed(2)}%
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between py-2">
                 <span className="text-muted-foreground">Fully Diluted Valuation</span>
                 <span className="font-medium">
                   {formatNumber(metrics.price * metrics.totalSupply)}
@@ -588,10 +637,10 @@ export default function TokenDetailPage() {
       </div>
 
       {/* Trade Button */}
-      <div className="mt-6 flex justify-center">
+      <div className="mt-8 flex justify-center animate-fade-in" style={{ animationDelay: '800ms' }}>
         <Button 
           size="lg" 
-          className="px-12"
+          className="px-12 bg-gradient-wolf hover-lift"
           onClick={() => navigate('/')}
         >
           Trade {token.symbol}
