@@ -13,6 +13,7 @@ import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
 
 // Lazy load pages for better performance
+const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
 const Liquidity = lazy(() => import("./pages/Liquidity"));
 const Pools = lazy(() => import("./pages/Pools"));
@@ -59,7 +60,8 @@ const AppContent = memo(function AppContent() {
       <Suspense fallback={<PageLoader />}>
         <PageTransition>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/swap" element={<Index />} />
             <Route path="/liquidity" element={<Liquidity />} />
             <Route path="/pools" element={<Pools />} />
             <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
