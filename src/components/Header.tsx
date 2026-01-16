@@ -24,6 +24,7 @@ import { NetworkStatus } from './NetworkStatus';
 import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
+import { PremiumThemeToggle } from './ui/premium-theme-toggle';
 import { RpcStatusIndicator } from './RpcStatusIndicator';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -221,8 +222,8 @@ export function Header() {
             <LanguageSelector />
           </Suspense>
 
-          {/* Theme Toggle */}
-          <ThemeToggle />
+          {/* Premium Theme Toggle */}
+          <PremiumThemeToggle />
 
           {/* RPC Status */}
           <RpcStatusIndicator />

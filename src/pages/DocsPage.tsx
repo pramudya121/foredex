@@ -1,4 +1,4 @@
-import { useState, forwardRef } from 'react';
+import { useState, forwardRef, memo } from 'react';
 import { CONTRACTS, TOKENS, NEXUS_TESTNET } from '@/config/contracts';
 import { 
   Book, 
@@ -28,6 +28,9 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import wolfLogo from '@/assets/wolf-logo.png';
+import { Spotlight } from '@/components/ui/spotlight';
+import { HoverEffect } from '@/components/ui/hover-effect';
+import { BorderBeam } from '@/components/ui/border-beam';
 
 const DOCS_SECTIONS = [
   { id: 'overview', label: 'Overview', icon: Book },
@@ -220,7 +223,7 @@ const TOKEN_INFO = [
   { name: 'WETH', address: TOKENS.WETH, description: 'Wrapped ETH representation' },
 ];
 
-export default function DocsPage() {
+function DocsPage() {
   const [activeSection, setActiveSection] = useState('overview');
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
@@ -351,7 +354,8 @@ ${p.items.map((i: string) => `- ${i}`).join('\n')}
   };
 
   return (
-    <main className="container py-8 md:py-12 max-w-7xl">
+    <Spotlight className="min-h-screen">
+      <main className="container py-8 md:py-12 max-w-7xl relative">
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Navigation */}
         <aside className="lg:w-64 shrink-0">
@@ -848,5 +852,8 @@ ${p.items.map((i: string) => `- ${i}`).join('\n')}
         </div>
       </div>
     </main>
+    </Spotlight>
   );
 }
+
+export default memo(DocsPage);
