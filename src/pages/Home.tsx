@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { memo, Suspense, lazy } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users } from 'lucide-react';
+import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spotlight } from '@/components/ui/spotlight';
 import { ShimmerButton } from '@/components/ui/shimmer-button';
@@ -12,6 +12,7 @@ import { GlowingStarsBackgroundCard } from '@/components/ui/glowing-stars';
 import { HeroTokenCarousel } from '@/components/home/HeroTokenCarousel';
 import { PartnersSection } from '@/components/home/PartnersSection';
 import { MobileFloatingDock } from '@/components/home/MobileFloatingDock';
+import { StatsSectionSkeleton, FeaturesSectionSkeleton, CarouselSkeleton } from '@/components/home/HomeSkeletons';
 import { cn } from '@/lib/utils';
 
 // Feature cards data
@@ -66,25 +67,31 @@ const StatCard = memo(function StatCard({
 }) {
   return (
     <div 
-      className="relative group"
+      className="relative group animate-fade-in"
       style={{ animationDelay: `${delay}ms` }}
     >
+      {/* Hover glow effect */}
       <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-primary/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative glass-card p-6 text-center hover-lift overflow-hidden rounded-2xl">
+      
+      <div className="relative glass-card p-5 sm:p-6 text-center hover-lift overflow-hidden rounded-2xl border border-border/30 group-hover:border-primary/30 transition-colors duration-300">
         <BorderBeam size={100} duration={12} delay={delay / 1000} />
         
+        {/* Icon */}
         {Icon && (
           <div className="flex justify-center mb-3">
-            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors duration-300">
               <Icon className="w-5 h-5" />
             </div>
           </div>
         )}
         
-        <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary mb-1 transition-transform group-hover:scale-110">
+        {/* Value */}
+        <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary mb-1.5 transition-transform group-hover:scale-105 duration-300">
           <NumberTicker value={value} prefix={prefix} suffix={suffix} delay={delay} decimalPlaces={decimalPlaces} />
         </p>
-        <p className="text-xs sm:text-sm text-muted-foreground">{label}</p>
+        
+        {/* Label */}
+        <p className="text-xs sm:text-sm text-muted-foreground font-medium">{label}</p>
       </div>
     </div>
   );
@@ -99,30 +106,29 @@ const FeatureBadge = memo(function FeatureBadge({
   text: string;
 }) {
   return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground group/badge">
-      <div className="p-1.5 rounded-lg bg-primary/10 group-hover/badge:bg-primary/20 transition-colors">
+    <div className="flex items-center gap-2 text-sm text-muted-foreground group/badge cursor-default">
+      <div className="p-1.5 rounded-lg bg-primary/10 group-hover/badge:bg-primary/20 transition-colors duration-300">
         <Icon className="w-4 h-4 text-primary" />
       </div>
-      <span className="group-hover/badge:text-foreground transition-colors">{text}</span>
+      <span className="group-hover/badge:text-foreground transition-colors duration-300">{text}</span>
     </div>
   );
 });
 
-
 function Home() {
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Ambient background effects */}
+      {/* Ambient background effects - Optimized with reduced opacity */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-primary/3 rounded-full blur-[150px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/2 rounded-full blur-[200px]" />
+        <div className="absolute top-0 left-1/4 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-primary/3 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/2 rounded-full blur-[150px]" />
       </div>
 
       <Spotlight className="min-h-screen relative z-10">
         <main className="relative">
           {/* Hero Section */}
-          <section className="container px-4 py-12 sm:py-16 md:py-24 lg:py-32 relative">
+          <section className="container px-4 py-12 sm:py-16 md:py-20 lg:py-28 relative">
             <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
               {/* Left Content */}
               <div className="space-y-6 sm:space-y-8 animate-fade-in">
@@ -139,15 +145,15 @@ function Home() {
                 <div className="space-y-4">
                   <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
                     Trade on{' '}
-                    <span className="relative">
-                      <span className="gradient-text animate-shimmer">FOREDEX</span>
-                      <span className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-primary to-primary/50 rounded-full blur-sm" />
+                    <span className="relative inline-block">
+                      <span className="gradient-text animate-shimmer bg-clip-text">FOREDEX</span>
+                      <span className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary/80 to-primary/50 rounded-full blur-sm" />
                     </span>
                   </h1>
                   <div className="max-w-xl">
                     <TextGenerateEffect 
                       words="The fastest DEX on Nexus Network. Swap tokens with minimal slippage and low fees."
-                      className="text-lg sm:text-xl text-muted-foreground"
+                      className="text-lg sm:text-xl text-muted-foreground leading-relaxed"
                     />
                   </div>
                 </div>
@@ -155,8 +161,8 @@ function Home() {
                 {/* CTA Buttons */}
                 <div className="flex flex-wrap gap-4 pt-2">
                   <Link to="/swap">
-                    <ShimmerButton className="px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold">
-                      <ArrowRightLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                    <ShimmerButton className="px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold group">
+                      <ArrowRightLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:rotate-180 transition-transform duration-500" />
                       Start Trading
                     </ShimmerButton>
                   </Link>
@@ -164,9 +170,9 @@ function Home() {
                     <Button 
                       variant="outline" 
                       size="lg"
-                      className="px-6 sm:px-8 py-5 sm:py-6 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300"
+                      className="px-6 sm:px-8 py-5 sm:py-6 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 group"
                     >
-                      <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                      <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform duration-300" />
                       Learn More
                     </Button>
                   </Link>
@@ -182,15 +188,21 @@ function Home() {
 
               {/* Right Content - Token Carousel */}
               <div className="flex items-center justify-center lg:justify-end animate-scale-in">
-                <HeroTokenCarousel />
+                <Suspense fallback={<CarouselSkeleton />}>
+                  <HeroTokenCarousel />
+                </Suspense>
               </div>
             </div>
           </section>
 
           {/* Stats Section */}
           <section className="container px-4 py-12 sm:py-16">
-            <div className="text-center mb-10 sm:mb-12">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3">
+            <div className="text-center mb-10 sm:mb-12 space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                Platform Statistics
+              </div>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
                 Trusted by <span className="text-primary">Thousands</span>
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
@@ -203,7 +215,7 @@ function Home() {
                 <StatCard 
                   key={stat.label}
                   {...stat}
-                  delay={index * 100}
+                  delay={index * 150}
                 />
               ))}
             </div>
@@ -211,8 +223,12 @@ function Home() {
 
           {/* Features Section */}
           <section className="container px-4 py-12 sm:py-16">
-            <div className="text-center mb-10 sm:mb-12">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3">
+            <div className="text-center mb-10 sm:mb-12 space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-2">
+                <Zap className="w-3.5 h-3.5" />
+                Core Features
+              </div>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
                 Everything You Need to <span className="text-primary">Trade</span>
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
@@ -234,7 +250,7 @@ function Home() {
                 
                 <div className="relative z-10 space-y-5 sm:space-y-6">
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/30 mb-4">
-                    <Rocket className="w-4 h-4 text-primary" />
+                    <Rocket className="w-4 h-4 text-primary animate-bounce" />
                     <span className="text-sm font-medium text-primary">Ready to Launch?</span>
                   </div>
                   
@@ -247,8 +263,8 @@ function Home() {
                   
                   <div className="flex flex-wrap justify-center gap-3 sm:gap-4 pt-4">
                     <Link to="/swap">
-                      <ShimmerButton className="px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold">
-                        <ArrowRightLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                      <ShimmerButton className="px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold group">
+                        <ArrowRightLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:rotate-180 transition-transform duration-500" />
                         Launch App
                       </ShimmerButton>
                     </Link>
@@ -256,9 +272,9 @@ function Home() {
                       <Button 
                         variant="outline" 
                         size="lg"
-                        className="px-6 sm:px-8 py-5 sm:py-6 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all"
+                        className="px-6 sm:px-8 py-5 sm:py-6 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 group"
                       >
-                        <Wallet className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                        <Wallet className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform duration-300" />
                         View Portfolio
                       </Button>
                     </Link>
