@@ -1,4 +1,4 @@
-import { memo, Suspense, lazy } from 'react';
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,6 @@ import { GlowingStarsBackgroundCard } from '@/components/ui/glowing-stars';
 import { HeroTokenCarousel } from '@/components/home/HeroTokenCarousel';
 import { PartnersSection } from '@/components/home/PartnersSection';
 import { MobileFloatingDock } from '@/components/home/MobileFloatingDock';
-import { StatsSectionSkeleton, FeaturesSectionSkeleton, CarouselSkeleton } from '@/components/home/HomeSkeletons';
 import { cn } from '@/lib/utils';
 
 // Feature cards data
@@ -115,7 +114,7 @@ const FeatureBadge = memo(function FeatureBadge({
   );
 });
 
-function Home() {
+function HomePage() {
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* Ambient background effects - Optimized with reduced opacity */}
@@ -188,9 +187,7 @@ function Home() {
 
               {/* Right Content - Token Carousel */}
               <div className="flex items-center justify-center lg:justify-end animate-scale-in">
-                <Suspense fallback={<CarouselSkeleton />}>
-                  <HeroTokenCarousel />
-                </Suspense>
+                <HeroTokenCarousel />
               </div>
             </div>
           </section>
@@ -295,4 +292,4 @@ function Home() {
   );
 }
 
-export default memo(Home);
+export default memo(HomePage);
