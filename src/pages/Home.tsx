@@ -14,6 +14,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { HeroTokenCarousel } from '@/components/home/HeroTokenCarousel';
 import { ParallaxSection, ParallaxBackground } from '@/components/home/ParallaxSection';
 import { MobileFloatingDock } from '@/components/home/MobileFloatingDock';
+import { PartnersSection } from '@/components/home/PartnersSection';
 
 // Feature cards data
 const FEATURES = [
@@ -230,6 +231,9 @@ const Home = () => {
               <HoverEffect items={FEATURES} />
             </section>
           </ParallaxSection>
+
+          {/* Partners Section */}
+          <PartnersSection />
 
           {/* CTA Section */}
           <ParallaxSection speed={0.03}>

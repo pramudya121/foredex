@@ -20,7 +20,17 @@ export function PremiumThemeToggle() {
 
   const applyTheme = useCallback((selectedTheme: Theme) => {
     const actualTheme = selectedTheme === 'system' ? getSystemTheme() : selectedTheme;
+    
+    // Add transitioning class for smooth color morphing
+    document.documentElement.classList.add('transitioning');
+    
+    // Apply theme
     document.documentElement.classList.toggle('light', actualTheme === 'light');
+    
+    // Remove transitioning class after animation completes
+    setTimeout(() => {
+      document.documentElement.classList.remove('transitioning');
+    }, 600);
   }, [getSystemTheme]);
 
   useEffect(() => {
