@@ -1,12 +1,11 @@
-import { memo, forwardRef, useMemo, useState } from 'react';
+import { memo, forwardRef } from 'react';
 import { SwapCard } from '@/components/SwapCard';
 import { LimitOrderPanel } from '@/components/LimitOrderPanel';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft, Target } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
-import { TOKEN_LIST } from '@/config/contracts';
-import { TokenLogo } from '@/components/TokenLogo';
+
 import wolfLogo from '@/assets/wolf-logo.png';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -14,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Spotlight } from '@/components/ui/spotlight';
 import { ShimmerButton } from '@/components/ui/shimmer-button';
 import { RotatingLogo } from '@/components/ui/rotating-logo';
-import { Marquee } from '@/components/ui/marquee';
 import { NumberTicker } from '@/components/ui/number-ticker';
 import { BorderBeam } from '@/components/ui/border-beam';
 import { MovingBorder } from '@/components/ui/moving-border';
@@ -71,38 +69,8 @@ const StatCard = memo(forwardRef<HTMLDivElement, StatCardProps>(
 
 StatCard.displayName = 'StatCard';
 
-// Token Price Ticker Item
-const TokenTickerItem = memo(({ symbol, logoURI, price, change }: { 
-  symbol: string; 
-  logoURI?: string; 
-  price: number; 
-  change: number;
-}) => (
-  <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-card/50 border border-border/30 mx-2">
-    <TokenLogo symbol={symbol} logoURI={logoURI} size="sm" />
-    <span className="font-medium text-sm">{symbol}</span>
-    <span className="text-sm text-muted-foreground">${price.toFixed(4)}</span>
-    <span className={`text-xs font-medium ${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-      {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-    </span>
-  </div>
-));
-
-TokenTickerItem.displayName = 'TokenTickerItem';
-
 const Index = () => {
   const { isConnected } = useRealtimePrices();
-
-  // Generate mock token prices for marquee
-  const tokenPrices = useMemo(() => {
-    return TOKEN_LIST
-      .filter(t => t.address !== '0x0000000000000000000000000000000000000000')
-      .map((token, i) => ({
-        ...token,
-        price: 1 + Math.random() * 10,
-        change: (Math.random() - 0.5) * 20,
-      }));
-  }, []);
 
   return (
     <Spotlight className="min-h-screen">
@@ -160,22 +128,6 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Live Price Ticker Marquee */}
-        <div className="mb-8 -mx-4 overflow-hidden">
-          <div className="glass-card py-3 border-y border-x-0 rounded-none">
-            <Marquee pauseOnHover speed={40}>
-              {tokenPrices.map((token) => (
-                <TokenTickerItem 
-                  key={token.address}
-                  symbol={token.symbol}
-                  logoURI={token.logoURI}
-                  price={token.price}
-                  change={token.change}
-                />
-              ))}
-            </Marquee>
-          </div>
-        </div>
 
         {/* Main Trading Area with Tabs for Swap/Limit */}
         <div className="flex justify-center relative">
