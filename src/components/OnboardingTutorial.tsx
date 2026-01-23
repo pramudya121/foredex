@@ -141,25 +141,25 @@ export function OnboardingTutorial() {
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              'fixed z-50 w-[90vw] max-w-md',
+              'fixed z-50 w-[92vw] max-w-md mx-auto px-2 sm:px-0',
               step.position === 'center' && 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2',
-              step.position === 'top-left' && 'top-24 left-8',
-              step.position === 'top-right' && 'top-24 right-8',
-              step.position === 'bottom-left' && 'bottom-24 left-8',
-              step.position === 'bottom-right' && 'bottom-24 right-8'
+              step.position === 'top-left' && 'top-20 sm:top-24 left-2 sm:left-8',
+              step.position === 'top-right' && 'top-20 sm:top-24 right-2 sm:right-8',
+              step.position === 'bottom-left' && 'bottom-20 sm:bottom-24 left-2 sm:left-8',
+              step.position === 'bottom-right' && 'bottom-20 sm:bottom-24 right-2 sm:right-8'
             )}
           >
-            <div className="glass-card p-6 border-2 border-primary/30 shadow-2xl shadow-primary/10">
+            <div className="glass-card p-4 sm:p-6 border-2 border-primary/30 shadow-2xl shadow-primary/10">
               {/* Close button */}
               <button
                 onClick={handleSkip}
-                className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-muted transition-colors"
+                className="absolute top-2 sm:top-3 right-2 sm:right-3 p-1.5 rounded-full hover:bg-muted transition-colors"
               >
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
 
               {/* Progress bar */}
-              <div className="h-1 bg-muted rounded-full mb-6 overflow-hidden">
+              <div className="h-1 bg-muted rounded-full mb-4 sm:mb-6 overflow-hidden">
                 <motion.div
                   className="h-full bg-gradient-to-r from-primary to-primary/60"
                   initial={{ width: 0 }}
@@ -174,9 +174,9 @@ export function OnboardingTutorial() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', damping: 15 }}
-                className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 mx-auto"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-primary/10 flex items-center justify-center mb-3 sm:mb-4 mx-auto"
               >
-                <step.icon className="w-8 h-8 text-primary" />
+                <step.icon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
               </motion.div>
 
               {/* Content */}
@@ -185,24 +185,24 @@ export function OnboardingTutorial() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="text-center mb-6"
+                className="text-center mb-4 sm:mb-6"
               >
-                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold mb-1.5 sm:mb-2">{step.title}</h3>
+                <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
                   {step.description}
                 </p>
               </motion.div>
 
               {/* Step indicators */}
-              <div className="flex justify-center gap-1.5 mb-6">
+              <div className="flex justify-center gap-1 sm:gap-1.5 mb-4 sm:mb-6">
                 {TUTORIAL_STEPS.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setCurrentStep(index)}
                     className={cn(
-                      'w-2 h-2 rounded-full transition-all duration-300',
+                      'w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all duration-300',
                       index === currentStep 
-                        ? 'w-6 bg-primary' 
+                        ? 'w-4 sm:w-6 bg-primary' 
                         : index < currentStep 
                           ? 'bg-primary/50' 
                           : 'bg-muted'
@@ -212,34 +212,34 @@ export function OnboardingTutorial() {
               </div>
 
               {/* Navigation */}
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-2 sm:gap-3">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handlePrev}
                   disabled={currentStep === 0}
-                  className="gap-1"
+                  className="gap-1 text-xs sm:text-sm px-2 sm:px-3"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                  Back
+                  <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Back</span>
                 </Button>
 
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleSkip}
-                  className="text-muted-foreground"
+                  className="text-muted-foreground text-xs sm:text-sm px-2 sm:px-3"
                 >
-                  Skip Tour
+                  Skip
                 </Button>
 
                 <Button
                   size="sm"
                   onClick={handleNext}
-                  className="gap-1"
+                  className="gap-1 text-xs sm:text-sm px-2 sm:px-3"
                 >
-                  {currentStep === TUTORIAL_STEPS.length - 1 ? 'Get Started' : 'Next'}
-                  {currentStep < TUTORIAL_STEPS.length - 1 && <ChevronRight className="w-4 h-4" />}
+                  {currentStep === TUTORIAL_STEPS.length - 1 ? 'Start' : 'Next'}
+                  {currentStep < TUTORIAL_STEPS.length - 1 && <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />}
                 </Button>
               </div>
             </div>
