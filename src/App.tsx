@@ -7,8 +7,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Web3Provider } from "@/contexts/Web3Context";
 import { Header } from "@/components/Header";
 import { WaveBackground } from "@/components/WaveBackground";
-import { PriceTicker } from "@/components/PriceTicker";
-import { useSettingsStore } from "@/stores/settingsStore";
 import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
 
@@ -51,12 +49,9 @@ const queryClient = new QueryClient({
 });
 
 const AppContent = memo(function AppContent() {
-  const { settings } = useSettingsStore();
-  
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      {settings.showPriceTicker && <PriceTicker />}
       <Suspense fallback={<PageLoader />}>
         <PageTransition>
           <Routes>
