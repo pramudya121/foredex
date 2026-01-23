@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils';
 import { TokenLogo } from '@/components/TokenLogo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { BackgroundGradient } from '@/components/ui/background-gradient';
+import { BorderBeam } from '@/components/ui/border-beam';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { PoolMiniChart } from './PoolMiniChart';
 
@@ -63,14 +65,15 @@ export const PoolCard = memo(({
   const hasUserPosition = isConnected && pool.userLpBalance && parseFloat(pool.userLpBalance) > 0;
 
   return (
-    <div
+    <BackgroundGradient 
       className={cn(
-        'glass-card p-5 hover:border-primary/40 transition-all group',
-        'hover:shadow-lg hover:shadow-primary/5',
-        isFavorite && 'border-yellow-500/30 bg-yellow-500/5',
+        'p-5',
+        isFavorite && 'ring-2 ring-yellow-500/30',
         hasUserPosition && 'ring-2 ring-primary/30'
       )}
+      containerClassName="group"
     >
+      <BorderBeam size={120} duration={8} />
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -243,7 +246,7 @@ export const PoolCard = memo(({
           </Button>
         </Link>
       </div>
-    </div>
+    </BackgroundGradient>
   );
 });
 

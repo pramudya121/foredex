@@ -102,9 +102,9 @@ const Home = () => {
   }, []);
 
   return (
-    <>
+    <div className="relative min-h-screen">
       <ParallaxBackground />
-      <Spotlight className="min-h-screen">
+      <Spotlight className="min-h-screen relative z-10">
         <main className="relative">
           {/* Hero Section */}
           <section className="container px-4 py-16 sm:py-20 md:py-28 lg:py-32 relative">
@@ -275,7 +275,7 @@ const Home = () => {
       
       {/* Mobile Floating Dock */}
       <MobileFloatingDock />
-    </>
+    </div>
   );
 };
 

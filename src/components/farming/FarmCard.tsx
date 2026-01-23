@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { TokenLogo } from '@/components/TokenLogo';
+import { GlowingStarsBackgroundCard } from '@/components/ui/glowing-stars';
+import { BorderBeam } from '@/components/ui/border-beam';
 import { 
   Dialog, 
   DialogContent, 
@@ -225,11 +227,12 @@ export const FarmCard = memo(function FarmCard({
 
   return (
     <>
-      <Card className="group relative overflow-hidden border-border/40 bg-gradient-to-br from-card via-card to-card/80 hover:border-primary/40 transition-all duration-300 hover:shadow-[0_0_30px_hsl(var(--primary)/0.15)]">
+      <GlowingStarsBackgroundCard className="group relative overflow-hidden border-border/40 hover:border-primary/40 transition-all duration-300 hover:shadow-[0_0_30px_hsl(var(--primary)/0.15)]">
+        <BorderBeam size={150} duration={10} />
         {/* Glow effect - pointer-events-none to prevent blocking clicks */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         
-        <CardContent className="relative p-5">
+        <div className="relative p-5">
           {/* Header */}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
@@ -525,8 +528,8 @@ export const FarmCard = memo(function FarmCard({
               )}
             </CollapsibleContent>
           </Collapsible>
-        </CardContent>
-      </Card>
+        </div>
+      </GlowingStarsBackgroundCard>
 
       {/* Emergency Withdraw Dialog */}
       <Dialog open={showEmergency} onOpenChange={setShowEmergency}>
