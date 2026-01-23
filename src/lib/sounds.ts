@@ -213,6 +213,102 @@ class SoundManager {
     osc.start(now);
     osc.stop(now + 0.05);
   }
+
+  // Liquidity added sound - rising bubbles
+  playLiquidity() {
+    if (!this.enabled) return;
+    
+    const ctx = this.getContext();
+    const now = ctx.currentTime;
+    
+    // Multiple bubble sounds
+    for (let i = 0; i < 4; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = 'sine';
+      const startFreq = 300 + Math.random() * 200;
+      const time = now + i * 0.1;
+      
+      osc.frequency.setValueAtTime(startFreq, time);
+      osc.frequency.exponentialRampToValueAtTime(startFreq * 2, time + 0.1);
+      
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(this.volume * 0.2, time + 0.02);
+      this.exponentialDecay(gain.gain, 0.01, time + 0.15);
+      
+      osc.start(time);
+      osc.stop(time + 0.15);
+    }
+  }
+
+  // Alert sound - attention grabber
+  playAlert() {
+    if (!this.enabled) return;
+    
+    const ctx = this.getContext();
+    const now = ctx.currentTime;
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.type = 'sine';
+    
+    // Two-tone alert
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.setValueAtTime(1100, now + 0.15);
+    osc.frequency.setValueAtTime(880, now + 0.3);
+    osc.frequency.setValueAtTime(1100, now + 0.45);
+    
+    gain.gain.setValueAtTime(this.volume * 0.5, now);
+    this.exponentialDecay(gain.gain, 0.01, now + 0.6);
+    
+    osc.start(now);
+    osc.stop(now + 0.6);
+  }
+
+  // Limit order filled sound - satisfying completion
+  playOrderFilled() {
+    if (!this.enabled) return;
+    
+    const ctx = this.getContext();
+    const now = ctx.currentTime;
+    
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const osc3 = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc1.connect(gain);
+    osc2.connect(gain);
+    osc3.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc1.type = 'sine';
+    osc2.type = 'sine';
+    osc3.type = 'sine';
+    
+    // Major chord progression
+    osc1.frequency.setValueAtTime(523.25, now); // C5
+    osc2.frequency.setValueAtTime(659.25, now + 0.1); // E5
+    osc3.frequency.setValueAtTime(783.99, now + 0.2); // G5
+    
+    gain.gain.setValueAtTime(this.volume * 0.5, now);
+    this.exponentialDecay(gain.gain, 0.01, now + 0.5);
+    
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+    osc2.start(now + 0.1);
+    osc2.stop(now + 0.4);
+    osc3.start(now + 0.2);
+    osc3.stop(now + 0.5);
+  }
 }
 
 // Polyfill for exponentialDecayTo if not available
@@ -235,3 +331,6 @@ export const playNotificationSound = () => soundManager.playNotification();
 export const playSwapSound = () => soundManager.playSwap();
 export const playCoinSound = () => soundManager.playCoin();
 export const playClickSound = () => soundManager.playClick();
+export const playLiquiditySound = () => soundManager.playLiquidity();
+export const playAlertSound = () => soundManager.playAlert();
+export const playOrderFilledSound = () => soundManager.playOrderFilled();

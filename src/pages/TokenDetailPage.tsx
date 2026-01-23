@@ -15,7 +15,8 @@ import {
   BarChart3,
   Clock,
   Layers,
-  Star
+  Star,
+  CandlestickChart as CandlestickIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenLogo } from '@/components/TokenLogo';
@@ -33,6 +34,7 @@ import {
   Bar,
 } from 'recharts';
 import { toast } from 'sonner';
+import CandlestickChart, { generateCandlestickData, CandlestickData } from '@/components/CandlestickChart';
 
 interface TokenMetrics {
   price: number;
@@ -157,7 +159,9 @@ export default function TokenDetailPage() {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<TokenMetrics | null>(null);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [candlestickData, setCandlestickData] = useState<CandlestickData[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
+  const [chartType, setChartType] = useState<'area' | 'candlestick'>('area');
   const [copied, setCopied] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
 
@@ -247,7 +251,16 @@ export default function TokenDetailPage() {
         });
         
         const rangeConfig = TIME_RANGES.find(r => r.value === timeRange)!;
-        setChartData(generateHistoricalData(price, rangeConfig.points, timeRange));
+        const historicalData = generateHistoricalData(price, rangeConfig.points, timeRange);
+        setChartData(historicalData);
+        
+        // Generate candlestick data from price history
+        const priceHistory = historicalData.map(d => ({
+          time: d.timestamp,
+          price: d.price,
+        }));
+        const candleData = generateCandlestickData(priceHistory, timeRange === '24h' ? 'hourly' : 'daily');
+        setCandlestickData(candleData);
       } catch (error) {
         console.error('Error fetching token metrics:', error);
       } finally {
@@ -459,10 +472,13 @@ export default function TokenDetailPage() {
       <div className="glass-card p-6 animate-scale-in" style={{ animationDelay: '500ms', animationFillMode: 'forwards' }}>
         <Tabs defaultValue="price" className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <TabsList>
-              <TabsTrigger value="price">Price</TabsTrigger>
-              <TabsTrigger value="volume">Volume</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center gap-2">
+              <TabsList>
+                <TabsTrigger value="price">Price</TabsTrigger>
+                <TabsTrigger value="candlestick">Candlestick</TabsTrigger>
+                <TabsTrigger value="volume">Volume</TabsTrigger>
+              </TabsList>
+            </div>
             
             <div className="flex gap-1">
               {TIME_RANGES.map((range) => (
@@ -527,6 +543,24 @@ export default function TokenDetailPage() {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            )}
+          </TabsContent>
+
+          {/* Candlestick Chart Tab */}
+          <TabsContent value="candlestick" className="h-[400px]">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <Skeleton className="h-full w-full" />
+              </div>
+            ) : candlestickData.length > 0 ? (
+              <CandlestickChart data={candlestickData} height={400} />
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <CandlestickIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Not enough data for candlestick chart</p>
+                </div>
+              </div>
             )}
           </TabsContent>
 

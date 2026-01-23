@@ -1,11 +1,14 @@
-import { memo, forwardRef, useMemo } from 'react';
+import { memo, forwardRef, useMemo, useState } from 'react';
 import { SwapCard } from '@/components/SwapCard';
-import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft } from 'lucide-react';
+import { LimitOrderPanel } from '@/components/LimitOrderPanel';
+import { OnboardingTutorial } from '@/components/OnboardingTutorial';
+import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft, Target } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import { TOKEN_LIST } from '@/config/contracts';
 import { TokenLogo } from '@/components/TokenLogo';
 import wolfLogo from '@/assets/wolf-logo.png';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Premium UI Components
 import { Spotlight } from '@/components/ui/spotlight';
@@ -174,19 +177,42 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Main Trading Area with Moving Border */}
+        {/* Main Trading Area with Tabs for Swap/Limit */}
         <div className="flex justify-center relative">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-80 h-80 bg-primary/10 rounded-full blur-3xl animate-pulse" />
           </div>
           <div className="w-full max-w-md relative animate-scale-in">
-            <MovingBorder 
-              duration={4000} 
-              borderRadius="1.5rem"
-              className="p-0"
-            >
-              <SwapCard />
-            </MovingBorder>
+            <div className="glass-card p-1 mb-4">
+              <Tabs defaultValue="swap" className="w-full">
+                <TabsList className="w-full grid grid-cols-2">
+                  <TabsTrigger value="swap" className="gap-2">
+                    <ArrowRightLeft className="w-4 h-4" />
+                    Market Swap
+                  </TabsTrigger>
+                  <TabsTrigger value="limit" className="gap-2">
+                    <Target className="w-4 h-4" />
+                    Limit Order
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="swap" className="mt-4">
+                  <MovingBorder 
+                    duration={4000} 
+                    borderRadius="1.5rem"
+                    className="p-0"
+                  >
+                    <SwapCard />
+                  </MovingBorder>
+                </TabsContent>
+                
+                <TabsContent value="limit" className="mt-4">
+                  <div className="glass-card p-4 rounded-2xl">
+                    <LimitOrderPanel />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
         </div>
 
@@ -196,6 +222,9 @@ const Index = () => {
           <StatCard value={50} suffix="K+" label="Trades" delay={600} />
           <StatCard value={0.3} suffix="%" label="Fees" delay={700} decimalPlaces={1} />
         </div>
+
+        {/* Onboarding Tutorial */}
+        <OnboardingTutorial />
       </main>
     </Spotlight>
   );
