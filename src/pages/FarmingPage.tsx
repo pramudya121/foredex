@@ -8,6 +8,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BorderBeam } from '@/components/ui/border-beam';
+import { NumberTicker } from '@/components/ui/number-ticker';
+import { Spotlight } from '@/components/ui/spotlight';
+import { ScrollReveal, RevealSection } from '@/components/ui/scroll-reveal';
 import { 
   Sprout, 
   TrendingUp, 
@@ -19,6 +23,7 @@ import {
   BarChart3,
   Settings,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PoolInfo } from '@/components/farming/FarmCard';
@@ -28,52 +33,67 @@ const StatsCard = memo(function StatsCard({
   icon: Icon, 
   label, 
   value, 
+  numericValue,
   subValue,
   gradient = false,
   iconColor = 'text-primary',
-  delay = 0
+  delay = 0,
+  prefix = '',
+  suffix = '',
 }: { 
   icon: React.ElementType; 
   label: string; 
-  value: string;
+  value?: string;
+  numericValue?: number;
   subValue?: string;
   gradient?: boolean;
   iconColor?: string;
   delay?: number;
+  prefix?: string;
+  suffix?: string;
 }) {
   return (
-    <Card 
-      className={`overflow-hidden border-border/40 transition-all duration-300 hover-lift card-glow animate-scale-in opacity-0 ${
-        gradient 
-          ? 'bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border-primary/30' 
-          : 'bg-gradient-to-br from-card via-card to-card/80'
-      }`}
-      style={{ animationDelay: `${delay}ms`, animationFillMode: 'forwards' }}
-    >
-      <CardContent className="p-5">
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-xl ${gradient ? 'bg-primary/20' : 'bg-muted/50'} ring-1 ${gradient ? 'ring-primary/30' : 'ring-border/50'} transition-transform duration-300 hover:scale-110`}>
-            <Icon className={`w-5 h-5 ${iconColor}`} />
+    <div className="relative group">
+      <div className={`absolute -inset-0.5 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${gradient ? 'bg-gradient-to-r from-primary/50 to-primary/20' : 'bg-primary/20'}`} />
+      <Card 
+        className={`relative overflow-hidden border-border/40 transition-all duration-300 hover-lift ${
+          gradient 
+            ? 'bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border-primary/30' 
+            : 'bg-card/80'
+        }`}
+      >
+        <BorderBeam size={80} duration={12} delay={delay / 1000} />
+        <CardContent className="p-5">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${gradient ? 'bg-primary/20' : 'bg-muted/50'} ring-1 ${gradient ? 'ring-primary/30' : 'ring-border/50'} transition-transform duration-300 group-hover:scale-110`}>
+              <Icon className={`w-5 h-5 ${iconColor}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-medium mb-0.5">{label}</p>
+              {numericValue !== undefined ? (
+                <p className={`text-xl font-bold truncate ${gradient ? 'text-primary' : 'text-foreground'}`}>
+                  <NumberTicker value={numericValue} prefix={prefix} suffix={suffix} delay={delay} decimalPlaces={4} />
+                </p>
+              ) : (
+                <p className={`text-xl font-bold truncate ${gradient ? 'text-primary' : 'text-foreground'}`}>
+                  {value}
+                </p>
+              )}
+              {subValue && (
+                <p className="text-xs text-muted-foreground mt-0.5">{subValue}</p>
+              )}
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground font-medium mb-0.5">{label}</p>
-            <p className={`text-xl font-bold truncate ${gradient ? 'text-primary' : 'text-foreground'}`}>
-              {value}
-            </p>
-            {subValue && (
-              <p className="text-xs text-muted-foreground mt-0.5">{subValue}</p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 });
 
 // Loading Skeleton
 const LoadingSkeleton = memo(function LoadingSkeleton() {
   return (
-    <div className="space-y-6 animate-in fade-in-50 duration-500">
+    <div className="space-y-6">
       {/* Stats Skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
@@ -144,7 +164,7 @@ const EmptyState = memo(function EmptyState({ hasFilters }: { hasFilters: boolea
   );
 });
 
-export default function FarmingPage() {
+function FarmingPage() {
   const { isConnected, connect } = useWeb3();
   const { 
     pools, 
@@ -188,7 +208,6 @@ export default function FarmingPage() {
     return num.toFixed(decimals);
   };
   
-  // Format reward per block nicely
   const formatRewardPerBlock = (val: string | undefined) => {
     if (!val) return '0';
     const num = parseFloat(val);
@@ -265,185 +284,204 @@ export default function FarmingPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8 relative">
-      {/* Ambient background effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-40 right-1/3 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 left-1/4 w-64 h-64 bg-green-500/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      </div>
-
-      {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/20 p-6 lg:p-8 animate-fade-in">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.15),transparent_50%)] pointer-events-none" />
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse" />
-        
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 rounded-xl bg-primary/20 ring-2 ring-primary/30">
-                <Sprout className="w-6 h-6 text-primary" />
-              </div>
-              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Yield Farming</h1>
-              {stats?.isPaused && (
-                <Badge variant="destructive" className="text-xs">
-                  Paused
-                </Badge>
-              )}
-            </div>
-            <p className="text-muted-foreground text-sm lg:text-base max-w-xl">
-              Stake your LP tokens to earn FRDX rewards. Higher APR for longer-term stakers.
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {isOwner && (
-              <Link to="/farming/admin">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Admin
-                </Button>
-              </Link>
-            )}
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refetch()}
-              disabled={loading}
-              className="h-9 px-3"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            
-            {!isConnected && (
-              <Button 
-                onClick={() => connect()}
-                className="bg-gradient-to-r from-primary to-rose-500 hover:from-primary/90 hover:to-rose-500/90"
-              >
-                <Wallet className="w-4 h-4 mr-2" />
-                Connect Wallet
-              </Button>
-            )}
-          </div>
+    <Spotlight className="min-h-screen">
+      <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8 relative">
+        {/* Ambient background effects */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+          <div className="absolute top-40 right-1/3 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 left-1/4 w-64 h-64 bg-green-500/3 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
-      </div>
 
-      {loading && pools.length === 0 ? (
-        <LoadingSkeleton />
-      ) : (
-        <>
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatsCard 
-              icon={BarChart3} 
-              label="Active Pools" 
-              value={pools.length.toString()}
-              subValue={`${formatRewardPerBlock(stats?.rewardPerBlock)} FRDX/block`}
-              iconColor="text-blue-400"
-              delay={100}
-            />
-            <StatsCard 
-              icon={Coins} 
-              label="Total Value Locked" 
-              value={`${formatNumber(totalTVL, 2)} LP`}
-              iconColor="text-green-400"
-              delay={200}
-            />
-            <StatsCard 
-              icon={TrendingUp} 
-              label="Your Stake" 
-              value={`${formatNumber(totalUserStaked, 4)} LP`}
-              iconColor="text-purple-400"
-              delay={300}
-            />
+        {/* Hero Header */}
+        <ScrollReveal direction="up" delay={0}>
+          <div className="relative overflow-hidden rounded-2xl glass-card p-6 lg:p-8 border-primary/20">
+            <BorderBeam size={150} duration={15} />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.15),transparent_50%)] pointer-events-none" />
             
-            {/* Pending Rewards Card with Harvest All */}
-            <Card className="overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-primary/20 ring-1 ring-primary/30">
-                      <Gift className="w-5 h-5 text-primary" />
+            <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2.5 rounded-xl bg-primary/20 ring-2 ring-primary/30">
+                    <Sprout className="w-6 h-6 text-primary" />
+                  </div>
+                  <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
+                    Yield <span className="text-primary">Farming</span>
+                  </h1>
+                  {stats?.isPaused && (
+                    <Badge variant="destructive" className="text-xs">Paused</Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-sm lg:text-base max-w-xl">
+                  Stake your LP tokens to earn FRDX rewards. Higher APR for longer-term stakers.
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                {isOwner && (
+                  <Link to="/farming/admin">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Admin
+                    </Button>
+                  </Link>
+                )}
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={loading}
+                  className="h-9 px-3"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+                
+                {!isConnected && (
+                  <Button 
+                    onClick={() => connect()}
+                    className="bg-gradient-wolf hover:opacity-90"
+                  >
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Connect Wallet
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </ScrollReveal>
+
+        {loading && pools.length === 0 ? (
+          <LoadingSkeleton />
+        ) : (
+          <>
+            {/* Stats Grid */}
+            <RevealSection>
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-muted-foreground">Farming Statistics</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatsCard 
+                  icon={BarChart3} 
+                  label="Active Pools" 
+                  value={pools.length.toString()}
+                  subValue={`${formatRewardPerBlock(stats?.rewardPerBlock)} FRDX/block`}
+                  iconColor="text-blue-400"
+                  delay={0}
+                />
+                <StatsCard 
+                  icon={Coins} 
+                  label="Total Value Locked" 
+                  numericValue={totalTVL}
+                  suffix=" LP"
+                  iconColor="text-green-400"
+                  delay={100}
+                />
+                <StatsCard 
+                  icon={TrendingUp} 
+                  label="Your Stake" 
+                  numericValue={totalUserStaked}
+                  suffix=" LP"
+                  iconColor="text-purple-400"
+                  delay={200}
+                />
+                
+                {/* Pending Rewards Card with Harvest All */}
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-primary/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent">
+                    <BorderBeam size={80} duration={12} delay={0.3} />
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-xl bg-primary/20 ring-1 ring-primary/30 group-hover:scale-110 transition-transform">
+                            <Gift className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium mb-0.5">Pending Rewards</p>
+                            <p className="text-xl font-bold text-primary">
+                              <NumberTicker value={totalPendingRewards} suffix=" FRDX" delay={300} decimalPlaces={4} />
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {isConnected && totalPendingRewards > 0 && (
+                          <Button 
+                            size="sm" 
+                            onClick={handleHarvestAll}
+                            disabled={harvestingAll}
+                            className="bg-gradient-wolf hover:opacity-90 shadow-lg shadow-primary/25"
+                          >
+                            {harvestingAll ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Zap className="w-4 h-4 mr-1" />
+                                Claim
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </RevealSection>
+
+            {/* Pools Section */}
+            <RevealSection>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <Shield className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground font-medium mb-0.5">Pending Rewards</p>
-                      <p className="text-xl font-bold text-primary">
-                        {formatNumber(totalPendingRewards, 4)} FRDX
+                      <h2 className="text-lg font-semibold">Active Pools</h2>
+                      <p className="text-xs text-muted-foreground">
+                        {filteredPools.length} of {pools.length} pools shown
                       </p>
                     </div>
                   </div>
-                  
-                  {isConnected && totalPendingRewards > 0 && (
-                    <Button 
-                      size="sm" 
-                      onClick={handleHarvestAll}
-                      disabled={harvestingAll}
-                      className="bg-gradient-to-r from-primary to-rose-500 hover:from-primary/90 hover:to-rose-500/90 shadow-lg shadow-primary/25"
-                    >
-                      {harvestingAll ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Zap className="w-4 h-4 mr-1" />
-                          Claim
-                        </>
-                      )}
-                    </Button>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                
+                {/* Filters */}
+                <FarmingFilters
+                  pools={pools}
+                  onFilteredPoolsChange={handleFilteredPoolsChange}
+                  sortBy={sortBy}
+                  onSortChange={setSortBy}
+                />
 
-
-          {/* Pools Section */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-muted/50">
-                  <Shield className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold">Active Pools</h2>
-                  <p className="text-xs text-muted-foreground">
-                    {filteredPools.length} of {pools.length} pools shown
-                  </p>
-                </div>
+                {/* Pools Grid */}
+                {filteredPools.length === 0 ? (
+                  <EmptyState hasFilters={pools.length > 0} />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {filteredPools.map(pool => (
+                      <FarmCard
+                        key={pool.pid}
+                        pool={pool}
+                        onDeposit={deposit}
+                        onWithdraw={withdraw}
+                        onHarvest={handleHarvest}
+                        onEmergencyWithdraw={handleEmergencyWithdraw}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-            
-            {/* Filters */}
-            <FarmingFilters
-              pools={pools}
-              onFilteredPoolsChange={handleFilteredPoolsChange}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-            />
-
-            {/* Pools Grid */}
-            {filteredPools.length === 0 ? (
-              <EmptyState hasFilters={pools.length > 0} />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {filteredPools.map(pool => (
-                  <FarmCard
-                    key={pool.pid}
-                    pool={pool}
-                    onDeposit={deposit}
-                    onWithdraw={withdraw}
-                    onHarvest={handleHarvest}
-                    onEmergencyWithdraw={handleEmergencyWithdraw}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+            </RevealSection>
+          </>
+        )}
+      </div>
+    </Spotlight>
   );
 }
+
+export default memo(FarmingPage);
