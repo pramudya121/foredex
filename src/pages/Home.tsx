@@ -109,7 +109,7 @@ const FeatureBadge = memo(function FeatureBadge({
 });
 
 
-const Home = memo(function Home() {
+function Home() {
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* Ambient background effects */}
@@ -277,6 +277,6 @@ const Home = memo(function Home() {
       <MobileFloatingDock />
     </div>
   );
-});
+}
 
-export default Home;
+export default memo(Home);
