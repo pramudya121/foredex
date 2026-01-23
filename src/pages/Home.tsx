@@ -1,6 +1,6 @@
-import { memo, lazy, Suspense } from 'react';
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users, LineChart } from 'lucide-react';
+import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spotlight } from '@/components/ui/spotlight';
 import { ShimmerButton } from '@/components/ui/shimmer-button';
@@ -9,12 +9,10 @@ import { BorderBeam } from '@/components/ui/border-beam';
 import { TextGenerateEffect } from '@/components/ui/text-generate-effect';
 import { HoverEffect } from '@/components/ui/hover-effect';
 import { GlowingStarsBackgroundCard } from '@/components/ui/glowing-stars';
+import { HeroTokenCarousel } from '@/components/home/HeroTokenCarousel';
+import { PartnersSection } from '@/components/home/PartnersSection';
+import { MobileFloatingDock } from '@/components/home/MobileFloatingDock';
 import { cn } from '@/lib/utils';
-
-// Lazy load heavy components
-const HeroTokenCarousel = lazy(() => import('@/components/home/HeroTokenCarousel').then(m => ({ default: m.HeroTokenCarousel })));
-const PartnersSection = lazy(() => import('@/components/home/PartnersSection').then(m => ({ default: m.PartnersSection })));
-const MobileFloatingDock = lazy(() => import('@/components/home/MobileFloatingDock').then(m => ({ default: m.MobileFloatingDock })));
 
 // Feature cards data
 const FEATURES = [
@@ -110,14 +108,6 @@ const FeatureBadge = memo(function FeatureBadge({
   );
 });
 
-// Loading placeholder
-const CarouselLoader = memo(function CarouselLoader() {
-  return (
-    <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-card/50 animate-pulse flex items-center justify-center">
-      <div className="w-32 h-32 rounded-full bg-primary/20 animate-pulse" />
-    </div>
-  );
-});
 
 const Home = memo(function Home() {
   return (
@@ -192,9 +182,7 @@ const Home = memo(function Home() {
 
               {/* Right Content - Token Carousel */}
               <div className="flex items-center justify-center lg:justify-end animate-scale-in">
-                <Suspense fallback={<CarouselLoader />}>
-                  <HeroTokenCarousel />
-                </Suspense>
+                <HeroTokenCarousel />
               </div>
             </div>
           </section>
@@ -236,9 +224,7 @@ const Home = memo(function Home() {
           </section>
 
           {/* Partners Section */}
-          <Suspense fallback={<div className="h-40" />}>
-            <PartnersSection />
-          </Suspense>
+          <PartnersSection />
 
           {/* CTA Section */}
           <section className="container px-4 py-12 sm:py-16 md:py-20">
@@ -288,9 +274,7 @@ const Home = memo(function Home() {
       </Spotlight>
       
       {/* Mobile Floating Dock */}
-      <Suspense fallback={null}>
-        <MobileFloatingDock />
-      </Suspense>
+      <MobileFloatingDock />
     </div>
   );
 });
