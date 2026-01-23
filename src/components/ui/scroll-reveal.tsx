@@ -65,6 +65,7 @@ interface StaggeredRevealProps {
   itemClassName?: string;
   direction?: 'up' | 'down' | 'left' | 'right' | 'scale';
   baseDelay?: number;
+  staggerDelay?: number;
   duration?: number;
   distance?: number;
 }
@@ -75,10 +76,12 @@ export const StaggeredReveal = memo(function StaggeredReveal({
   itemClassName,
   direction = 'up',
   baseDelay = 100,
+  staggerDelay,
   duration = 500,
   distance = 20,
 }: StaggeredRevealProps) {
-  const { containerRef, visibleItems } = useStaggeredReveal(children.length, baseDelay);
+  const delay = staggerDelay ?? baseDelay;
+  const { containerRef, visibleItems } = useStaggeredReveal(children.length, delay);
 
   return (
     <div ref={containerRef} className={className}>

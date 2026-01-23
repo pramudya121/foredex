@@ -1,13 +1,11 @@
 import { memo } from 'react';
 import { SwapCard } from '@/components/SwapCard';
-import { LimitOrderPanel } from '@/components/LimitOrderPanel';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
-import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft, Target } from 'lucide-react';
+import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 
 import wolfLogo from '@/assets/wolf-logo.png';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Premium UI Components
 import { Spotlight } from '@/components/ui/spotlight';
@@ -17,7 +15,6 @@ import { NumberTicker } from '@/components/ui/number-ticker';
 import { BorderBeam } from '@/components/ui/border-beam';
 import { MovingBorder } from '@/components/ui/moving-border';
 import { ScrollReveal, RevealSection } from '@/components/ui/scroll-reveal';
-import { cn } from '@/lib/utils';
 
 const FeatureBadge = memo(function FeatureBadge({ 
   icon: Icon, 
@@ -125,36 +122,13 @@ const Index = () => {
           
           <ScrollReveal direction="scale" duration={600}>
             <div className="w-full max-w-md relative">
-              <div className="glass-card p-1 rounded-2xl">
-                <Tabs defaultValue="swap" className="w-full">
-                  <TabsList className="w-full grid grid-cols-2 mb-1">
-                    <TabsTrigger value="swap" className="gap-2 data-[state=active]:bg-primary/20">
-                      <ArrowRightLeft className="w-4 h-4" />
-                      Market
-                    </TabsTrigger>
-                    <TabsTrigger value="limit" className="gap-2 data-[state=active]:bg-primary/20">
-                      <Target className="w-4 h-4" />
-                      Limit
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="swap" className="mt-2">
-                    <MovingBorder 
-                      duration={4000} 
-                      borderRadius="1rem"
-                      className="p-0"
-                    >
-                      <SwapCard />
-                    </MovingBorder>
-                  </TabsContent>
-                  
-                  <TabsContent value="limit" className="mt-2">
-                    <div className="glass-card p-4 rounded-xl border border-border/50">
-                      <LimitOrderPanel />
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </div>
+              <MovingBorder 
+                duration={4000} 
+                borderRadius="1rem"
+                className="p-0"
+              >
+                <SwapCard />
+              </MovingBorder>
             </div>
           </ScrollReveal>
         </div>
