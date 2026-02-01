@@ -7,24 +7,14 @@ import { rpcProvider } from '@/lib/rpcProvider';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { 
   ExternalLink, 
-  TrendingUp, 
   Droplets, 
   Percent, 
   BarChart3, 
   Star,
   Plus,
   Flame,
-  ChevronRight,
   Copy,
   Check,
-  Wallet,
-  LayoutGrid,
-  List,
-  Search,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Coins,
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,19 +22,11 @@ import { TokenLogo } from './TokenLogo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { useFavoritePoolsStore } from '@/stores/favoritePoolsStore';
 import { toast } from 'sonner';
 import { PoolMiniChart } from './pools/PoolMiniChart';
 import { PoolCard } from './pools/PoolCard';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { PoolFilters, SortOption, ViewMode } from './pools/PoolFilters';
 
 interface Pool {
   address: string;
@@ -142,8 +124,6 @@ export const clearPoolsTableCache = () => {
   poolsTableCache = null;
 };
 
-type SortOption = 'tvl' | 'apr' | 'volume' | 'fees' | 'newest';
-
 function PoolsTableInner() {
   const { address: userAddress, isConnected } = useWeb3();
   const cacheValid = poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL;
@@ -154,9 +134,11 @@ function PoolsTableInner() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showMyPositions, setShowMyPositions] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [sortBy, setSortBy] = useState<SortOption>('tvl');
   const [searchQuery, setSearchQuery] = useState('');
+  const [minTvl, setMinTvl] = useState(0);
+  const [minApr, setMinApr] = useState(0);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
   const isFetchingRef = useRef(false);
 
@@ -204,6 +186,14 @@ function PoolsTableInner() {
       );
     }
     
+    // Advanced filters
+    if (minTvl > 0) {
+      filtered = filtered.filter(p => p.tvl >= minTvl);
+    }
+    if (minApr > 0) {
+      filtered = filtered.filter(p => p.apr >= minApr);
+    }
+    
     if (showFavoritesOnly) {
       filtered = filtered.filter(p => isFavorite(p.address));
     }
@@ -211,7 +201,7 @@ function PoolsTableInner() {
       filtered = filtered.filter(p => p.userLpBalance && parseFloat(p.userLpBalance) > 0);
     }
     return filtered;
-  }, [sortedPools, showFavoritesOnly, showMyPositions, isFavorite, isConnected, searchQuery]);
+  }, [sortedPools, showFavoritesOnly, showMyPositions, isFavorite, isConnected, searchQuery, minTvl, minApr]);
 
   const copyAddress = useCallback((address: string) => {
     navigator.clipboard.writeText(address);
@@ -477,134 +467,46 @@ function PoolsTableInner() {
 
   const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  // Sort options configuration
-  const sortOptions: { value: SortOption; label: string; icon: React.ReactNode }[] = [
-    { value: 'tvl', label: 'TVL', icon: <TrendingUp className="w-4 h-4" /> },
-    { value: 'apr', label: 'APR', icon: <Flame className="w-4 h-4" /> },
-    { value: 'volume', label: 'Volume', icon: <BarChart3 className="w-4 h-4" /> },
-    { value: 'fees', label: 'Fees', icon: <Coins className="w-4 h-4" /> },
-    { value: 'newest', label: 'Newest', icon: <ArrowDown className="w-4 h-4" /> },
-  ];
-
-  const currentSortOption = sortOptions.find(o => o.value === sortBy);
-
   return (
     <div className="space-y-4">
-      {/* Enhanced Filter Bar */}
-      <div className="flex flex-col gap-3">
-        {/* Search Row */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Search Input */}
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search pools..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-background/50"
-            />
-          </div>
-          
-          {/* Refresh Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchPools(true)}
-            disabled={isRefreshing}
-            className="h-9 px-3"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-
-        {/* Filters and Sort Row */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <Button
-              variant={showFavoritesOnly ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setShowFavoritesOnly(!showFavoritesOnly);
-                if (!showFavoritesOnly) setShowMyPositions(false);
-              }}
-              className="flex items-center gap-2 h-8"
-            >
-              <Star className={cn('w-4 h-4', showFavoritesOnly && 'fill-current')} />
-              <span className="hidden sm:inline">Favorites</span> ({favorites.length})
-            </Button>
-            {isConnected && (
-              <Button
-                variant={showMyPositions ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  setShowMyPositions(!showMyPositions);
-                  if (!showMyPositions) setShowFavoritesOnly(false);
-                }}
-                className="flex items-center gap-2 h-8"
-              >
-                <Wallet className={cn('w-4 h-4', showMyPositions && 'fill-current')} />
-                <span className="hidden sm:inline">My Positions</span>
-              </Button>
-            )}
-            <Badge variant="secondary" className="px-3 py-1">
-              <Droplets className="w-3 h-3 mr-1" />
-              {displayedPools.length}/{pools.length} Pools
-            </Badge>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {/* Sort Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-2">
-                  <ArrowUpDown className="w-4 h-4" />
-                  <span className="hidden sm:inline">Sort:</span>
-                  <span className="font-medium">{currentSortOption?.label}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {sortOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onClick={() => setSortBy(option.value)}
-                    className={cn(
-                      'flex items-center gap-2 cursor-pointer',
-                      sortBy === option.value && 'bg-primary/10 text-primary'
-                    )}
-                  >
-                    {option.icon}
-                    {option.label}
-                    {sortBy === option.value && (
-                      <Check className="w-4 h-4 ml-auto" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center border rounded-lg overflow-hidden">
-              <Button
-                variant={viewMode === 'table' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('table')}
-                className="rounded-none h-8 px-2"
-              >
-                <List className="w-4 h-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'card' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('card')}
-                className="rounded-none h-8 px-2"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+      {/* Enhanced Filter Bar using new component */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <PoolFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          showFavoritesOnly={showFavoritesOnly}
+          onToggleFavorites={() => {
+            setShowFavoritesOnly(!showFavoritesOnly);
+            if (!showFavoritesOnly) setShowMyPositions(false);
+          }}
+          showMyPositions={showMyPositions}
+          onToggleMyPositions={() => {
+            setShowMyPositions(!showMyPositions);
+            if (!showMyPositions) setShowFavoritesOnly(false);
+          }}
+          isConnected={isConnected}
+          favoritesCount={favorites.length}
+          totalPools={pools.length}
+          filteredCount={displayedPools.length}
+          minTvl={minTvl}
+          onMinTvlChange={setMinTvl}
+          minApr={minApr}
+          onMinAprChange={setMinApr}
+        />
+        
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => fetchPools(true)}
+          disabled={isRefreshing}
+          className="h-9 px-3"
+        >
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Table Header - Desktop */}
