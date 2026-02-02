@@ -69,6 +69,10 @@ export function RotatingLogo({
           <img
             src={src}
             alt={alt}
+            width={128}
+            height={128}
+            loading="eager"
+            fetchPriority="high"
             className={cn(
               "w-full h-full object-contain drop-shadow-2xl",
               "animate-wolf-breathe"
@@ -87,6 +91,9 @@ export function RotatingLogo({
           <img
             src={src}
             alt={alt}
+            width={128}
+            height={128}
+            loading="lazy"
             className={cn(
               "w-full h-full object-contain drop-shadow-2xl opacity-80",
               "animate-wolf-breathe"

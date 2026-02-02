@@ -125,6 +125,9 @@ export const HeroTokenCarousel = memo(function HeroTokenCarousel() {
               <img 
                 src={token.logoURI} 
                 alt={token.symbol}
+                width={20}
+                height={20}
+                loading="lazy"
                 className="w-5 h-5 rounded-full"
               />
             </div>
