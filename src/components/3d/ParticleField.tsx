@@ -1,11 +1,10 @@
-import { memo, useRef, useMemo, useCallback } from 'react';
+import { memo, useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-// Floating particles with mouse interaction
-const Particles = memo(function Particles({ count = 300 }: { count?: number }) {
+// Floating particles with mouse interaction - using function declaration to avoid forwardRef issues
+function Particles({ count = 300 }: { count?: number }) {
   const meshRef = useRef<THREE.Points>(null);
-  const mousePosition = useRef({ x: 0, y: 0 });
 
   const [positions, velocities] = useMemo(() => {
     const pos = new Float32Array(count * 3);
@@ -68,10 +67,10 @@ const Particles = memo(function Particles({ count = 300 }: { count?: number }) {
       />
     </points>
   );
-});
+}
 
-// Connection lines between nearby particles
-const ConnectionLines = memo(function ConnectionLines() {
+// Connection lines between nearby particles - using function declaration
+function ConnectionLines() {
   const lineRef = useRef<THREE.LineSegments>(null);
   
   useFrame((state) => {
@@ -106,16 +105,17 @@ const ConnectionLines = memo(function ConnectionLines() {
       <lineBasicMaterial color="#dc2626" transparent opacity={0.1} />
     </lineSegments>
   );
-});
+}
 
-const Scene = memo(function Scene() {
+// Scene component - using function declaration
+function Scene() {
   return (
     <>
       <Particles count={200} />
       <ConnectionLines />
     </>
   );
-});
+}
 
 export const ParticleField = memo(function ParticleField({ className = "" }: { className?: string }) {
   return (
