@@ -335,7 +335,7 @@
     50% { opacity: 1; }
   }
 
-  /* Shimmer effect */
+  /* Enhanced shimmer effect */
   .animate-shimmer {
     position: relative;
     overflow: hidden;
@@ -382,6 +382,55 @@
   @keyframes bounce-subtle {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-4px); }
+  }
+
+  /* Enhanced magnetic hover effect */
+  .magnetic-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .magnetic-hover:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 10px 40px hsl(var(--primary) / 0.2);
+  }
+
+  .magnetic-hover:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /* Glow on hover */
+  .glow-hover {
+    @apply transition-all duration-300;
+  }
+
+  .glow-hover:hover {
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.4),
+                0 0 60px hsl(var(--primary) / 0.2);
+  }
+
+  /* Interactive card with 3D tilt effect */
+  .tilt-card {
+    @apply transition-transform duration-300 ease-out;
+    transform-style: preserve-3d;
+    perspective: 1000px;
+  }
+
+  .tilt-card:hover {
+    transform: rotateX(2deg) rotateY(-2deg) translateZ(10px);
+  }
+
+  /* Focus visible improvements for accessibility */
+  .focus-ring {
+    @apply outline-none;
+  }
+
+  .focus-ring:focus-visible {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Smooth scale on press */
+  .press-scale {
+    @apply transition-transform duration-150 active:scale-95;
   }
 
   /* Gradient border animation */
