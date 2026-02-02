@@ -33,11 +33,22 @@ export const TokenLogo = forwardRef<HTMLImageElement | HTMLDivElement, TokenLogo
     const finalLogoURI = logoURI || getLogoFromSymbol(symbol);
 
     if (finalLogoURI && !imageError) {
+      const dimensions = {
+        xs: 16,
+        sm: 24,
+        md: 32,
+        lg: 40,
+        xl: 48,
+      };
+      
       return (
         <img
           ref={ref as React.Ref<HTMLImageElement>}
           src={finalLogoURI}
           alt={symbol}
+          width={dimensions[size]}
+          height={dimensions[size]}
+          loading="lazy"
           className={cn(
             'rounded-full object-cover',
             sizeClasses[size],

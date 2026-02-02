@@ -73,6 +73,9 @@ export function WolfSpinner({ size = 'md', text, className }: WolfSpinnerProps) 
             <img 
               src="/wolf-logo.png" 
               alt="Loading..."
+              width={96}
+              height={96}
+              loading="lazy"
               className={cn(
                 'w-full h-full object-cover',
                 'animate-wolf-glow'

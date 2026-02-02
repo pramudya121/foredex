@@ -183,6 +183,10 @@ export function Header() {
             <img 
               src={wolfLogo} 
               alt="FOREDEX" 
+              width={40}
+              height={40}
+              loading="eager"
+              fetchPriority="high"
               className="h-8 w-8 sm:h-10 sm:w-10 transition-transform duration-300 group-hover:scale-110"
             />
             <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />

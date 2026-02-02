@@ -31,6 +31,9 @@ const PartnerLogo = memo(({ partner }: { partner: Partner }) => (
     <img 
       src={partner.logo} 
       alt={partner.name}
+      width={32}
+      height={32}
+      loading="lazy"
       className="w-8 h-8 rounded-full object-cover group-hover:scale-110 transition-transform"
       onError={(e) => {
         e.currentTarget.src = '/placeholder.svg';
