@@ -9,7 +9,8 @@ import { Header } from "@/components/Header";
 import { WaveBackground } from "@/components/WaveBackground";
 import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
-
+import { SkipLink } from "@/components/ui/accessibility-skip-link";
+import { ParticleField } from "@/components/3d/ParticleField";
 // Lazy load pages for better performance
 const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
@@ -51,28 +52,36 @@ const queryClient = new QueryClient({
 const AppContent = memo(function AppContent() {
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Accessibility: Skip to main content link */}
+      <SkipLink />
+      
+      {/* 3D Particle background effect */}
+      <ParticleField />
+      
       <Header />
-      <Suspense fallback={<PageLoader />}>
-        <PageTransition>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/swap" element={<Index />} />
-            <Route path="/liquidity" element={<Liquidity />} />
-            <Route path="/pools" element={<Pools />} />
-            <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
-            <Route path="/farming" element={<FarmingPage />} />
-            <Route path="/farming/admin" element={<FarmingAdminPage />} />
-            <Route path="/farming/:pid" element={<FarmingPoolDetailPage />} />
-            <Route path="/tokens" element={<TokensPage />} />
-            <Route path="/tokens/:address" element={<TokenDetailPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/docs" element={<DocsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </PageTransition>
-      </Suspense>
+      <main id="main-content" role="main" tabIndex={-1} className="flex-1 outline-none">
+        <Suspense fallback={<PageLoader />}>
+          <PageTransition>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/swap" element={<Index />} />
+              <Route path="/liquidity" element={<Liquidity />} />
+              <Route path="/pools" element={<Pools />} />
+              <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
+              <Route path="/farming" element={<FarmingPage />} />
+              <Route path="/farming/admin" element={<FarmingAdminPage />} />
+              <Route path="/farming/:pid" element={<FarmingPoolDetailPage />} />
+              <Route path="/tokens" element={<TokensPage />} />
+              <Route path="/tokens/:address" element={<TokenDetailPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/docs" element={<DocsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </PageTransition>
+        </Suspense>
+      </main>
     </div>
   );
 });

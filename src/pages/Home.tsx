@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, Suspense, lazy } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp, Wallet, Rocket, Globe, Users, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,9 @@ import { PartnersSection } from '@/components/home/PartnersSection';
 import { MobileFloatingDock } from '@/components/home/MobileFloatingDock';
 import { ScrollReveal, RevealSection, StaggeredReveal } from '@/components/ui/scroll-reveal';
 import { cn } from '@/lib/utils';
+
+// Lazy load 3D scene for performance
+const WolfScene = lazy(() => import('@/components/3d/WolfScene'));
 
 // Feature cards data
 const FEATURES = [
@@ -201,10 +204,24 @@ function HomePage() {
                 </div>
               </div>
 
-              {/* Right Content - Token Carousel */}
+              {/* Right Content - 3D Wolf Scene + Token Carousel */}
               <ScrollReveal direction="scale" delay={300} duration={800}>
                 <div className="flex items-center justify-center lg:justify-end">
-                  <HeroTokenCarousel />
+                  <div className="relative w-full max-w-md aspect-square">
+                    {/* 3D Wolf Scene */}
+                    <Suspense fallback={
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-32 h-32 rounded-full bg-primary/20 animate-pulse" />
+                      </div>
+                    }>
+                      <WolfScene className="absolute inset-0 w-full h-full" />
+                    </Suspense>
+                    
+                    {/* Token Carousel overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <HeroTokenCarousel />
+                    </div>
+                  </div>
                 </div>
               </ScrollReveal>
             </div>
