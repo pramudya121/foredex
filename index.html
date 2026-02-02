@@ -3,21 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Security Meta Tags -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+    
+    <!-- SEO & OG Tags -->
     <title>FOREDEX - Decentralized Exchange on Nexus</title>
     <meta name="description" content="FOREDEX is a powerful decentralized exchange (DEX) on Nexus Testnet. Swap tokens, provide liquidity, and earn fees with low slippage." />
     <meta name="author" content="FOREDEX" />
     <meta name="keywords" content="DEX, decentralized exchange, Nexus, swap, liquidity, DeFi, crypto" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://foredex.lovable.app" />
 
     <meta property="og:title" content="FOREDEX - Trade with the Pack" />
     <meta property="og:description" content="Swap tokens instantly on Nexus Testnet. Low fees, fast transactions, powered by FOREDEX." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/wolf-logo.png" />
+    <meta property="og:url" content="https://foredex.lovable.app" />
+    <meta property="og:site_name" content="FOREDEX" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="FOREDEX - Decentralized Exchange" />
     <meta name="twitter:description" content="Swap tokens instantly on Nexus Testnet with FOREDEX" />
+    <meta name="twitter:image" content="/wolf-logo.png" />
     
-    <!-- Preconnect to external origins for faster resource loading -->
+    <!-- Performance: Preconnect to external origins -->
     <link rel="preconnect" href="https://cdn.gpteng.co" crossorigin />
     <link rel="dns-prefetch" href="https://cdn.gpteng.co" />
     
@@ -31,10 +45,21 @@
     <link rel="preload" href="/tokens/mon.png" as="image" />
     <link rel="preload" href="/wolf-logo.png" as="image" />
     
+    <!-- Theme Color for Mobile -->
+    <meta name="theme-color" content="#dc2626" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
     <link rel="icon" type="image/png" href="/wolf-logo.png" />
+    <link rel="apple-touch-icon" href="/wolf-logo.png" />
   </head>
 
   <body class="dark">
+    <noscript>
+      <div style="padding: 20px; text-align: center; background: #1a1a1a; color: #fff;">
+        <h1>JavaScript Required</h1>
+        <p>FOREDEX requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

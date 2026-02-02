@@ -3,8 +3,8 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, MeshDistortMaterial, Sphere, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 
-// Animated wolf-themed sphere with distortion
-const AnimatedWolfSphere = memo(function AnimatedWolfSphere() {
+// Animated wolf-themed sphere with distortion - using function declaration to avoid forwardRef issues
+function AnimatedWolfSphere() {
   const meshRef = useRef<THREE.Mesh>(null);
   
   useFrame((state) => {
@@ -28,10 +28,10 @@ const AnimatedWolfSphere = memo(function AnimatedWolfSphere() {
       </Sphere>
     </Float>
   );
-});
+}
 
-// Orbiting particles
-const OrbitingParticles = memo(function OrbitingParticles() {
+// Orbiting particles - using function declaration
+function OrbitingParticles() {
   const particlesRef = useRef<THREE.Points>(null);
   
   const particlePositions = useMemo(() => {
@@ -73,10 +73,10 @@ const OrbitingParticles = memo(function OrbitingParticles() {
       />
     </points>
   );
-});
+}
 
-// Glowing ring
-const GlowingRing = memo(function GlowingRing({ radius = 2.5, color = "#dc2626" }: { radius?: number; color?: string }) {
+// Glowing ring - using function declaration
+function GlowingRing({ radius = 2.5, color = "#dc2626" }: { radius?: number; color?: string }) {
   const ringRef = useRef<THREE.Mesh>(null);
   
   useFrame((state) => {
@@ -92,10 +92,10 @@ const GlowingRing = memo(function GlowingRing({ radius = 2.5, color = "#dc2626" 
       <meshBasicMaterial color={color} transparent opacity={0.6} />
     </mesh>
   );
-});
+}
 
 // Main scene component
-const Scene = memo(function Scene() {
+function Scene() {
   return (
     <>
       <ambientLight intensity={0.3} />
@@ -118,7 +118,7 @@ const Scene = memo(function Scene() {
       />
     </>
   );
-});
+}
 
 // Fallback component for loading
 const SceneFallback = memo(function SceneFallback() {
