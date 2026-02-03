@@ -102,37 +102,33 @@ export const HeroTokenCarousel = memo(function HeroTokenCarousel() {
       </div>
 
       {/* Orbiting small tokens */}
-      <div className="absolute inset-0 pointer-events-none">
-        {HERO_TOKENS.slice(0, 4).map((token, index) => {
-          const angle = (index * 90 + Date.now() / 50) % 360;
-          const radius = 180;
-          
-          return (
-            <div
-              key={token.address}
-              className={cn(
-                "absolute top-1/2 left-1/2 w-8 h-8 -ml-4 -mt-4",
-                "rounded-full bg-card border border-border/50",
-                "flex items-center justify-center",
-                "shadow-lg",
-                index !== activeIndex ? "opacity-60" : "opacity-0"
-              )}
-              style={{
-                animation: `orbit ${20 + index * 5}s linear infinite`,
-                animationDelay: `${index * -5}s`,
-              }}
-            >
-              <img 
-                src={token.logoURI} 
-                alt={token.symbol}
-                width={20}
-                height={20}
-                loading="lazy"
-                className="w-5 h-5 rounded-full"
-              />
-            </div>
-          );
-        })}
+      <div className="absolute inset-0 pointer-events-none hidden sm:block">
+        {HERO_TOKENS.slice(0, 4).map((token, index) => (
+          <div
+            key={token.address}
+            className={cn(
+              "absolute top-1/2 left-1/2 w-10 h-10 -ml-5 -mt-5",
+              "rounded-full bg-card/90 border border-border/50",
+              "flex items-center justify-center",
+              "shadow-lg backdrop-blur-sm",
+              "animate-orbit",
+              index !== activeIndex ? "opacity-70" : "opacity-0"
+            )}
+            style={{
+              animationDuration: `${20 + index * 5}s`,
+              animationDelay: `${index * -5}s`,
+            }}
+          >
+            <img 
+              src={token.logoURI} 
+              alt={token.symbol}
+              width={24}
+              height={24}
+              loading="lazy"
+              className="w-6 h-6 rounded-full object-cover"
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
