@@ -4,12 +4,11 @@ import { ArrowRightLeft, BookOpen, Zap, Shield, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { ShimmerButton } from '@/components/ui/shimmer-button';
 import { TextGenerateEffect } from '@/components/ui/text-generate-effect';
-import { HeroTokenCarousel } from '@/components/home/HeroTokenCarousel';
 import { ScrollReveal } from '@/components/ui/scroll-reveal';
 import { cn } from '@/lib/utils';
 
-// Lazy load 3D scene for performance
-const WolfScene = lazy(() => import('@/components/3d/WolfScene'));
+// Lazy load 3D Token Globe for performance
+const TokenGlobe = lazy(() => import('@/components/3d/TokenGlobe'));
 
 // Feature badge component
 const FeatureBadge = memo(function FeatureBadge({ 
@@ -99,23 +98,22 @@ export const HeroSection = memo(function HeroSection() {
           </div>
         </div>
 
-        {/* Right Content - 3D Wolf Scene + Token Carousel */}
+        {/* Right Content - 3D Token Globe */}
         <ScrollReveal direction="scale" delay={200} duration={800}>
           <div className="flex items-center justify-center lg:justify-end">
-            <div className="relative w-full max-w-md aspect-square">
-              {/* 3D Wolf Scene */}
+            <div className="relative w-full max-w-lg aspect-square">
+              {/* 3D Token Globe */}
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center">
-                  <div className="w-40 h-40 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse" />
+                  <div className="relative">
+                    <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse" />
+                    <div className="absolute inset-4 rounded-full border-2 border-primary/20 animate-spin-slow" />
+                    <div className="absolute inset-8 rounded-full border border-primary/10 animate-spin-slow" style={{ animationDirection: 'reverse' }} />
+                  </div>
                 </div>
               }>
-                <WolfScene className="absolute inset-0 w-full h-full" />
+                <TokenGlobe className="absolute inset-0 w-full h-full" />
               </Suspense>
-              
-              {/* Token Carousel overlay */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <HeroTokenCarousel />
-              </div>
             </div>
           </div>
         </ScrollReveal>
