@@ -17,70 +17,90 @@ const ORBIT_TOKENS = [
 
 // Glowing core sphere with NEX logo
 function CoreSphere() {
-  const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
+  const outerGlowRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.002;
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.3) * 0.1;
-    }
     if (glowRef.current) {
-      const scale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.05;
+      const scale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.08;
       glowRef.current.scale.setScalar(scale);
+    }
+    if (outerGlowRef.current) {
+      const scale = 1.1 + Math.sin(state.clock.elapsedTime * 1.5) * 0.1;
+      outerGlowRef.current.scale.setScalar(scale);
     }
   });
 
   return (
     <group>
-      {/* Inner core */}
-      <Sphere ref={meshRef} args={[0.8, 64, 64]}>
-        <meshStandardMaterial
-          color="#1a1a2e"
-          metalness={0.9}
-          roughness={0.1}
-          envMapIntensity={1}
-        />
-      </Sphere>
-      
-      {/* NEX Logo in center */}
+      {/* NEX Logo - fills the core circle */}
       <Html
         center
-        distanceFactor={6}
+        distanceFactor={4}
         style={{
-          width: '80px',
-          height: '80px',
+          width: '120px',
+          height: '120px',
           borderRadius: '50%',
           overflow: 'hidden',
           pointerEvents: 'none',
         }}
       >
-        <img 
-          src="/tokens/nex.jpg" 
-          alt="NEX"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            borderRadius: '50%',
-            border: '3px solid #ff4444',
-            boxShadow: '0 0 30px rgba(255, 68, 68, 0.6)',
-          }}
-        />
+        <div style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          overflow: 'hidden',
+          animation: 'pulse-glow 2s ease-in-out infinite',
+        }}>
+          <img 
+            src="/tokens/nex.jpg" 
+            alt="NEX"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              borderRadius: '50%',
+              border: '3px solid #ff4444',
+              boxShadow: '0 0 40px rgba(255, 68, 68, 0.8), 0 0 80px rgba(255, 68, 68, 0.4)',
+            }}
+          />
+        </div>
+        <style>{`
+          @keyframes pulse-glow {
+            0%, 100% { 
+              transform: scale(1); 
+              filter: brightness(1) drop-shadow(0 0 20px rgba(255, 68, 68, 0.6));
+            }
+            50% { 
+              transform: scale(1.05); 
+              filter: brightness(1.2) drop-shadow(0 0 40px rgba(255, 68, 68, 0.9));
+            }
+          }
+        `}</style>
       </Html>
       
-      {/* Outer glow */}
-      <Sphere ref={glowRef} args={[1, 32, 32]}>
+      {/* Inner glow ring */}
+      <Sphere ref={glowRef} args={[1.2, 32, 32]}>
         <meshBasicMaterial
           color="#ff4444"
           transparent
-          opacity={0.15}
+          opacity={0.2}
+          side={THREE.BackSide}
+        />
+      </Sphere>
+      
+      {/* Outer glow */}
+      <Sphere ref={outerGlowRef} args={[1.5, 32, 32]}>
+        <meshBasicMaterial
+          color="#ff4444"
+          transparent
+          opacity={0.08}
           side={THREE.BackSide}
         />
       </Sphere>
       
       {/* Core glow effect */}
-      <pointLight color="#ff4444" intensity={2} distance={5} />
+      <pointLight color="#ff4444" intensity={3} distance={8} />
     </group>
   );
 }
@@ -357,19 +377,21 @@ function GlobeScene() {
 
 interface TokenGlobeProps {
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export const TokenGlobe = memo(function TokenGlobe({ className }: TokenGlobeProps) {
+export const TokenGlobe = memo(function TokenGlobe({ className, style }: TokenGlobeProps) {
   return (
-    <div className={className}>
+    <div className={className} style={{ ...style, overflow: 'visible' }}>
       <Canvas
-        camera={{ position: [0, 0, 8], fov: 45 }}
+        camera={{ position: [0, 0, 10], fov: 40 }}
         gl={{ 
           antialias: true,
           alpha: true,
           powerPreference: 'high-performance',
         }}
         dpr={[1, 2]}
+        style={{ overflow: 'visible' }}
       >
         <GlobeScene />
         <OrbitControls 
