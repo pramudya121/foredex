@@ -15,7 +15,7 @@ const ORBIT_TOKENS = [
   { symbol: 'MON', logo: '/tokens/mon.png', color: '#8B5CF6' },
 ];
 
-// Glowing core sphere
+// Glowing core sphere with NEX logo
 function CoreSphere() {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
@@ -43,12 +43,38 @@ function CoreSphere() {
         />
       </Sphere>
       
+      {/* NEX Logo in center */}
+      <Html
+        center
+        distanceFactor={6}
+        style={{
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}
+      >
+        <img 
+          src="/tokens/nex.jpg" 
+          alt="NEX"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            borderRadius: '50%',
+            border: '3px solid #ff4444',
+            boxShadow: '0 0 30px rgba(255, 68, 68, 0.6)',
+          }}
+        />
+      </Html>
+      
       {/* Outer glow */}
       <Sphere ref={glowRef} args={[1, 32, 32]}>
         <meshBasicMaterial
           color="#ff4444"
           transparent
-          opacity={0.1}
+          opacity={0.15}
           side={THREE.BackSide}
         />
       </Sphere>
