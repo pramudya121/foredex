@@ -100,8 +100,8 @@ export const HeroSection = memo(function HeroSection() {
 
         {/* Right Content - 3D Token Globe */}
         <ScrollReveal direction="scale" delay={200} duration={800}>
-          <div className="flex items-center justify-center lg:justify-end overflow-visible">
-            <div className="relative w-full max-w-xl aspect-square overflow-visible">
+          <div className="flex items-center justify-center lg:justify-end" style={{ overflow: 'visible' }}>
+            <div className="relative w-full aspect-square" style={{ overflow: 'visible', maxWidth: '600px' }}>
               {/* 3D Token Globe */}
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center">
@@ -112,7 +112,7 @@ export const HeroSection = memo(function HeroSection() {
                   </div>
                 </div>
               }>
-                <TokenGlobe className="absolute inset-[-20%] w-[140%] h-[140%]" />
+                <TokenGlobe className="absolute" style={{ inset: '-30%', width: '160%', height: '160%' }} />
               </Suspense>
             </div>
           </div>
