@@ -34,8 +34,8 @@ const FeatureBadge = memo(function FeatureBadge({
 
 export const HeroSection = memo(function HeroSection() {
   return (
-    <section className="container px-4 py-16 sm:py-20 md:py-24 lg:py-32 relative">
-      <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+    <section className="container px-4 py-16 sm:py-20 md:py-24 lg:py-32 relative overflow-visible">
+      <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center overflow-visible">
         {/* Left Content */}
         <div className="space-y-8">
           {/* Network Badge */}
@@ -100,8 +100,8 @@ export const HeroSection = memo(function HeroSection() {
 
         {/* Right Content - 3D Token Globe */}
         <ScrollReveal direction="scale" delay={200} duration={800}>
-          <div className="flex items-center justify-center lg:justify-end">
-            <div className="relative w-full max-w-lg aspect-square">
+          <div className="flex items-center justify-center lg:justify-end overflow-visible">
+            <div className="relative w-full max-w-xl aspect-square overflow-visible">
               {/* 3D Token Globe */}
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center">
@@ -112,7 +112,7 @@ export const HeroSection = memo(function HeroSection() {
                   </div>
                 </div>
               }>
-                <TokenGlobe className="absolute inset-0 w-full h-full" />
+                <TokenGlobe className="absolute inset-[-20%] w-[140%] h-[140%]" />
               </Suspense>
             </div>
           </div>
