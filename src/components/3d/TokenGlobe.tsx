@@ -1,18 +1,18 @@
-import { memo, useRef, useMemo } from 'react';
+import { memo, useRef, useMemo, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls, Sphere, Ring, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Token data for orbits
 const ORBIT_TOKENS = [
-  { symbol: 'WETH', logo: '/tokens/weth.png', color: '#627EEA' },
-  { symbol: 'USDC', logo: '/tokens/usdc.png', color: '#2775CA' },
-  { symbol: 'FRDX', logo: '/tokens/frdx.png', color: '#FF4444' },
-  { symbol: 'XRP', logo: '/tokens/xrp.png', color: '#23292F' },
-  { symbol: 'LINK', logo: '/tokens/link.png', color: '#2A5ADA' },
-  { symbol: 'TRX', logo: '/tokens/trx.png', color: '#FF0013' },
-  { symbol: 'DOGE', logo: '/tokens/doge.png', color: '#C2A633' },
-  { symbol: 'MON', logo: '/tokens/mon.png', color: '#8B5CF6' },
+  { symbol: 'WETH', logo: '/tokens/weth.png', color: '#627EEA', glowColor: 'rgba(98, 126, 234, 0.6)' },
+  { symbol: 'USDC', logo: '/tokens/usdc.png', color: '#2775CA', glowColor: 'rgba(39, 117, 202, 0.6)' },
+  { symbol: 'FRDX', logo: '/tokens/frdx.png', color: '#FF4444', glowColor: 'rgba(255, 68, 68, 0.6)' },
+  { symbol: 'XRP', logo: '/tokens/xrp.png', color: '#23292F', glowColor: 'rgba(35, 41, 47, 0.6)' },
+  { symbol: 'LINK', logo: '/tokens/link.png', color: '#2A5ADA', glowColor: 'rgba(42, 90, 218, 0.6)' },
+  { symbol: 'TRX', logo: '/tokens/trx.png', color: '#FF0013', glowColor: 'rgba(255, 0, 19, 0.6)' },
+  { symbol: 'DOGE', logo: '/tokens/doge.png', color: '#C2A633', glowColor: 'rgba(194, 166, 51, 0.6)' },
+  { symbol: 'MON', logo: '/tokens/mon.png', color: '#8B5CF6', glowColor: 'rgba(139, 92, 246, 0.6)' },
 ];
 
 // Glowing core sphere with NEX logo
@@ -33,13 +33,13 @@ function CoreSphere() {
 
   return (
     <group>
-      {/* NEX Logo - fills the core circle */}
+      {/* NEX Logo - fills the core circle with pulse animation */}
       <Html
         center
-        distanceFactor={4}
+        distanceFactor={3.5}
         style={{
-          width: '120px',
-          height: '120px',
+          width: '150px',
+          height: '150px',
           borderRadius: '50%',
           overflow: 'hidden',
           pointerEvents: 'none',
@@ -60,8 +60,8 @@ function CoreSphere() {
               height: '100%',
               objectFit: 'cover',
               borderRadius: '50%',
-              border: '3px solid #ff4444',
-              boxShadow: '0 0 40px rgba(255, 68, 68, 0.8), 0 0 80px rgba(255, 68, 68, 0.4)',
+              border: '4px solid #ff4444',
+              boxShadow: '0 0 50px rgba(255, 68, 68, 0.9), 0 0 100px rgba(255, 68, 68, 0.5), inset 0 0 30px rgba(255, 68, 68, 0.3)',
             }}
           />
         </div>
@@ -69,11 +69,11 @@ function CoreSphere() {
           @keyframes pulse-glow {
             0%, 100% { 
               transform: scale(1); 
-              filter: brightness(1) drop-shadow(0 0 20px rgba(255, 68, 68, 0.6));
+              filter: brightness(1) drop-shadow(0 0 25px rgba(255, 68, 68, 0.7));
             }
             50% { 
-              transform: scale(1.05); 
-              filter: brightness(1.2) drop-shadow(0 0 40px rgba(255, 68, 68, 0.9));
+              transform: scale(1.08); 
+              filter: brightness(1.3) drop-shadow(0 0 50px rgba(255, 68, 68, 1));
             }
           }
         `}</style>
@@ -142,7 +142,52 @@ function OrbitalRing({
   );
 }
 
-// Orbiting token component
+// Glow trail component
+function GlowTrail({ 
+  positions, 
+  color 
+}: { 
+  positions: THREE.Vector3[]; 
+  color: string;
+}) {
+  const trailRef = useRef<THREE.Points>(null);
+  
+  const trailGeometry = useMemo(() => {
+    const positionsArray = new Float32Array(positions.length * 3);
+    const opacities = new Float32Array(positions.length);
+    
+    positions.forEach((pos, i) => {
+      positionsArray[i * 3] = pos.x;
+      positionsArray[i * 3 + 1] = pos.y;
+      positionsArray[i * 3 + 2] = pos.z;
+      opacities[i] = (i / positions.length) * 0.8;
+    });
+    
+    return { positions: positionsArray, opacities };
+  }, [positions]);
+
+  return (
+    <points ref={trailRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={positions.length}
+          array={trailGeometry.positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.08}
+        color={color}
+        transparent
+        opacity={0.6}
+        sizeAttenuation
+      />
+    </points>
+  );
+}
+
+// Orbiting token component with glow trail
 function OrbitingToken({ 
   token, 
   radius, 
@@ -160,6 +205,8 @@ function OrbitingToken({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const tokenRef = useRef<THREE.Group>(null);
+  const trailPositions = useRef<THREE.Vector3[]>([]);
+  const [trail, setTrail] = useState<THREE.Vector3[]>([]);
 
   useFrame((state) => {
     if (groupRef.current && tokenRef.current) {
@@ -182,25 +229,51 @@ function OrbitingToken({
       // Keep token facing camera
       tokenRef.current.lookAt(0, 0, 0);
       tokenRef.current.rotateY(Math.PI);
+      
+      // Update trail positions
+      const newPos = new THREE.Vector3(finalX, tiltedY, finalZ);
+      trailPositions.current.push(newPos);
+      if (trailPositions.current.length > 15) {
+        trailPositions.current.shift();
+      }
+      
+      // Update trail every few frames for performance
+      if (Math.floor(state.clock.elapsedTime * 30) % 3 === 0) {
+        setTrail([...trailPositions.current]);
+      }
     }
   });
 
   return (
     <group ref={groupRef}>
+      {/* Glow trail */}
+      {trail.length > 2 && (
+        <GlowTrail positions={trail} color={token.color} />
+      )}
+      
       <group ref={tokenRef}>
-        <Float speed={2} rotationIntensity={0} floatIntensity={0.5}>
-          {/* Token glow */}
-          <Sphere args={[0.35, 16, 16]}>
+        <Float speed={2} rotationIntensity={0} floatIntensity={0.3}>
+          {/* Outer glow */}
+          <Sphere args={[0.4, 16, 16]}>
             <meshBasicMaterial
               color={token.color}
               transparent
-              opacity={0.2}
+              opacity={0.15}
+            />
+          </Sphere>
+          
+          {/* Inner glow */}
+          <Sphere args={[0.32, 16, 16]}>
+            <meshBasicMaterial
+              color={token.color}
+              transparent
+              opacity={0.25}
             />
           </Sphere>
           
           {/* Token container */}
           <mesh>
-            <circleGeometry args={[0.28, 32]} />
+            <circleGeometry args={[0.26, 32]} />
             <meshBasicMaterial color="#1a1a2e" />
           </mesh>
           
@@ -209,8 +282,8 @@ function OrbitingToken({
             center
             distanceFactor={8}
             style={{
-              width: '48px',
-              height: '48px',
+              width: '44px',
+              height: '44px',
               borderRadius: '50%',
               overflow: 'hidden',
               pointerEvents: 'none',
@@ -225,10 +298,13 @@ function OrbitingToken({
                 objectFit: 'cover',
                 borderRadius: '50%',
                 border: `2px solid ${token.color}`,
-                boxShadow: `0 0 20px ${token.color}40`,
+                boxShadow: `0 0 25px ${token.glowColor}, 0 0 50px ${token.glowColor}`,
               }}
             />
           </Html>
+          
+          {/* Point light for each token */}
+          <pointLight color={token.color} intensity={0.5} distance={2} />
         </Float>
       </group>
     </group>
@@ -306,15 +382,16 @@ function GlobeScene() {
   });
 
   // Create orbit configurations
+  // Wider orbits - tokens further from center
   const orbits = useMemo(() => [
-    { radius: 2.0, tilt: 0.3, rotationY: 0, speed: 0.5, tokenIndex: 0 },
-    { radius: 2.0, tilt: 0.3, rotationY: 0, speed: 0.5, tokenIndex: 1, offset: Math.PI },
-    { radius: 2.5, tilt: -0.5, rotationY: 1.2, speed: 0.4, tokenIndex: 2 },
-    { radius: 2.5, tilt: -0.5, rotationY: 1.2, speed: 0.4, tokenIndex: 3, offset: Math.PI },
-    { radius: 3.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 4 },
-    { radius: 3.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 5, offset: Math.PI },
-    { radius: 3.5, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 6 },
-    { radius: 3.5, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 7, offset: Math.PI },
+    { radius: 2.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 0 },
+    { radius: 2.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 1, offset: Math.PI },
+    { radius: 3.4, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 2 },
+    { radius: 3.4, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 3, offset: Math.PI },
+    { radius: 4.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 4 },
+    { radius: 4.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 5, offset: Math.PI },
+    { radius: 4.6, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 6 },
+    { radius: 4.6, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 7, offset: Math.PI },
   ], []);
 
   // Get unique ring configurations
@@ -382,23 +459,22 @@ interface TokenGlobeProps {
 
 export const TokenGlobe = memo(function TokenGlobe({ className, style }: TokenGlobeProps) {
   return (
-    <div className={className} style={{ ...style, overflow: 'visible' }}>
+    <div className={className} style={style}>
       <Canvas
-        camera={{ position: [0, 0, 10], fov: 40 }}
+        camera={{ position: [0, 0, 12], fov: 45 }}
         gl={{ 
           antialias: true,
           alpha: true,
           powerPreference: 'high-performance',
         }}
         dpr={[1, 2]}
-        style={{ overflow: 'visible' }}
       >
         <GlobeScene />
         <OrbitControls 
           enableZoom={false}
           enablePan={false}
           autoRotate
-          autoRotateSpeed={0.5}
+          autoRotateSpeed={0.3}
           minPolarAngle={Math.PI / 3}
           maxPolarAngle={Math.PI / 1.5}
         />
