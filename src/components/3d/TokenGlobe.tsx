@@ -316,13 +316,13 @@ function ParticleField() {
   const particlesRef = useRef<THREE.Points>(null);
   
   const particles = useMemo(() => {
-    const positions = new Float32Array(200 * 3);
-    const colors = new Float32Array(200 * 3);
+    const positions = new Float32Array(150 * 3);
+    const colors = new Float32Array(150 * 3);
     
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 150; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const r = 4 + Math.random() * 2;
+      const r = 2.5 + Math.random() * 1.5;
       
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
@@ -349,13 +349,13 @@ function ParticleField() {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={200}
+          count={150}
           array={particles.positions}
           itemSize={3}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={200}
+          count={150}
           array={particles.colors}
           itemSize={3}
         />
@@ -381,17 +381,16 @@ function GlobeScene() {
     }
   });
 
-  // Create orbit configurations
-  // Wider orbits - tokens further from center
+  // Create orbit configurations - compact orbits to fit within container
   const orbits = useMemo(() => [
-    { radius: 2.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 0 },
-    { radius: 2.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 1, offset: Math.PI },
-    { radius: 3.4, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 2 },
-    { radius: 3.4, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 3, offset: Math.PI },
-    { radius: 4.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 4 },
-    { radius: 4.0, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 5, offset: Math.PI },
-    { radius: 4.6, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 6 },
-    { radius: 4.6, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 7, offset: Math.PI },
+    { radius: 1.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 0 },
+    { radius: 1.8, tilt: 0.3, rotationY: 0, speed: 0.4, tokenIndex: 1, offset: Math.PI },
+    { radius: 2.2, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 2 },
+    { radius: 2.2, tilt: -0.5, rotationY: 1.2, speed: 0.35, tokenIndex: 3, offset: Math.PI },
+    { radius: 2.6, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 4 },
+    { radius: 2.6, tilt: 0.8, rotationY: 2.4, speed: 0.3, tokenIndex: 5, offset: Math.PI },
+    { radius: 3.0, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 6 },
+    { radius: 3.0, tilt: -0.2, rotationY: 3.6, speed: 0.25, tokenIndex: 7, offset: Math.PI },
   ], []);
 
   // Get unique ring configurations
