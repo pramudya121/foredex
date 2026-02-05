@@ -459,15 +459,16 @@ interface TokenGlobeProps {
 
 export const TokenGlobe = memo(function TokenGlobe({ className, style }: TokenGlobeProps) {
   return (
-    <div className={className} style={style}>
+    <div className={className} style={{ ...style, background: 'transparent' }}>
       <Canvas
-        camera={{ position: [0, 0, 12], fov: 45 }}
+        camera={{ position: [0, 0, 10], fov: 50 }}
         gl={{ 
           antialias: true,
           alpha: true,
           powerPreference: 'high-performance',
         }}
         dpr={[1, 2]}
+        style={{ background: 'transparent' }}
       >
         <GlobeScene />
         <OrbitControls 

@@ -28,9 +28,6 @@ import { PremiumThemeToggle } from './ui/premium-theme-toggle';
 import { RpcStatusIndicator } from './RpcStatusIndicator';
 import { QRCodeSVG } from 'qrcode.react';
 
-const PriceAlertManager = lazy(() => import('./PriceAlertManager'));
-const LanguageSelector = lazy(() => import('./LanguageSelector'));
-
 const NAV_ITEMS = [
   { path: '/', label: 'Home' },
   { path: '/swap', label: 'Swap' },
@@ -216,16 +213,6 @@ export function Header() {
 
         {/* Wallet & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Price Alerts */}
-          <Suspense fallback={null}>
-            <PriceAlertManager />
-          </Suspense>
-
-          {/* Language Selector */}
-          <Suspense fallback={null}>
-            <LanguageSelector />
-          </Suspense>
-
           {/* Premium Theme Toggle */}
           <PremiumThemeToggle />
 
