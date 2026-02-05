@@ -100,9 +100,9 @@ export const HeroSection = memo(function HeroSection() {
 
         {/* Right Content - 3D Token Globe */}
         <ScrollReveal direction="scale" delay={200} duration={800}>
-          <div className="flex items-center justify-center lg:justify-end">
-            {/* Responsive globe container: 240px mobile, 300px tablet, 400px desktop */}
-            <div className="relative w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] lg:w-[400px] lg:h-[400px] xl:w-[450px] xl:h-[450px]">
+          <div className="flex items-center justify-center lg:justify-end overflow-visible">
+            {/* Responsive globe container with extra padding for orbits */}
+            <div className="relative w-[280px] h-[280px] sm:w-[340px] sm:h-[340px] lg:w-[420px] lg:h-[420px] xl:w-[480px] xl:h-[480px] overflow-visible">
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="relative">
@@ -111,7 +111,7 @@ export const HeroSection = memo(function HeroSection() {
                   </div>
                 </div>
               }>
-                <TokenGlobe className="w-full h-full" />
+                <TokenGlobe className="w-full h-full overflow-visible" />
               </Suspense>
             </div>
           </div>
