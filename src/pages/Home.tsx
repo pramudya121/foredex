@@ -10,7 +10,7 @@ import { RevealSection } from '@/components/ui/scroll-reveal';
 
 function HomePage() {
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="relative min-h-screen overflow-x-hidden">
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div 
