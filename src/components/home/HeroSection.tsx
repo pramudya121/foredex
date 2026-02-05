@@ -100,15 +100,14 @@ export const HeroSection = memo(function HeroSection() {
 
         {/* Right Content - 3D Token Globe */}
         <ScrollReveal direction="scale" delay={200} duration={800}>
-          <div className="flex items-center justify-center lg:justify-center">
-            <div className="relative w-full max-w-[380px] aspect-square">
-              {/* 3D Token Globe */}
+          <div className="flex items-center justify-center lg:justify-end">
+            <div className="relative w-full max-w-[320px] lg:max-w-[360px] aspect-square">
+              {/* 3D Token Globe - seamless background */}
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="relative">
-                    <div className="w-36 h-36 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse" />
-                    <div className="absolute inset-4 rounded-full border-2 border-primary/20 animate-spin-slow" />
-                    <div className="absolute inset-8 rounded-full border border-primary/10 animate-spin-slow" style={{ animationDirection: 'reverse' }} />
+                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse" />
+                    <div className="absolute inset-3 rounded-full border-2 border-primary/20 animate-spin-slow" />
                   </div>
                 </div>
               }>

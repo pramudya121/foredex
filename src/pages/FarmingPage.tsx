@@ -317,18 +317,16 @@ function FarmingPage() {
               </div>
               
               <div className="flex items-center gap-3">
-                {isOwner && (
-                  <Link to="/farming/admin">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                    >
-                      <Settings className="w-4 h-4 mr-2" />
-                      Admin
-                    </Button>
-                  </Link>
-                )}
+                <Link to="/farming/admin">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Admin Panel
+                  </Button>
+                </Link>
                 
                 <Button
                   variant="ghost"
