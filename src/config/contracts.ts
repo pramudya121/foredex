@@ -30,10 +30,12 @@ export const NEXUS_TESTNET = {
   chainIdHex: '0xF69',
   name: 'Nexus Testnet',
   rpcUrl: 'https://testnet.rpc.nexus.xyz/',
-  // Single RPC URL - CORS proxy added automatically in rpcProvider
+  // RPC URLs - HTTP and WebSocket
   rpcUrls: [
     'https://testnet.rpc.nexus.xyz/',
   ],
+  // WebSocket RPC for real-time subscriptions
+  wsUrl: 'wss://testnet.rpc.nexus.xyz',
   blockExplorer: 'https://nexus.testnet.blockscout.com',
   nativeCurrency: {
     name: 'NEX',
