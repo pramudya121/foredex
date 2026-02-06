@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TokenPrice } from '@/hooks/useRealtimePrices';
 
@@ -73,21 +73,30 @@ function LivePriceIndicator({ price, showChange = true, size = 'md' }: LivePrice
 
 interface ConnectionStatusProps {
   isConnected: boolean;
+  isWsConnected?: boolean;
 }
 
-export function ConnectionStatus({ isConnected }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, isWsConnected = false }: ConnectionStatusProps) {
   return (
     <div className={cn(
       'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium',
-      isConnected 
+      isWsConnected 
         ? 'bg-green-500/10 text-green-500' 
-        : 'bg-red-500/10 text-red-500'
+        : isConnected 
+          ? 'bg-yellow-500/10 text-yellow-500'
+          : 'bg-red-500/10 text-red-500'
     )}>
-      {isConnected ? (
+      {isWsConnected ? (
+        <>
+          <Radio className="w-3 h-3" />
+          <span>Real-time</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+        </>
+      ) : isConnected ? (
         <>
           <Wifi className="w-3 h-3" />
           <span>Live</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
         </>
       ) : (
         <>

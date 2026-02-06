@@ -58,7 +58,7 @@ const StatCard = memo(function StatCard({
 });
 
 const Index = () => {
-  const { isConnected } = useRealtimePrices();
+  const { isConnected, isWsConnected } = useRealtimePrices();
 
   return (
     <Spotlight className="min-h-screen">
@@ -109,7 +109,7 @@ const Index = () => {
               <FeatureBadge icon={Zap} text="Instant Swaps" />
               <FeatureBadge icon={Shield} text="Secure Trading" />
               <FeatureBadge icon={TrendingUp} text="Best Rates" />
-              <ConnectionStatus isConnected={isConnected} />
+              <ConnectionStatus isConnected={isConnected} isWsConnected={isWsConnected} />
             </div>
           </ScrollReveal>
         </div>
