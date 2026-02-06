@@ -442,7 +442,16 @@ export function useFarmingData() {
     const tx = await farmingContract.add(allocPoint, lpTokenAddress);
     await tx.wait();
     
+    // Clear cache and wait for blockchain to update before refetching
     clearFarmingCache();
+    rpcProvider.clearCache();
+    
+    // Wait a bit for the blockchain state to propagate
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Force multiple refetch attempts to ensure new pool appears
+    await fetchData(true);
+    await new Promise(r => setTimeout(r, 1000));
     await fetchData(true);
   }, [signer, isOwner, fetchData]);
 

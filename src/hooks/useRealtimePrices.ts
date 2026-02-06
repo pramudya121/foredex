@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
-import { CONTRACTS, TOKEN_LIST } from '@/config/contracts';
+import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
 
@@ -43,6 +43,14 @@ class RealtimePriceService {
   private updateInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
   private lastSuccessfulFetch = 0;
+  
+  // WebSocket state
+  private wsProvider: ethers.WebSocketProvider | null = null;
+  private wsConnected = false;
+  private wsReconnectTimeout: NodeJS.Timeout | null = null;
+  private wsReconnectAttempts = 0;
+  private maxWsReconnectAttempts = 5;
+  private blockSubscription: any = null;
 
   private constructor() {
     // Initialize with fallback prices immediately
@@ -77,6 +85,70 @@ class RealtimePriceService {
           isUpdating: false,
         });
       });
+  }
+
+  // Initialize WebSocket connection for real-time updates
+  private async initWebSocket(): Promise<void> {
+    const wsUrl = NEXUS_TESTNET.wsUrl;
+    if (!wsUrl) {
+      console.warn('[RealtimePrices] No WebSocket URL configured');
+      return;
+    }
+
+    try {
+      const network = {
+        chainId: NEXUS_TESTNET.chainId,
+        name: NEXUS_TESTNET.name,
+      };
+
+      this.wsProvider = new ethers.WebSocketProvider(
+        wsUrl,
+        network,
+        { staticNetwork: ethers.Network.from(network) }
+      );
+
+      // Test connection
+      await Promise.race([
+        this.wsProvider.getBlockNumber(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('WS Timeout')), 10000))
+      ]);
+
+      this.wsConnected = true;
+      this.wsReconnectAttempts = 0;
+      console.info('[RealtimePrices] WebSocket connected for real-time price updates');
+
+      // Subscribe to new blocks for price updates
+      this.blockSubscription = this.wsProvider.on('block', async (blockNumber: number) => {
+        console.log(`[RealtimePrices] New block: ${blockNumber}`);
+        // Fetch new prices on each block
+        await this.updatePrices();
+      });
+
+    } catch (error: any) {
+      console.warn('[RealtimePrices] WebSocket init failed:', error?.message || 'Unknown');
+      this.wsProvider = null;
+      this.wsConnected = false;
+      this.scheduleWsReconnect();
+    }
+  }
+
+  private scheduleWsReconnect(): void {
+    if (this.wsReconnectTimeout) {
+      clearTimeout(this.wsReconnectTimeout);
+    }
+
+    if (this.wsReconnectAttempts >= this.maxWsReconnectAttempts) {
+      console.warn('[RealtimePrices] Max WebSocket reconnect attempts reached, using polling');
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000);
+    this.wsReconnectAttempts++;
+
+    this.wsReconnectTimeout = setTimeout(() => {
+      console.info(`[RealtimePrices] Attempting WebSocket reconnect (${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts})`);
+      this.initWebSocket();
+    }, delay);
   }
 
   subscribe(listener: PriceListener): () => void {
@@ -120,22 +192,20 @@ class RealtimePriceService {
   }
 
   private async fetchPrices(): Promise<PriceUpdate[]> {
-    // Check if RPC is available
-    if (!rpcProvider.isAvailable()) {
+    // Try WebSocket provider first, then fall back to HTTP RPC
+    let provider = this.wsConnected && this.wsProvider ? this.wsProvider : rpcProvider.getProvider();
+    
+    if (!provider || (!this.wsConnected && !rpcProvider.isAvailable())) {
       return this.generateFallbackUpdate();
     }
-
-    const provider = rpcProvider.getProvider();
-    if (!provider) return this.generateFallbackUpdate();
 
     try {
       const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
       
       // Get pair count with caching
-      const pairCount = await rpcProvider.call(
-        () => factory.allPairsLength(),
-        'allPairsLength'
-      );
+      const pairCount = this.wsConnected 
+        ? await factory.allPairsLength()
+        : await rpcProvider.call(() => factory.allPairsLength(), 'allPairsLength');
       
       if (pairCount === null) return this.generateFallbackUpdate();
 
@@ -143,20 +213,48 @@ class RealtimePriceService {
       const maxPairs = Math.min(Number(pairCount), 10); // Reduced to minimize requests
 
       for (let i = 0; i < maxPairs; i++) {
-        const pairAddress = await rpcProvider.call(
-          () => factory.allPairs(i),
-          `pair_${i}`
-        );
+        let pairAddress: string | null = null;
+        
+        if (this.wsConnected && this.wsProvider) {
+          try {
+            pairAddress = await factory.allPairs(i);
+          } catch {
+            pairAddress = await rpcProvider.call(() => factory.allPairs(i), `pair_${i}`);
+          }
+        } else {
+          pairAddress = await rpcProvider.call(() => factory.allPairs(i), `pair_${i}`);
+        }
         
         if (!pairAddress) continue;
 
         const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
         
-        const [token0Addr, token1Addr, reserves] = await Promise.all([
-          rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
-          rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
-          rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`),
-        ]);
+        let token0Addr: string | null = null;
+        let token1Addr: string | null = null;
+        let reserves: any = null;
+
+        if (this.wsConnected && this.wsProvider) {
+          try {
+            [token0Addr, token1Addr, reserves] = await Promise.all([
+              pair.token0(),
+              pair.token1(),
+              pair.getReserves(),
+            ]);
+          } catch {
+            // Fallback to HTTP RPC
+            [token0Addr, token1Addr, reserves] = await Promise.all([
+              rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
+              rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`),
+            ]);
+          }
+        } else {
+          [token0Addr, token1Addr, reserves] = await Promise.all([
+            rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`),
+            rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`),
+            rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`),
+          ]);
+        }
 
         if (!token0Addr || !token1Addr || !reserves) continue;
 
@@ -246,11 +344,19 @@ class RealtimePriceService {
     if (this.isRunning) return;
     
     this.isRunning = true;
+    
+    // Try to connect via WebSocket first
+    this.initWebSocket();
+    
+    // Initial price fetch
     this.updatePrices();
     
-    // Update every 15 seconds instead of 5 to reduce RPC load
+    // Fallback polling - updates every 15 seconds if WebSocket not connected
+    // If WebSocket is connected, this serves as a backup
     this.updateInterval = setInterval(() => {
-      this.updatePrices();
+      if (!this.wsConnected) {
+        this.updatePrices();
+      }
     }, 15000);
   }
 
@@ -259,17 +365,39 @@ class RealtimePriceService {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
+    
+    if (this.wsReconnectTimeout) {
+      clearTimeout(this.wsReconnectTimeout);
+      this.wsReconnectTimeout = null;
+    }
+    
+    if (this.blockSubscription && this.wsProvider) {
+      this.wsProvider.off('block', this.blockSubscription);
+      this.blockSubscription = null;
+    }
+    
+    if (this.wsProvider) {
+      this.wsProvider.destroy();
+      this.wsProvider = null;
+    }
+    
+    this.wsConnected = false;
     this.isRunning = false;
   }
 
   getPrices(): Map<string, TokenPrice> {
     return this.prices;
   }
+
+  isWebSocketConnected(): boolean {
+    return this.wsConnected;
+  }
 }
 
 export function useRealtimePrices() {
   const [prices, setPrices] = useState<Map<string, TokenPrice>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
+  const [isWsConnected, setIsWsConnected] = useState(false);
   const serviceRef = useRef<RealtimePriceService | null>(null);
 
   useEffect(() => {
@@ -278,10 +406,17 @@ export function useRealtimePrices() {
     const unsubscribe = serviceRef.current.subscribe((newPrices) => {
       setPrices(new Map(newPrices));
       setIsConnected(true);
+      setIsWsConnected(serviceRef.current?.isWebSocketConnected() || false);
     });
+
+    // Check WebSocket status periodically
+    const wsCheckInterval = setInterval(() => {
+      setIsWsConnected(serviceRef.current?.isWebSocketConnected() || false);
+    }, 5000);
 
     return () => {
       unsubscribe();
+      clearInterval(wsCheckInterval);
     };
   }, []);
 
@@ -296,6 +431,7 @@ export function useRealtimePrices() {
   return {
     prices,
     isConnected,
+    isWsConnected,
     getPrice,
     getAllPrices,
   };

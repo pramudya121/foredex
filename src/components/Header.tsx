@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { NEXUS_TESTNET } from '@/config/contracts';
 import { toast } from 'sonner';
 import wolfLogo from '@/assets/wolf-logo.png';
-import { NetworkStatus } from './NetworkStatus';
 import { PendingTransactions } from './PendingTransactions';
 import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
@@ -218,9 +217,6 @@ export function Header() {
 
           {/* RPC Status */}
           <RpcStatusIndicator />
-
-          {/* Network Status */}
-          <NetworkStatus />
 
           {/* Pending Transactions */}
           {isConnected && <PendingTransactions />}
