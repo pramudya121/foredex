@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { rpcProvider } from '@/lib/rpcProvider';
-import { Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -9,9 +9,11 @@ import {
 } from '@/components/ui/tooltip';
 
 type RpcStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
+type WsStatus = 'connected' | 'connecting' | 'disconnected';
 
 export function RpcStatusIndicator() {
   const [status, setStatus] = useState<RpcStatus>('connecting');
+  const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -19,14 +21,27 @@ export function RpcStatusIndicator() {
       const provider = rpcProvider.getProvider();
       const isAvailable = rpcProvider.isAvailable();
       
+      // HTTP RPC status
       if (!provider) {
         setStatus('connecting');
       } else if (isAvailable) {
         setStatus('connected');
       } else {
-        // Still connecting if provider exists but not ready
         setStatus('connecting');
       }
+
+      // WebSocket status
+      const wsAvailable = rpcProvider.isWsAvailable();
+      const wsProvider = rpcProvider.getWsProvider();
+      
+      if (!wsProvider) {
+        setWsStatus('connecting');
+      } else if (wsAvailable) {
+        setWsStatus('connected');
+      } else {
+        setWsStatus('disconnected');
+      }
+
       setLastCheck(new Date());
     };
 
@@ -73,7 +88,26 @@ export function RpcStatusIndicator() {
     },
   };
 
+  const wsStatusConfig = {
+    connected: {
+      color: 'text-green-500',
+      label: 'WebSocket Connected',
+      description: 'Real-time updates active',
+    },
+    connecting: {
+      color: 'text-yellow-500',
+      label: 'WebSocket Connecting...',
+      description: 'Establishing real-time connection',
+    },
+    disconnected: {
+      color: 'text-muted-foreground',
+      label: 'WebSocket Disconnected',
+      description: 'Real-time updates unavailable',
+    },
+  };
+
   const config = statusConfig[status];
+  const wsConfig = wsStatusConfig[wsStatus];
   const Icon = config.icon;
 
   return (
@@ -92,15 +126,25 @@ export function RpcStatusIndicator() {
             }
           }}
         >
-          <Icon 
-            className={cn(
-              'w-4 h-4',
-              config.color,
-              status === 'connecting' && 'animate-spin'
-            )} 
-          />
+          <div className="flex items-center gap-1">
+            <Icon 
+              className={cn(
+                'w-4 h-4',
+                config.color,
+                status === 'connecting' && 'animate-spin'
+              )} 
+            />
+            {/* WebSocket indicator */}
+            <Radio 
+              className={cn(
+                'w-3 h-3',
+                wsStatus === 'connected' ? 'text-green-500' : 
+                wsStatus === 'connecting' ? 'text-yellow-500' : 'text-muted-foreground'
+              )} 
+            />
+          </div>
           {/* Pulse indicator */}
-          {status === 'connected' && (
+          {status === 'connected' && wsStatus === 'connected' && (
             <span className="absolute top-1 right-1 flex h-2 w-2">
               <span className={cn(
                 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
@@ -114,15 +158,28 @@ export function RpcStatusIndicator() {
           )}
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-[200px]">
-        <div className="space-y-1">
-          <p className="font-medium flex items-center gap-2">
-            <span className={cn('w-2 h-2 rounded-full', config.pulse)} />
-            {config.label}
-          </p>
-          <p className="text-xs text-muted-foreground">{config.description}</p>
+      <TooltipContent side="bottom" className="max-w-[220px]">
+        <div className="space-y-2">
+          {/* HTTP RPC Status */}
+          <div className="space-y-1">
+            <p className="font-medium flex items-center gap-2">
+              <span className={cn('w-2 h-2 rounded-full', config.pulse)} />
+              {config.label}
+            </p>
+            <p className="text-xs text-muted-foreground">{config.description}</p>
+          </div>
+          
+          {/* WebSocket Status */}
+          <div className="space-y-1 border-t border-border/50 pt-2">
+            <p className="font-medium flex items-center gap-2">
+              <Radio className={cn('w-3 h-3', wsConfig.color)} />
+              {wsConfig.label}
+            </p>
+            <p className="text-xs text-muted-foreground">{wsConfig.description}</p>
+          </div>
+          
           {lastCheck && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
               Last check: {lastCheck.toLocaleTimeString()}
             </p>
           )}

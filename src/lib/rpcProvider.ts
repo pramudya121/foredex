@@ -9,10 +9,11 @@ interface BatchedRequest {
   reject: (error: any) => void;
 }
 
-// Singleton RPC provider with robust error handling, adaptive throttling, and request batching
+// Singleton RPC provider with robust error handling, adaptive throttling, request batching, and WebSocket support
 class RPCProviderService {
   private static instance: RPCProviderService;
   private provider: ethers.JsonRpcProvider | null = null;
+  private wsProvider: ethers.WebSocketProvider | null = null;
   private currentRpcIndex = 0;
   private lastRequestTime = 0;
   private minRequestInterval = 100;
@@ -22,13 +23,18 @@ class RPCProviderService {
   private maxErrors = 50;
   private cooldownUntil = 0;
   private isInitializing = false;
+  private isWsInitializing = false;
   private consecutiveErrors = 0;
   private pendingRequests = new Map<string, Promise<any>>();
   private requestQueue: Array<() => void> = [];
   private isProcessingQueue = false;
   private lastSuccessTime = Date.now();
   private providerReady = false;
+  private wsProviderReady = false;
   private initPromise: Promise<void> | null = null;
+  private wsReconnectAttempts = 0;
+  private maxWsReconnectAttempts = 5;
+  private wsReconnectTimeout: NodeJS.Timeout | null = null;
   
   // Batching state
   private batchQueue: BatchedRequest[] = [];
@@ -38,6 +44,7 @@ class RPCProviderService {
 
   private constructor() {
     this.initPromise = this.initProvider();
+    this.initWebSocket();
   }
 
   // Get RPC URLs with CORS proxy fallbacks
@@ -125,6 +132,90 @@ class RPCProviderService {
     }
   }
 
+  // Initialize WebSocket provider for real-time subscriptions
+  private async initWebSocket(): Promise<void> {
+    if (this.isWsInitializing) return;
+    this.isWsInitializing = true;
+    this.wsProviderReady = false;
+
+    try {
+      const wsUrl = NEXUS_TESTNET.wsUrl;
+      if (!wsUrl) {
+        console.warn('[RPC] No WebSocket URL configured');
+        this.isWsInitializing = false;
+        return;
+      }
+
+      const network = {
+        chainId: NEXUS_TESTNET.chainId,
+        name: NEXUS_TESTNET.name,
+      };
+
+      this.wsProvider = new ethers.WebSocketProvider(
+        wsUrl,
+        network,
+        { staticNetwork: ethers.Network.from(network) }
+      );
+
+      // Test WebSocket connection
+      await Promise.race([
+        this.wsProvider.getBlockNumber(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('WS Timeout')), 10000))
+      ]);
+
+      this.wsProviderReady = true;
+      this.wsReconnectAttempts = 0;
+      console.info(`[RPC] WebSocket connected: ${wsUrl}`);
+
+      // Handle WebSocket events - monitor for disconnection via periodic health check
+      const healthCheck = setInterval(async () => {
+        if (!this.wsProvider || !this.wsProviderReady) {
+          clearInterval(healthCheck);
+          return;
+        }
+        try {
+          await Promise.race([
+            this.wsProvider.getBlockNumber(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('WS Health Timeout')), 5000))
+          ]);
+        } catch {
+          console.warn('[RPC] WebSocket health check failed');
+          this.wsProviderReady = false;
+          clearInterval(healthCheck);
+          this.scheduleWsReconnect();
+        }
+      }, 30000); // Check every 30 seconds
+
+    } catch (error: any) {
+      console.warn('[RPC] WebSocket init failed:', error?.message || 'Unknown');
+      this.wsProvider = null;
+      this.wsProviderReady = false;
+      this.scheduleWsReconnect();
+    } finally {
+      this.isWsInitializing = false;
+    }
+  }
+
+  // Schedule WebSocket reconnection with exponential backoff
+  private scheduleWsReconnect(): void {
+    if (this.wsReconnectTimeout) {
+      clearTimeout(this.wsReconnectTimeout);
+    }
+
+    if (this.wsReconnectAttempts >= this.maxWsReconnectAttempts) {
+      console.warn('[RPC] Max WebSocket reconnect attempts reached');
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000);
+    this.wsReconnectAttempts++;
+
+    this.wsReconnectTimeout = setTimeout(() => {
+      console.info(`[RPC] Attempting WebSocket reconnect (${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts})`);
+      this.initWebSocket();
+    }, delay);
+  }
+
   private async switchRpc() {
     const rpcUrls = this.getRpcUrls();
     const nextIndex = (this.currentRpcIndex + 1) % rpcUrls.length;
@@ -145,6 +236,19 @@ class RPCProviderService {
       this.initProvider();
     }
     return this.provider;
+  }
+
+  // Get WebSocket provider for subscriptions
+  getWsProvider(): ethers.WebSocketProvider | null {
+    if (!this.wsProvider && !this.isWsInitializing) {
+      this.initWebSocket();
+    }
+    return this.wsProvider;
+  }
+
+  // Check if WebSocket is available
+  isWsAvailable(): boolean {
+    return this.wsProvider !== null && this.wsProviderReady;
   }
 
   isAvailable(): boolean {
