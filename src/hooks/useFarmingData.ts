@@ -41,11 +41,58 @@ export function clearFarmingCache() {
   farmingCache = null;
 }
 
+// Cache for token symbols fetched on-chain
+const tokenSymbolCache = new Map<string, string>();
+
 const getTokenSymbol = (tokenAddress: string): string => {
+  if (!tokenAddress || tokenAddress === ethers.ZeroAddress) return 'UNKNOWN';
+  
+  const addr = tokenAddress.toLowerCase();
+  
+  // Check local cache first
+  if (tokenSymbolCache.has(addr)) {
+    return tokenSymbolCache.get(addr)!;
+  }
+  
+  // Check TOKEN_LIST
   const token = TOKEN_LIST.find(
-    t => t.address.toLowerCase() === tokenAddress.toLowerCase()
+    t => t.address.toLowerCase() === addr
   );
-  return token?.symbol || tokenAddress.slice(0, 6) + '...';
+  
+  if (token?.symbol) {
+    tokenSymbolCache.set(addr, token.symbol);
+    return token.symbol;
+  }
+  
+  // Return shortened address as fallback
+  return tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4);
+};
+
+// Async version that fetches from chain if needed
+const getTokenSymbolAsync = async (tokenAddress: string, provider: ethers.Provider): Promise<string> => {
+  if (!tokenAddress || tokenAddress === ethers.ZeroAddress) return 'UNKNOWN';
+  
+  const addr = tokenAddress.toLowerCase();
+  
+  // Check cache
+  const cached = getTokenSymbol(tokenAddress);
+  if (!cached.includes('...')) {
+    return cached;
+  }
+  
+  // Fetch from chain
+  try {
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+    const symbol = await tokenContract.symbol();
+    if (symbol) {
+      tokenSymbolCache.set(addr, symbol);
+      return symbol;
+    }
+  } catch {
+    // Ignore fetch errors
+  }
+  
+  return cached;
 };
 
 export function useFarmingData() {
@@ -210,26 +257,59 @@ export function useFarmingData() {
           let token0Symbol = 'LP', token1Symbol = '';
           let totalStaked = '0';
 
-          // Get pair tokens with fallback
+          // Get pair tokens with fallback - try multiple approaches
+          let isPairToken = false;
+          
           try {
+            // First try to get token0 and token1 (LP pair tokens)
             const [t0, t1] = await Promise.all([
               lpContract.token0().catch(() => null),
               lpContract.token1().catch(() => null),
             ]);
-            if (t0 && t1) {
-              token0Symbol = getTokenSymbol(t0);
-              token1Symbol = getTokenSymbol(t1);
-            } else {
-              // Single token staking - try to get symbol
-              try {
-                const sym = await lpContract.symbol();
-                token0Symbol = sym || 'LP';
-              } catch {
-                token0Symbol = 'LP';
-              }
+            
+            if (t0 && t1 && t0 !== ethers.ZeroAddress && t1 !== ethers.ZeroAddress) {
+              isPairToken = true;
+              // Use async version to fetch symbols if not in list
+              const [sym0, sym1] = await Promise.all([
+                getTokenSymbolAsync(t0, provider),
+                getTokenSymbolAsync(t1, provider),
+              ]);
+              token0Symbol = sym0;
+              token1Symbol = sym1;
             }
           } catch {
-            token0Symbol = 'LP';
+            // Not a pair token, continue to fallback
+          }
+          
+          // If not a pair token, try to get LP token's own symbol
+          if (!isPairToken) {
+            try {
+              const lpSymbol = await lpContract.symbol();
+              if (lpSymbol && lpSymbol !== 'UNI-V2') {
+                // Parse LP symbol like "UNI-V2" or custom names
+                token0Symbol = lpSymbol;
+                token1Symbol = '';
+              } else {
+                // Try to get name as fallback
+                try {
+                  const lpName = await lpContract.name();
+                  if (lpName) {
+                    // Parse names like "Uniswap V2: TOKEN0-TOKEN1"
+                    const match = lpName.match(/([A-Z0-9]+)[/-]([A-Z0-9]+)/i);
+                    if (match) {
+                      token0Symbol = match[1].toUpperCase();
+                      token1Symbol = match[2].toUpperCase();
+                    } else {
+                      token0Symbol = lpName.slice(0, 10);
+                    }
+                  }
+                } catch {
+                  token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
+                }
+              }
+            } catch {
+              token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
+            }
           }
 
           // Get total staked with better error handling
