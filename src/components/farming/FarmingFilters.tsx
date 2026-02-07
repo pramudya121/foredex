@@ -44,9 +44,9 @@ interface Filters {
 const defaultFilters: Filters = {
   search: '',
   minAPR: 0,
-  maxAPR: 1000,
+  maxAPR: 999999, // Very high to not filter by default
   minTVL: 0,
-  maxTVL: 1000000,
+  maxTVL: 999999999, // Very high to not filter by default
 };
 
 export function FarmingFilters({ pools, onFilteredPoolsChange, sortBy, onSortChange }: FarmingFiltersProps) {
