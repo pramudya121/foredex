@@ -1,7 +1,17 @@
-import { memo, useRef, useMemo, useState } from 'react';
+import { memo, useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls, Sphere, Ring, Html } from '@react-three/drei';
 import * as THREE from 'three';
+
+// Check for reduced motion preference
+const prefersReducedMotion = typeof window !== 'undefined' 
+  ? window.matchMedia('(prefers-reduced-motion: reduce)').matches 
+  : false;
+
+// Detect low-power devices
+const isLowPowerDevice = typeof navigator !== 'undefined' 
+  ? /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  : false;
 
 // Token data for orbits
 const ORBIT_TOKENS = [
@@ -311,15 +321,19 @@ function OrbitingToken({
   );
 }
 
-// Particle field around the globe
+// Particle field around the globe - optimized for performance
 function ParticleField() {
   const particlesRef = useRef<THREE.Points>(null);
+  const frameRef = useRef(0);
+  
+  // Reduced particle count for better performance
+  const particleCount = isLowPowerDevice ? 60 : 100;
   
   const particles = useMemo(() => {
-    const positions = new Float32Array(150 * 3);
-    const colors = new Float32Array(150 * 3);
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
     
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < particleCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       const r = 2.5 + Math.random() * 1.5;
@@ -335,9 +349,13 @@ function ParticleField() {
     }
     
     return { positions, colors };
-  }, []);
+  }, [particleCount]);
 
   useFrame((state) => {
+    // Skip frames on low-power devices for better performance
+    frameRef.current++;
+    if (isLowPowerDevice && frameRef.current % 2 !== 0) return;
+    
     if (particlesRef.current) {
       particlesRef.current.rotation.y = state.clock.elapsedTime * 0.02;
       particlesRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.1;
@@ -349,13 +367,13 @@ function ParticleField() {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={150}
+          count={particleCount}
           array={particles.positions}
           itemSize={3}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={150}
+          count={particleCount}
           array={particles.colors}
           itemSize={3}
         />
@@ -457,24 +475,54 @@ interface TokenGlobeProps {
 }
 
 export const TokenGlobe = memo(function TokenGlobe({ className, style }: TokenGlobeProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  useEffect(() => {
+    // Delay canvas initialization for better initial page load
+    const timer = setTimeout(() => setIsVisible(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+  
+  // Don't render 3D for reduced motion preference
+  if (prefersReducedMotion) {
+    return (
+      <div className={className} style={{ ...style, background: 'transparent' }}>
+        <div className="w-full h-full flex items-center justify-center">
+          <img 
+            src="/tokens/nex.jpg" 
+            alt="NEX"
+            className="w-32 h-32 rounded-full border-4 border-primary shadow-lg shadow-primary/30"
+          />
+        </div>
+      </div>
+    );
+  }
+  
+  if (!isVisible) {
+    return <div className={className} style={{ ...style, background: 'transparent' }} />;
+  }
+  
   return (
     <div className={className} style={{ ...style, background: 'transparent' }}>
       <Canvas
         camera={{ position: [0, 0, 10], fov: 50 }}
         gl={{ 
-          antialias: true,
+          antialias: !isLowPowerDevice,
           alpha: true,
           powerPreference: 'high-performance',
+          depth: !isLowPowerDevice,
+          stencil: false,
         }}
-        dpr={[1, 2]}
+        dpr={1}
         style={{ background: 'transparent' }}
+        frameloop={isLowPowerDevice ? 'demand' : 'always'}
       >
         <GlobeScene />
         <OrbitControls 
           enableZoom={false}
           enablePan={false}
           autoRotate
-          autoRotateSpeed={0.3}
+          autoRotateSpeed={isLowPowerDevice ? 0.2 : 0.3}
           minPolarAngle={Math.PI / 3}
           maxPolarAngle={Math.PI / 1.5}
         />
