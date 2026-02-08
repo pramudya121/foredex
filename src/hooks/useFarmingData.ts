@@ -219,55 +219,21 @@ export function useFarmingData() {
 
       const validPools: PoolInfo[] = [];
 
-      // Fetch all pool info with improved retry logic and better error handling
-      const fetchPool = async (pid: number, attempt = 1): Promise<PoolInfo | null> => {
-        const maxAttempts = 3; // Reduced attempts for faster loading
-        const delayMs = 400 * attempt; // Progressive delay
-        
+      // Fetch all pool info sequentially to avoid RPC rate limiting
+      const fetchPool = async (pid: number): Promise<PoolInfo | null> => {
         try {
-          // Direct contract call with timeout
-          let poolInfo;
-          try {
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout')), 8000)
-            );
-            poolInfo = await Promise.race([
-              farmingContract.poolInfo(pid),
-              timeoutPromise
-            ]);
-          } catch (e: any) {
-            // Retry with delay on failure
-            if (attempt < maxAttempts) {
-              await new Promise(r => setTimeout(r, delayMs));
-              return fetchPool(pid, attempt + 1);
-            }
-            // Return placeholder for failed pool instead of null
-            console.warn(`[useFarmingData] Pool ${pid} failed, using placeholder`);
-            return {
-              pid,
-              lpToken: ethers.ZeroAddress,
-              allocPoint: BigInt(0),
-              token0Symbol: `Pool ${pid}`,
-              token1Symbol: '(Loading...)',
-              totalStaked: '0',
-              userStaked: '0',
-              pendingReward: '0',
-              apr: 0,
-              lpBalance: '0',
-            };
-          }
+          // Direct contract call - simpler approach
+          const poolInfo = await farmingContract.poolInfo(pid);
           
           if (!poolInfo) {
-            console.warn(`[useFarmingData] Pool ${pid} returned empty data`);
             return null;
           }
           
-          const lpToken = poolInfo[0]; // lpToken is first element
-          const allocPoint = poolInfo[1]; // allocPoint is second element
+          const lpToken = poolInfo[0];
+          const allocPoint = poolInfo[1];
           
           // Skip invalid LP tokens
           if (!lpToken || lpToken === ethers.ZeroAddress) {
-            console.warn(`[useFarmingData] Pool ${pid} has invalid lpToken: ${lpToken}`);
             return null;
           }
 
@@ -276,81 +242,41 @@ export function useFarmingData() {
           let token0Symbol = 'LP', token1Symbol = '';
           let totalStaked = '0';
 
-          // Get pair tokens with fallback - try multiple approaches
-          let isPairToken = false;
-          
+          // Get pair tokens
           try {
-            // First try to get token0 and token1 (LP pair tokens) with timeout
-            const pairPromise = Promise.all([
+            const [t0, t1] = await Promise.all([
               lpContract.token0().catch(() => null),
               lpContract.token1().catch(() => null),
             ]);
-            const timeoutPromise = new Promise<[null, null]>((resolve) => 
-              setTimeout(() => resolve([null, null]), 5000)
-            );
-            
-            const [t0, t1] = await Promise.race([pairPromise, timeoutPromise]);
             
             if (t0 && t1 && t0 !== ethers.ZeroAddress && t1 !== ethers.ZeroAddress) {
-              isPairToken = true;
-              // Use async version to fetch symbols if not in list
               const [sym0, sym1] = await Promise.all([
                 getTokenSymbolAsync(t0, provider),
                 getTokenSymbolAsync(t1, provider),
               ]);
               token0Symbol = sym0;
               token1Symbol = sym1;
-            }
-          } catch {
-            // Not a pair token, continue to fallback
-          }
-          
-          // If not a pair token, try to get LP token's own symbol
-          if (!isPairToken) {
-            try {
-              const lpSymbol = await Promise.race([
-                lpContract.symbol(),
-                new Promise<string>((resolve) => setTimeout(() => resolve(''), 3000))
-              ]);
+            } else {
+              // Try to get LP token symbol directly
+              const lpSymbol = await lpContract.symbol().catch(() => null);
               if (lpSymbol && lpSymbol !== 'UNI-V2') {
                 token0Symbol = lpSymbol;
-                token1Symbol = '';
               } else {
-                // Try to get name as fallback
-                try {
-                  const lpName = await Promise.race([
-                    lpContract.name(),
-                    new Promise<string>((resolve) => setTimeout(() => resolve(''), 3000))
-                  ]);
-                  if (lpName) {
-                    const match = lpName.match(/([A-Z0-9]+)[/-]([A-Z0-9]+)/i);
-                    if (match) {
-                      token0Symbol = match[1].toUpperCase();
-                      token1Symbol = match[2].toUpperCase();
-                    } else {
-                      token0Symbol = lpName.slice(0, 10);
-                    }
-                  }
-                } catch {
-                  token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
-                }
+                token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
               }
-            } catch {
-              token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
             }
+          } catch {
+            token0Symbol = 'LP-' + lpToken.slice(2, 6).toUpperCase();
           }
 
-          // Get total staked with timeout
+          // Get total staked
           try {
-            const staked = await Promise.race([
-              lpContract.balanceOf(CONTRACTS.FARMING),
-              new Promise<bigint>((resolve) => setTimeout(() => resolve(BigInt(0)), 3000))
-            ]);
+            const staked = await lpContract.balanceOf(CONTRACTS.FARMING);
             if (staked) {
               totalStaked = ethers.formatEther(staked);
             }
           } catch {
-            totalStaked = '0';
+            // Use 0 as fallback
           }
 
           // Get user info if connected
@@ -360,34 +286,18 @@ export function useFarmingData() {
 
           if (address) {
             try {
-              const userInfo = await Promise.race([
-                farmingContract.userInfo(pid, address),
-                new Promise((resolve) => setTimeout(() => resolve(null), 3000))
+              const [userInfo, pending, balance] = await Promise.all([
+                farmingContract.userInfo(pid, address).catch(() => null),
+                farmingContract.pendingReward(pid, address).catch(() => null),
+                lpContract.balanceOf(address).catch(() => null),
               ]);
-              if (userInfo) {
-                userStaked = ethers.formatEther(userInfo.amount || userInfo[0] || 0);
-              }
-            } catch {}
-
-            try {
-              const pending = await Promise.race([
-                farmingContract.pendingReward(pid, address),
-                new Promise((resolve) => setTimeout(() => resolve(null), 3000))
-              ]);
-              if (pending !== null) {
-                pendingReward = ethers.formatEther(pending);
-              }
-            } catch {}
-
-            try {
-              const balance = await Promise.race([
-                lpContract.balanceOf(address),
-                new Promise((resolve) => setTimeout(() => resolve(null), 3000))
-              ]);
-              if (balance) {
-                lpBalance = ethers.formatEther(balance);
-              }
-            } catch {}
+              
+              if (userInfo) userStaked = ethers.formatEther(userInfo.amount || userInfo[0] || 0);
+              if (pending !== null) pendingReward = ethers.formatEther(pending);
+              if (balance) lpBalance = ethers.formatEther(balance);
+            } catch {
+              // Silent fail for user data
+            }
           }
 
           // Calculate APR
@@ -395,7 +305,7 @@ export function useFarmingData() {
           const totalStakedNum = parseFloat(totalStaked) || 0.001;
           const allocPointNum = Number(allocPoint || 0);
           const totalAllocNum = Number(totalAllocPoint || 1);
-          const blocksPerYear = 15768000; // ~2 sec blocks
+          const blocksPerYear = 15768000;
           
           const poolShareOfRewards = totalAllocNum > 0 ? allocPointNum / totalAllocNum : 0;
           const poolRewardPerYear = rewardPerBlockNum * blocksPerYear * poolShareOfRewards;
@@ -404,7 +314,7 @@ export function useFarmingData() {
             ? (poolRewardPerYear / totalStakedNum) * 100 
             : poolRewardPerYear > 0 ? 9999 : 0;
 
-          console.log(`[useFarmingData] Pool ${pid} fetched: ${token0Symbol}/${token1Symbol}, allocPoint: ${allocPointNum}`);
+          console.log(`[useFarmingData] Pool ${pid}: ${token0Symbol}/${token1Symbol}`);
 
           return {
             pid,
@@ -419,46 +329,20 @@ export function useFarmingData() {
             lpBalance,
           };
         } catch (e) {
-          console.warn(`[useFarmingData] Failed to fetch pool ${pid}:`, e);
-          // Retry on failure
-          if (attempt < maxAttempts) {
-            await new Promise(r => setTimeout(r, delayMs));
-            return fetchPool(pid, attempt + 1);
-          }
-          // Return placeholder on final failure
-          return {
-            pid,
-            lpToken: ethers.ZeroAddress,
-            allocPoint: BigInt(0),
-            token0Symbol: `Pool ${pid}`,
-            token1Symbol: '(Unavailable)',
-            totalStaked: '0',
-            userStaked: '0',
-            pendingReward: '0',
-            apr: 0,
-            lpBalance: '0',
-          };
+          console.warn(`[useFarmingData] Pool ${pid} error:`, e);
+          return null;
         }
       };
 
-      // Fetch pools with staggered delays to avoid rate limiting
-      const fetchPromises: Promise<PoolInfo | null>[] = [];
+      // Fetch pools sequentially with delay to avoid rate limits
       for (let pid = 0; pid < poolCount; pid++) {
-        // Stagger start times to reduce concurrent RPC load
-        const startDelay = pid * 500; // 500ms between each pool start
-        fetchPromises.push(
-          new Promise(async (resolve) => {
-            await new Promise(r => setTimeout(r, startDelay));
-            const pool = await fetchPool(pid);
-            resolve(pool);
-          })
-        );
-      }
-      
-      const results = await Promise.all(fetchPromises);
-      for (const pool of results) {
-        if (pool && pool.lpToken !== ethers.ZeroAddress) {
+        const pool = await fetchPool(pid);
+        if (pool) {
           validPools.push(pool);
+        }
+        // Small delay between pools
+        if (pid < poolCount - 1) {
+          await new Promise(r => setTimeout(r, 200));
         }
       }
 
