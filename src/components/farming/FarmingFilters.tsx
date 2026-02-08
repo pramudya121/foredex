@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,37 +44,35 @@ interface Filters {
 const defaultFilters: Filters = {
   search: '',
   minAPR: 0,
-  maxAPR: 999999, // Very high to not filter by default
+  maxAPR: 999999,
   minTVL: 0,
-  maxTVL: 999999999, // Very high to not filter by default
+  maxTVL: 999999999,
 };
 
 export function FarmingFilters({ pools, onFilteredPoolsChange, sortBy, onSortChange }: FarmingFiltersProps) {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Get pair name helper
   const getPairName = (pool: PoolInfo) => {
     return pool.token1Symbol 
       ? `${pool.token0Symbol}-${pool.token1Symbol}` 
       : pool.token0Symbol;
   };
 
-  // Calculate max values for sliders
   const maxPoolAPR = useMemo(() => {
     return Math.max(...pools.map(p => p.apr), 100);
   }, [pools]);
 
   const maxPoolTVL = useMemo(() => {
     const maxTVL = Math.max(...pools.map(p => parseFloat(p.totalStaked) * 100), 10000);
-    return Math.ceil(maxTVL / 1000) * 1000; // Round up to nearest 1000
+    return Math.ceil(maxTVL / 1000) * 1000;
   }, [pools]);
 
   // Apply filters and sorting
-  const applyFilters = useMemo(() => {
+  const filteredPools = useMemo(() => {
     let filtered = [...pools];
 
-    // Search filter (token pair)
+    // Search filter
     if (filters.search.trim()) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(pool => {
@@ -90,8 +88,8 @@ export function FarmingFilters({ pools, onFilteredPoolsChange, sortBy, onSortCha
       pool.apr >= filters.minAPR && pool.apr <= filters.maxAPR
     );
 
-    // TVL filter (using totalStaked as proxy)
-    const tvlMultiplier = 100; // Approximate USD value per LP token
+    // TVL filter
+    const tvlMultiplier = 100;
     filtered = filtered.filter(pool => {
       const tvl = parseFloat(pool.totalStaked) * tvlMultiplier;
       return tvl >= filters.minTVL && tvl <= filters.maxTVL;
@@ -110,10 +108,10 @@ export function FarmingFilters({ pools, onFilteredPoolsChange, sortBy, onSortCha
     return filtered;
   }, [pools, filters, sortBy]);
 
-  // Update parent when filters change
-  useMemo(() => {
-    onFilteredPoolsChange(applyFilters);
-  }, [applyFilters, onFilteredPoolsChange]);
+  // Update parent when filtered pools change - using useEffect instead of useMemo
+  useEffect(() => {
+    onFilteredPoolsChange(filteredPools);
+  }, [filteredPools, onFilteredPoolsChange]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
