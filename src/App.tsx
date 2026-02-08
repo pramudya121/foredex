@@ -1,4 +1,4 @@
-import { lazy, Suspense, memo } from 'react';
+import { lazy, Suspense, memo, useEffect } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +11,8 @@ import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
 import { SkipLink } from "@/components/ui/accessibility-skip-link";
 import { ParticleField } from "@/components/3d/ParticleField";
+import { toast } from "sonner";
+
 // Lazy load pages for better performance
 const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
@@ -50,6 +52,40 @@ const queryClient = new QueryClient({
 });
 
 const AppContent = memo(function AppContent() {
+  // Global unhandled promise rejection handler
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message = reason?.message || String(reason);
+      
+      // Suppress network/RPC errors - these are handled elsewhere
+      if (message.includes('429') || 
+          message.includes('CORS') || 
+          message.includes('Failed to fetch') ||
+          message.includes('NetworkError') ||
+          message.includes('Timeout') ||
+          message.includes('coalesce') ||
+          message.includes('WS Timeout') ||
+          message.includes('rate limit')) {
+        event.preventDefault();
+        return;
+      }
+      
+      // Handle user rejection silently
+      if (message.includes('user rejected') || message.includes('ACTION_REJECTED')) {
+        event.preventDefault();
+        return;
+      }
+      
+      // Log unexpected errors for debugging
+      console.error('Unhandled promise rejection:', reason);
+      event.preventDefault();
+    };
+
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Accessibility: Skip to main content link */}

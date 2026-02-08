@@ -141,7 +141,7 @@ class RPCProviderService {
     try {
       const wsUrl = NEXUS_TESTNET.wsUrl;
       if (!wsUrl) {
-        console.warn('[RPC] No WebSocket URL configured');
+        // Silent - no WebSocket URL configured is fine
         this.isWsInitializing = false;
         return;
       }
@@ -157,15 +157,18 @@ class RPCProviderService {
         { staticNetwork: ethers.Network.from(network) }
       );
 
-      // Test WebSocket connection
+      // Test WebSocket connection with shorter timeout
       await Promise.race([
         this.wsProvider.getBlockNumber(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('WS Timeout')), 10000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('WS Timeout')), 8000))
       ]);
 
       this.wsProviderReady = true;
       this.wsReconnectAttempts = 0;
-      console.info(`[RPC] WebSocket connected: ${wsUrl}`);
+      // Only log success on first connect or after reconnect
+      if (this.wsReconnectAttempts === 0) {
+        console.info(`[RPC] WebSocket connected`);
+      }
 
       // Handle WebSocket events - monitor for disconnection via periodic health check
       const healthCheck = setInterval(async () => {
@@ -179,15 +182,15 @@ class RPCProviderService {
             new Promise((_, reject) => setTimeout(() => reject(new Error('WS Health Timeout')), 5000))
           ]);
         } catch {
-          console.warn('[RPC] WebSocket health check failed');
+          // Silent failure - WebSocket is optional
           this.wsProviderReady = false;
           clearInterval(healthCheck);
           this.scheduleWsReconnect();
         }
       }, 30000); // Check every 30 seconds
 
-    } catch (error: any) {
-      console.warn('[RPC] WebSocket init failed:', error?.message || 'Unknown');
+    } catch {
+      // Silent - WebSocket is optional, HTTP fallback works fine
       this.wsProvider = null;
       this.wsProviderReady = false;
       this.scheduleWsReconnect();
@@ -196,22 +199,23 @@ class RPCProviderService {
     }
   }
 
-  // Schedule WebSocket reconnection with exponential backoff
+  // Schedule WebSocket reconnection with exponential backoff - silent operation
   private scheduleWsReconnect(): void {
     if (this.wsReconnectTimeout) {
       clearTimeout(this.wsReconnectTimeout);
     }
 
+    // After max attempts, stop trying but don't spam console
     if (this.wsReconnectAttempts >= this.maxWsReconnectAttempts) {
-      console.warn('[RPC] Max WebSocket reconnect attempts reached');
+      // Silent - we'll use HTTP polling instead
       return;
     }
 
-    const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000);
+    // Longer delays to reduce resource usage
+    const delay = Math.min(5000 * Math.pow(2, this.wsReconnectAttempts), 120000);
     this.wsReconnectAttempts++;
 
     this.wsReconnectTimeout = setTimeout(() => {
-      console.info(`[RPC] Attempting WebSocket reconnect (${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts})`);
       this.initWebSocket();
     }, delay);
   }
