@@ -278,123 +278,89 @@ function PoolsTableInner() {
       const totalPairs = Number(pairCount);
       const fetchedPools: Pool[] = [];
 
-      // Use batch RPC to fetch all pair addresses efficiently
-      const pairAddressCalls = [];
+      // Fetch pools sequentially to avoid RPC rate limiting
       for (let i = 0; i < totalPairs; i++) {
-        pairAddressCalls.push(
-          rpcProvider.batchCall('eth_call', [
-            {
-              to: CONTRACTS.FACTORY,
-              data: factory.interface.encodeFunctionData('allPairs', [i])
-            },
-            'latest'
-          ])
-        );
-      }
-
-      const pairAddressResults = await Promise.all(pairAddressCalls);
-      const pairAddresses = pairAddressResults.map(result => {
-        if (!result) return null;
         try {
-          return factory.interface.decodeFunctionResult('allPairs', result)[0];
-        } catch {
-          return null;
-        }
-      }).filter(Boolean);
+          const pairAddress = await factory.allPairs(i);
+          if (!pairAddress || pairAddress === ethers.ZeroAddress) continue;
 
-      // Fetch pair data using batchContractCalls for better efficiency
-      const BATCH_SIZE = 8; // Larger batch with batched RPC
-      for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
-        const batch = pairAddresses.slice(i, i + BATCH_SIZE);
-        
-        const batchPromises = batch.map(async (pairAddress) => {
-          if (!pairAddress) return null;
+          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+
+          const token0Addr = await pair.token0().catch(() => null);
+          if (!token0Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
           
-          try {
-            const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+          await new Promise(r => setTimeout(r, 200));
+          const token1Addr = await pair.token1().catch(() => null);
+          if (!token1Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
 
-            // Use batchContractCalls for efficient data fetching
-            const calls = [
-              { contract: pair, method: 'token0', args: [] },
-              { contract: pair, method: 'token1', args: [] },
-              { contract: pair, method: 'getReserves', args: [] },
-              { contract: pair, method: 'totalSupply', args: [] },
-            ];
+          await new Promise(r => setTimeout(r, 200));
+          const reserves = await pair.getReserves().catch(() => null);
+          
+          await new Promise(r => setTimeout(r, 200));
+          const totalSupply = await pair.totalSupply().catch(() => null);
 
-            // Add user balance if connected
-            if (userAddress && isConnected) {
-              calls.push({ contract: pair, method: 'balanceOf', args: [userAddress] });
+          if (!reserves || !totalSupply) { await new Promise(r => setTimeout(r, 300)); continue; }
+
+          const getTokenInfo = (addr: string) => {
+            const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+            if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+            return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown Token', logoURI: undefined };
+          };
+
+          const token0 = getTokenInfo(token0Addr);
+          const token1 = getTokenInfo(token1Addr);
+
+          const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+          const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+          const tvl = reserve0 + reserve1;
+          const volume24h = tvl * 0.12;
+          const fees24h = volume24h * 0.003;
+          const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
+
+          // Calculate user LP balance and share
+          const totalSupplyNum = parseFloat(ethers.formatEther(totalSupply));
+          let userLpBalance = '0';
+          let userShare = 0;
+
+          if (userAddress && isConnected) {
+            try {
+              await new Promise(r => setTimeout(r, 200));
+              const userLpBalanceRaw = await pair.balanceOf(userAddress);
+              if (userLpBalanceRaw) {
+                userLpBalance = ethers.formatEther(userLpBalanceRaw);
+                const userLpNum = parseFloat(userLpBalance);
+                userShare = totalSupplyNum > 0 ? (userLpNum / totalSupplyNum) * 100 : 0;
+              }
+            } catch {
+              // Silent fail for user balance
             }
-
-            const results = await rpcProvider.batchContractCalls(
-              calls,
-              `pool_${pairAddress}`
-            );
-
-            const [token0Addr, token1Addr, reserves, totalSupply] = results as [string, string, any, bigint];
-            const userLpBalanceRaw = results[4] as bigint | undefined;
-
-            if (!token0Addr || !token1Addr || !reserves || !totalSupply) return null;
-
-            const getTokenInfo = (addr: string) => {
-              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-              if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
-              return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown Token', logoURI: undefined };
-            };
-
-            const token0 = getTokenInfo(token0Addr);
-            const token1 = getTokenInfo(token1Addr);
-
-            const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-            const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-            const tvl = reserve0 + reserve1;
-            const volume24h = tvl * 0.12;
-            const fees24h = volume24h * 0.003;
-            const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
-
-            // Calculate user LP balance and share
-            const totalSupplyNum = parseFloat(ethers.formatEther(totalSupply));
-            let userLpBalance = '0';
-            let userShare = 0;
-            
-            if (userLpBalanceRaw) {
-              userLpBalance = ethers.formatEther(userLpBalanceRaw);
-              const userLpNum = parseFloat(userLpBalance);
-              userShare = totalSupplyNum > 0 ? (userLpNum / totalSupplyNum) * 100 : 0;
-            }
-
-            // Generate seed from address for consistent chart data
-            const addressSeed = parseInt(pairAddress.slice(2, 10), 16);
-            const chartData = generateMiniChartData(tvl, addressSeed);
-
-            return {
-              address: pairAddress,
-              token0,
-              token1,
-              reserve0: ethers.formatEther(reserves[0]),
-              reserve1: ethers.formatEther(reserves[1]),
-              totalSupply: ethers.formatEther(totalSupply),
-              tvl,
-              volume24h,
-              fees24h,
-              apr,
-              chartData,
-              userLpBalance,
-              userShare,
-            };
-          } catch {
-            return null;
           }
-        });
 
-        const batchResults = await Promise.all(batchPromises);
-        batchResults.forEach(result => {
-          if (result) fetchedPools.push(result);
-        });
+          const addressSeed = parseInt(pairAddress.slice(2, 10), 16);
+          const chartData = generateMiniChartData(tvl, addressSeed);
+
+          fetchedPools.push({
+            address: pairAddress,
+            token0,
+            token1,
+            reserve0: ethers.formatEther(reserves[0]),
+            reserve1: ethers.formatEther(reserves[1]),
+            totalSupply: ethers.formatEther(totalSupply),
+            tvl,
+            volume24h,
+            fees24h,
+            apr,
+            chartData,
+            userLpBalance,
+            userShare,
+          });
+        } catch (e) {
+          console.warn(`[PoolsTable] Failed to fetch pool ${i}:`, e);
+        }
         
-        // Minimal delay between batches - batch RPC is more efficient
-        if (i + BATCH_SIZE < pairAddresses.length) {
-          await new Promise(r => setTimeout(r, 100));
+        // Delay between pools to respect rate limits
+        if (i < totalPairs - 1) {
+          await new Promise(r => setTimeout(r, 400));
         }
       }
 

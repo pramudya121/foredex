@@ -244,20 +244,25 @@ export function useFarmingData() {
 
           // Get pair tokens
           try {
-            const [t0, t1] = await Promise.all([
-              lpContract.token0().catch(() => null),
-              lpContract.token1().catch(() => null),
-            ]);
+            const t0 = await lpContract.token0().catch(() => null);
+            await new Promise(r => setTimeout(r, 200));
+            const t1 = await lpContract.token1().catch(() => null);
             
             if (t0 && t1 && t0 !== ethers.ZeroAddress && t1 !== ethers.ZeroAddress) {
-              const [sym0, sym1] = await Promise.all([
-                getTokenSymbolAsync(t0, provider),
-                getTokenSymbolAsync(t1, provider),
-              ]);
-              token0Symbol = sym0;
-              token1Symbol = sym1;
+              await new Promise(r => setTimeout(r, 200));
+              token0Symbol = await getTokenSymbolAsync(t0, provider);
+              await new Promise(r => setTimeout(r, 200));
+              token1Symbol = await getTokenSymbolAsync(t1, provider);
+            } else if (t0 && (!t1 || t1 === ethers.ZeroAddress)) {
+              // Single-sided or non-standard LP
+              await new Promise(r => setTimeout(r, 200));
+              const lpSymbol = await lpContract.symbol().catch(() => null);
+              if (lpSymbol && lpSymbol !== 'UNI-V2') {
+                token0Symbol = lpSymbol;
+              } else {
+                token0Symbol = await getTokenSymbolAsync(t0, provider);
+              }
             } else {
-              // Try to get LP token symbol directly
               const lpSymbol = await lpContract.symbol().catch(() => null);
               if (lpSymbol && lpSymbol !== 'UNI-V2') {
                 token0Symbol = lpSymbol;
@@ -286,11 +291,12 @@ export function useFarmingData() {
 
           if (address) {
             try {
-              const [userInfo, pending, balance] = await Promise.all([
-                farmingContract.userInfo(pid, address).catch(() => null),
-                farmingContract.pendingReward(pid, address).catch(() => null),
-                lpContract.balanceOf(address).catch(() => null),
-              ]);
+              await new Promise(r => setTimeout(r, 200));
+              const userInfo = await farmingContract.userInfo(pid, address).catch(() => null);
+              await new Promise(r => setTimeout(r, 200));
+              const pending = await farmingContract.pendingReward(pid, address).catch(() => null);
+              await new Promise(r => setTimeout(r, 200));
+              const balance = await lpContract.balanceOf(address).catch(() => null);
               
               if (userInfo) userStaked = ethers.formatEther(userInfo.amount || userInfo[0] || 0);
               if (pending !== null) pendingReward = ethers.formatEther(pending);

@@ -144,83 +144,59 @@ export function usePoolStats() {
         return;
       }
 
-      // Fetch all pools - no limit
+      // Fetch all pools sequentially to avoid RPC rate limiting
       const validPools: PoolData[] = [];
       let totalTVL = 0;
 
-      // Batch fetch pair addresses first
-      const pairAddresses: string[] = [];
       for (let i = 0; i < totalPools; i++) {
         try {
-          const pairAddress = await rpcProvider.call(
-            () => factory.allPairs(i),
-            `pool_address_${i}`,
-            { retries: 2, timeout: 10000 }
-          );
-          if (pairAddress && pairAddress !== ethers.ZeroAddress) {
-            pairAddresses.push(pairAddress);
-          }
-        } catch {
-          console.warn(`[usePoolStats] Failed to get pair ${i}`);
+          const pairAddress = await factory.allPairs(i);
+          if (!pairAddress || pairAddress === ethers.ZeroAddress) continue;
+
+          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+
+          // Fetch token addresses first
+          const token0Addr = await pair.token0().catch(() => null);
+          if (!token0Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
+          
+          await new Promise(r => setTimeout(r, 200));
+          const token1Addr = await pair.token1().catch(() => null);
+          if (!token1Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
+
+          await new Promise(r => setTimeout(r, 200));
+          const reserves = await pair.getReserves().catch(() => null);
+          
+          await new Promise(r => setTimeout(r, 200));
+          const totalSupply = await pair.totalSupply().catch(() => null);
+
+          if (!reserves || !totalSupply) { await new Promise(r => setTimeout(r, 300)); continue; }
+
+          const token0 = getTokenInfo(token0Addr);
+          const token1 = getTokenInfo(token1Addr);
+
+          const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+          const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+          const tvl = reserve0 + reserve1;
+
+          validPools.push({
+            address: pairAddress,
+            token0,
+            token1,
+            reserve0: ethers.formatEther(reserves[0]),
+            reserve1: ethers.formatEther(reserves[1]),
+            totalSupply: ethers.formatEther(totalSupply),
+            tvl,
+          });
+          totalTVL += tvl;
+
+          console.log(`[usePoolStats] Pool ${i}: ${token0.symbol}/${token1.symbol} TVL=${tvl.toFixed(2)}`);
+        } catch (e) {
+          console.warn(`[usePoolStats] Failed to fetch pool ${i}:`, e);
         }
-      }
-
-      console.log('[usePoolStats] Found pair addresses:', pairAddresses.length);
-
-      // Fetch pool data in batches
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < pairAddresses.length; i += BATCH_SIZE) {
-        const batch = pairAddresses.slice(i, i + BATCH_SIZE);
         
-        const batchResults = await Promise.all(
-          batch.map(async (pairAddress) => {
-            try {
-              const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-              
-              const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-                rpcProvider.call(() => pair.token0(), `token0_${pairAddress}`, { retries: 2 }),
-                rpcProvider.call(() => pair.token1(), `token1_${pairAddress}`, { retries: 2 }),
-                rpcProvider.call(() => pair.getReserves(), `reserves_${pairAddress}`, { retries: 2, skipCache: forceRefresh }),
-                rpcProvider.call(() => pair.totalSupply(), `supply_${pairAddress}`, { retries: 2, skipCache: forceRefresh }),
-              ]);
-
-              if (!token0Addr || !token1Addr || !reserves || !totalSupply) {
-                return null;
-              }
-
-              const token0 = getTokenInfo(token0Addr);
-              const token1 = getTokenInfo(token1Addr);
-
-              const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-              const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-              const tvl = reserve0 + reserve1;
-
-              return {
-                address: pairAddress,
-                token0,
-                token1,
-                reserve0: ethers.formatEther(reserves[0]),
-                reserve1: ethers.formatEther(reserves[1]),
-                totalSupply: ethers.formatEther(totalSupply),
-                tvl,
-              };
-            } catch (e) {
-              console.warn(`[usePoolStats] Failed to fetch pool ${pairAddress}:`, e);
-              return null;
-            }
-          })
-        );
-
-        batchResults.forEach(result => {
-          if (result) {
-            validPools.push(result);
-            totalTVL += result.tvl;
-          }
-        });
-
-        // Small delay between batches
-        if (i + BATCH_SIZE < pairAddresses.length) {
-          await new Promise(r => setTimeout(r, 100));
+        // Delay between pools to respect rate limits
+        if (i < totalPools - 1) {
+          await new Promise(r => setTimeout(r, 400));
         }
       }
 
