@@ -202,6 +202,10 @@ export function LiquidityPanel() {
   const UNLIMITED_APPROVAL_THRESHOLD = ethers.MaxUint256 / BigInt(2);
 
   // Check token approvals - with smart caching for unlimited approvals
+  // Store unlimited approval status to avoid re-checking
+  const [unlimitedApprovalA, setUnlimitedApprovalA] = useState(false);
+  const [unlimitedApprovalB, setUnlimitedApprovalB] = useState(false);
+
   const checkApprovals = useCallback(async () => {
     if (!address || !tokenA || !tokenB) {
       return;
@@ -215,11 +219,16 @@ export function LiquidityPanel() {
       setApprovalB(true);
     }
 
+    // If already known to have unlimited approval, skip RPC check
+    if (unlimitedApprovalA && unlimitedApprovalB) {
+      return;
+    }
+
     const rpc = rpcProvider.getProvider();
     if (!rpc || !rpcProvider.isAvailable()) {
-      // If RPC not available, assume not approved to be safe
-      if (!isNativeToken(tokenA)) setApprovalA(false);
-      if (!isNativeToken(tokenB)) setApprovalB(false);
+      // If RPC not available but we know unlimited approval exists, keep it
+      if (!isNativeToken(tokenA) && !unlimitedApprovalA) setApprovalA(false);
+      if (!isNativeToken(tokenB) && !unlimitedApprovalB) setApprovalB(false);
       return;
     }
 
@@ -229,21 +238,22 @@ export function LiquidityPanel() {
     const hasAmountB = amountB && amountB.trim() !== '' && parseFloat(amountB) > 0;
 
     try {
-      // Check token A approval (skip if native token)
-      if (!isNativeToken(tokenA)) {
+      // Check token A approval (skip if native token or already unlimited)
+      if (!isNativeToken(tokenA) && !unlimitedApprovalA) {
         try {
           const tokenContract = new ethers.Contract(tokenA.address, ERC20_ABI, rpc);
           const allowance = await rpcProvider.call(
             () => tokenContract.allowance(address, CONTRACTS.ROUTER),
             `allowance_${tokenA.address}_${address}_router`,
-            { retries: 2, timeout: 10000, skipCache: true }
+            { retries: 2, timeout: 10000 }
           );
           
           if (allowance !== null) {
             const allowanceBigInt = BigInt(allowance);
-            // If user has unlimited approval (MaxUint256), always approved
+            // If user has unlimited approval (MaxUint256), always approved - cache this
             if (allowanceBigInt >= UNLIMITED_APPROVAL_THRESHOLD) {
               setApprovalA(true);
+              setUnlimitedApprovalA(true);
             } else if (hasAmountA) {
               // Check against specific amount
               const amountAWei = ethers.parseUnits(amountA, tokenA.decimals);
@@ -260,21 +270,22 @@ export function LiquidityPanel() {
         }
       }
 
-      // Check token B approval (skip if native token)
-      if (!isNativeToken(tokenB)) {
+      // Check token B approval (skip if native token or already unlimited)
+      if (!isNativeToken(tokenB) && !unlimitedApprovalB) {
         try {
           const tokenContract = new ethers.Contract(tokenB.address, ERC20_ABI, rpc);
           const allowance = await rpcProvider.call(
             () => tokenContract.allowance(address, CONTRACTS.ROUTER),
             `allowance_${tokenB.address}_${address}_router`,
-            { retries: 2, timeout: 10000, skipCache: true }
+            { retries: 2, timeout: 10000 }
           );
           
           if (allowance !== null) {
             const allowanceBigInt = BigInt(allowance);
-            // If user has unlimited approval (MaxUint256), always approved
+            // If user has unlimited approval (MaxUint256), always approved - cache this
             if (allowanceBigInt >= UNLIMITED_APPROVAL_THRESHOLD) {
               setApprovalB(true);
+              setUnlimitedApprovalB(true);
             } else if (hasAmountB) {
               // Check against specific amount
               const amountBWei = ethers.parseUnits(amountB, tokenB.decimals);
@@ -293,7 +304,7 @@ export function LiquidityPanel() {
     } catch {
       // Silent fail on parse errors
     }
-  }, [address, tokenA, tokenB, amountA, amountB]);
+  }, [address, tokenA, tokenB, amountA, amountB, unlimitedApprovalA, unlimitedApprovalB]);
 
   useEffect(() => {
     checkApprovals();
@@ -315,6 +326,7 @@ export function LiquidityPanel() {
       
       toast.success(`${tokenA.symbol} approved!`);
       setApprovalA(true);
+      setUnlimitedApprovalA(true); // MaxUint256 was approved
       
       // Re-check approvals after successful approval
       setTimeout(() => checkApprovals(), 1000);
@@ -345,6 +357,7 @@ export function LiquidityPanel() {
       
       toast.success(`${tokenB.symbol} approved!`);
       setApprovalB(true);
+      setUnlimitedApprovalB(true); // MaxUint256 was approved
       
       // Re-check approvals after successful approval
       setTimeout(() => checkApprovals(), 1000);
@@ -480,8 +493,10 @@ export function LiquidityPanel() {
     if (tokenA) {
       if (isNativeToken(tokenA)) {
         setApprovalA(true);
+        setUnlimitedApprovalA(true);
       } else {
-        // Will be checked by checkApprovals
+        // Reset unlimited flag so it gets re-checked for new token
+        setUnlimitedApprovalA(false);
       }
     }
   }, [tokenA]);
@@ -490,8 +505,10 @@ export function LiquidityPanel() {
     if (tokenB) {
       if (isNativeToken(tokenB)) {
         setApprovalB(true);
+        setUnlimitedApprovalB(true);
       } else {
-        // Will be checked by checkApprovals
+        // Reset unlimited flag so it gets re-checked for new token
+        setUnlimitedApprovalB(false);
       }
     }
   }, [tokenB]);
