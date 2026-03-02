@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PoolInfo } from '@/components/farming/FarmCard';
+import { useFarmVisibilityStore } from '@/stores/farmVisibilityStore';
 
 // Stats Card Component
 const StatsCard = memo(function StatsCard({ 
@@ -183,6 +184,12 @@ function FarmingPage() {
   const [sortBy, setSortBy] = useState<'apr' | 'tvl' | 'newest'>('apr');
   const [harvestingAll, setHarvestingAll] = useState(false);
   const [filteredPools, setFilteredPools] = useState<PoolInfo[]>([]);
+  const { hiddenPools } = useFarmVisibilityStore();
+
+  // Filter out hidden pools
+  const visiblePools = useMemo(() => {
+    return pools.filter(p => !hiddenPools.includes(p.pid));
+  }, [pools, hiddenPools]);
 
   const handleFilteredPoolsChange = useCallback((filtered: PoolInfo[]) => {
     setFilteredPools(filtered);
@@ -442,7 +449,7 @@ function FarmingPage() {
                     <div>
                       <h2 className="text-lg font-semibold">Active Pools</h2>
                       <p className="text-xs text-muted-foreground">
-                        {filteredPools.length} of {pools.length} pools shown
+                        {filteredPools.length} of {visiblePools.length} pools shown
                       </p>
                     </div>
                   </div>
@@ -450,7 +457,7 @@ function FarmingPage() {
                 
                 {/* Filters */}
                 <FarmingFilters
-                  pools={pools}
+                  pools={visiblePools}
                   onFilteredPoolsChange={handleFilteredPoolsChange}
                   sortBy={sortBy}
                   onSortChange={setSortBy}
