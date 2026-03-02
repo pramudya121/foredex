@@ -124,12 +124,30 @@ export const clearPoolsTableCache = () => {
   poolsTableCache = null;
 };
 
-function PoolsTableInner() {
+interface PoolsTableProps {
+  externalPools?: Array<{
+    address: string;
+    token0: { address: string; symbol: string; name: string; logoURI?: string };
+    token1: { address: string; symbol: string; name: string; logoURI?: string };
+    reserve0: string;
+    reserve1: string;
+    totalSupply: string;
+    tvl: number;
+  }>;
+  externalLoading?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+}
+
+function PoolsTableInner({ externalPools, externalLoading, onRefresh, isRefreshing: externalRefreshing }: PoolsTableProps) {
   const { address: userAddress, isConnected } = useWeb3();
-  const cacheValid = poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL;
+  
+  // Use external pools if provided, otherwise fallback to own fetching
+  const hasExternalPools = externalPools !== undefined;
+  const cacheValid = !hasExternalPools && poolsTableCache && Date.now() - poolsTableCache.timestamp < CACHE_TTL;
   
   const [pools, setPools] = useState<Pool[]>(() => cacheValid ? poolsTableCache!.pools : []);
-  const [loading, setLoading] = useState(!cacheValid);
+  const [loading, setLoading] = useState(!cacheValid && !hasExternalPools);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showMyPositions, setShowMyPositions] = useState(false);
@@ -141,6 +159,44 @@ function PoolsTableInner() {
   const [minApr, setMinApr] = useState(0);
   const { favorites, toggleFavorite, isFavorite } = useFavoritePoolsStore();
   const isFetchingRef = useRef(false);
+
+  // Convert external pools to internal Pool format when provided
+  useEffect(() => {
+    if (!hasExternalPools || !externalPools) return;
+    
+    const converted: Pool[] = externalPools.map(ep => {
+      const tvl = ep.tvl;
+      const volume24h = tvl * 0.12;
+      const fees24h = volume24h * 0.003;
+      const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
+      const addressSeed = parseInt(ep.address.slice(2, 10), 16);
+      const chartData = generateMiniChartData(tvl, addressSeed);
+      
+      return {
+        address: ep.address,
+        token0: ep.token0,
+        token1: ep.token1,
+        reserve0: ep.reserve0,
+        reserve1: ep.reserve1,
+        totalSupply: ep.totalSupply,
+        tvl,
+        volume24h,
+        fees24h,
+        apr,
+        chartData,
+        userLpBalance: '0',
+        userShare: 0,
+      };
+    });
+    
+    setPools(converted);
+    setLoading(false);
+    
+    // Fetch user LP balances if connected
+    if (userAddress && isConnected) {
+      updateUserLpBalances(converted);
+    }
+  }, [externalPools, hasExternalPools, userAddress, isConnected]);
 
   // Sort pools based on selected option
   const sortedPools = useMemo(() => {
@@ -211,6 +267,8 @@ function PoolsTableInner() {
   }, []);
 
   const fetchPools = useCallback(async (force: boolean = false) => {
+    // Skip own fetching if external pools are provided
+    if (hasExternalPools) return;
     if (isFetchingRef.current) return;
     
     // Use cache if valid and not forced
@@ -375,7 +433,7 @@ function PoolsTableInner() {
       setIsRefreshing(false);
       isFetchingRef.current = false;
     }
-  }, [pools.length, userAddress, isConnected]);
+  }, [pools.length, userAddress, isConnected, hasExternalPools]);
 
   // Helper function to update user LP balances on cached pools
   const updateUserLpBalances = useCallback(async (cachedPools: Pool[]) => {
@@ -467,11 +525,11 @@ function PoolsTableInner() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => fetchPools(true)}
-          disabled={isRefreshing}
+          onClick={() => hasExternalPools && onRefresh ? onRefresh() : fetchPools(true)}
+          disabled={hasExternalPools ? externalRefreshing : isRefreshing}
           className="h-9 px-3"
         >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${(hasExternalPools ? externalRefreshing : isRefreshing) ? 'animate-spin' : ''}`} />
         </Button>
       </div>
 
@@ -491,10 +549,10 @@ function PoolsTableInner() {
       </div>
 
       {/* Loading State */}
-      {loading && <LoadingSkeletons />}
+      {(hasExternalPools ? externalLoading : loading) && pools.length === 0 && <LoadingSkeletons />}
 
       {/* Empty State */}
-      {!loading && pools.length === 0 && (
+      {!(hasExternalPools ? externalLoading : loading) && pools.length === 0 && (
         <div className="glass-card p-12 text-center">
           <Droplets className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
           <h3 className="text-xl font-semibold mb-2">No Pools Found</h3>
