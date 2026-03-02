@@ -146,30 +146,30 @@ export function usePoolStats() {
 
       // Fetch all pools sequentially to avoid RPC rate limiting
       const validPools: PoolData[] = [];
+      const failedIndices: number[] = [];
       let totalTVL = 0;
 
-      for (let i = 0; i < totalPools; i++) {
+      const fetchSinglePool = async (i: number): Promise<PoolData | null> => {
         try {
           const pairAddress = await factory.allPairs(i);
-          if (!pairAddress || pairAddress === ethers.ZeroAddress) continue;
+          if (!pairAddress || pairAddress === ethers.ZeroAddress) return null;
 
-          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider!);
 
-          // Fetch token addresses first
           const token0Addr = await pair.token0().catch(() => null);
-          if (!token0Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
+          if (!token0Addr) return null;
           
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 300));
           const token1Addr = await pair.token1().catch(() => null);
-          if (!token1Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
+          if (!token1Addr) return null;
 
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 300));
           const reserves = await pair.getReserves().catch(() => null);
           
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 300));
           const totalSupply = await pair.totalSupply().catch(() => null);
 
-          if (!reserves || !totalSupply) { await new Promise(r => setTimeout(r, 300)); continue; }
+          if (!reserves || !totalSupply) return null;
 
           const token0 = getTokenInfo(token0Addr);
           const token1 = getTokenInfo(token1Addr);
@@ -178,7 +178,7 @@ export function usePoolStats() {
           const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
           const tvl = reserve0 + reserve1;
 
-          validPools.push({
+          return {
             address: pairAddress,
             token0,
             token1,
@@ -186,17 +186,42 @@ export function usePoolStats() {
             reserve1: ethers.formatEther(reserves[1]),
             totalSupply: ethers.formatEther(totalSupply),
             tvl,
-          });
-          totalTVL += tvl;
-
-          console.log(`[usePoolStats] Pool ${i}: ${token0.symbol}/${token1.symbol} TVL=${tvl.toFixed(2)}`);
+          };
         } catch (e) {
           console.warn(`[usePoolStats] Failed to fetch pool ${i}:`, e);
+          return null;
+        }
+      };
+
+      // First pass: fetch all pools
+      for (let i = 0; i < totalPools; i++) {
+        const pool = await fetchSinglePool(i);
+        if (pool) {
+          validPools.push(pool);
+          totalTVL += pool.tvl;
+          console.log(`[usePoolStats] Pool ${i}: ${pool.token0.symbol}/${pool.token1.symbol} TVL=${pool.tvl.toFixed(2)}`);
+        } else {
+          failedIndices.push(i);
         }
         
-        // Delay between pools to respect rate limits
         if (i < totalPools - 1) {
-          await new Promise(r => setTimeout(r, 400));
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      // Retry pass: retry failed pools with longer delays
+      if (failedIndices.length > 0) {
+        console.log(`[usePoolStats] Retrying ${failedIndices.length} failed pools...`);
+        await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retrying
+        
+        for (const idx of failedIndices) {
+          const pool = await fetchSinglePool(idx);
+          if (pool) {
+            validPools.push(pool);
+            totalTVL += pool.tvl;
+            console.log(`[usePoolStats] Retry success pool ${idx}: ${pool.token0.symbol}/${pool.token1.symbol}`);
+          }
+          await new Promise(r => setTimeout(r, 800));
         }
       }
 

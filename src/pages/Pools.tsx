@@ -70,7 +70,7 @@ const StatCard = memo(({
 StatCard.displayName = 'StatCard';
 
 const Pools = () => {
-  const { stats, refetch, isRefreshing } = usePoolStats();
+  const { stats, pools: poolsData, refetch, isRefreshing } = usePoolStats();
   const [showFactoryInfo, setShowFactoryInfo] = useState(false);
 
   const formatNumber = useCallback((num: number) => {
@@ -203,7 +203,12 @@ const Pools = () => {
 
         {/* Pools Table */}
         <RevealSection>
-          <PoolsTable />
+          <PoolsTable 
+            externalPools={poolsData} 
+            externalLoading={stats.loading} 
+            onRefresh={refetch}
+            isRefreshing={isRefreshing}
+          />
         </RevealSection>
       </main>
     </Spotlight>
