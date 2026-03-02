@@ -6,11 +6,15 @@ import { CONTRACTS } from '@/config/contracts';
 import { FARMING_ABI } from '@/config/farmingAbi';
 import { FarmingOwnershipTransfer } from '@/components/FarmingOwnershipTransfer';
 import { rpcProvider } from '@/lib/rpcProvider';
+import { useFarmingData } from '@/hooks/useFarmingData';
+import { useFarmVisibilityStore } from '@/stores/farmVisibilityStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { TokenLogo } from '@/components/TokenLogo';
 import { 
   Shield, 
   Plus, 
@@ -22,6 +26,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -436,8 +442,96 @@ export default function FarmingAdminPage() {
         </CardContent>
       </Card>
 
+      {/* Pool Visibility Toggle */}
+      <PoolVisibilitySection />
+
       {/* Ownership Transfer */}
       <FarmingOwnershipTransfer />
     </div>
+  );
+}
+
+function PoolVisibilitySection() {
+  const { pools, loading } = useFarmingData();
+  const { hiddenPools, togglePool } = useFarmVisibilityStore();
+
+  return (
+    <Card className="border-border/40 bg-gradient-to-br from-card via-card to-purple-500/5">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Eye className="w-5 h-5 text-purple-400" />
+          Pool Visibility
+        </CardTitle>
+        <CardDescription>
+          Toggle farm cards on or off. Hidden pools won't appear on the Farming page.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading && pools.length === 0 ? (
+          <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Loading pools...</span>
+          </div>
+        ) : pools.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No pools found</p>
+        ) : (
+          <div className="space-y-3">
+            {pools.map((pool) => {
+              const isVisible = !hiddenPools.includes(pool.pid);
+              const pairName = pool.token1Symbol
+                ? `${pool.token0Symbol}-${pool.token1Symbol}`
+                : pool.token0Symbol;
+
+              return (
+                <div
+                  key={pool.pid}
+                  className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                    isVisible
+                      ? 'border-border/50 bg-muted/20'
+                      : 'border-destructive/20 bg-destructive/5 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2">
+                      <TokenLogo symbol={pool.token0Symbol} className="w-8 h-8 rounded-full border-2 border-card" />
+                      {pool.token1Symbol && (
+                        <TokenLogo symbol={pool.token1Symbol} className="w-8 h-8 rounded-full border-2 border-card" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{pairName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Pool #{pool.pid} · {Number(pool.allocPoint)}x
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="text-xs">
+                      {isVisible ? (
+                        <><Eye className="w-3 h-3 mr-1" />Visible</>
+                      ) : (
+                        <><EyeOff className="w-3 h-3 mr-1" />Hidden</>
+                      )}
+                    </Badge>
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={() => {
+                        togglePool(pool.pid);
+                        toast.success(
+                          isVisible
+                            ? `${pairName} pool hidden`
+                            : `${pairName} pool visible`,
+                          { duration: 2000 }
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
