@@ -1,4 +1,9 @@
-import { memo } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
+import { useWeb3 } from '@/contexts/Web3Context';
+import { ethers } from 'ethers';
+import { TOKEN_LIST, CONTRACTS } from '@/config/contracts';
+import { ERC20_ABI, FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
 import { Portfolio } from '@/components/Portfolio';
 import { Wallet, TrendingUp, Shield, Zap, Sparkles, PieChart, Activity } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +53,78 @@ const FeatureBadge = memo(({ icon: Icon, text }: { icon: React.ElementType; text
 FeatureBadge.displayName = 'FeatureBadge';
 
 const PortfolioPage = () => {
+  const { address, isConnected, balance } = useWeb3();
+  const [tokenCount, setTokenCount] = useState(0);
+  const [lpCount, setLpCount] = useState(0);
+  const [totalValue, setTotalValue] = useState(0);
+
+  // Fetch real portfolio summary stats
+  const fetchStats = useCallback(async () => {
+    if (!address || !isConnected) return;
+
+    const provider = rpcProvider.getProvider();
+    if (!provider) return;
+
+    try {
+      // Count tokens with non-zero balances
+      const tokens = TOKEN_LIST.filter(t => t.address !== '0x0000000000000000000000000000000000000000');
+      let tCount = 0;
+      let totalVal = 0;
+
+      // Include native balance
+      const nativeBalance = parseFloat(balance || '0');
+      if (nativeBalance > 0) {
+        tCount++;
+        totalVal += nativeBalance;
+      }
+
+      for (const token of tokens) {
+        try {
+          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+          const bal = await rpcProvider.call(
+            () => contract.balanceOf(address),
+            `portfolio_stat_${token.address}_${address}`
+          );
+          if (bal && BigInt(bal) > 0n) {
+            tCount++;
+            totalVal += parseFloat(ethers.formatUnits(bal, token.decimals));
+          }
+        } catch { /* skip */ }
+      }
+
+      setTokenCount(tCount);
+      setTotalValue(totalVal);
+
+      // Count LP positions
+      const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
+      const pairCount = await rpcProvider.call(() => factory.allPairsLength(), 'portfolio_pairCount');
+      let lps = 0;
+      const count = Number(pairCount || 0);
+
+      for (let i = 0; i < count; i++) {
+        try {
+          const pairAddr = await rpcProvider.call(() => factory.allPairs(i), `portfolio_pair_${i}`);
+          if (pairAddr) {
+            const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
+            const lpBal = await rpcProvider.call(
+              () => pair.balanceOf(address),
+              `portfolio_lp_${pairAddr}_${address}`
+            );
+            if (lpBal && BigInt(lpBal) > 0n) lps++;
+          }
+        } catch { /* skip */ }
+      }
+
+      setLpCount(lps);
+    } catch (error) {
+      console.warn('Error fetching portfolio stats:', error);
+    }
+  }, [address, isConnected, balance]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
   return (
     <Spotlight className="min-h-screen">
       <main className="container py-4 sm:py-6 md:py-10 max-w-5xl px-3 sm:px-4 relative">
@@ -87,12 +164,12 @@ const PortfolioPage = () => {
           </div>
         </ScrollReveal>
         
-        {/* Quick Stats with BorderBeam */}
+        {/* Quick Stats with real data */}
         <StaggeredReveal staggerDelay={80} className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6">
-          <PortfolioStatCard value={5} label="Tokens" icon={PieChart} />
-          <PortfolioStatCard value={3} label="LP Positions" icon={Activity} />
-          <PortfolioStatCard value={1250} prefix="$" label="Total Value" icon={TrendingUp} />
-          <PortfolioStatCard value={12} suffix="%" label="24h Change" icon={Zap} />
+          <PortfolioStatCard value={tokenCount} label="Tokens" icon={PieChart} />
+          <PortfolioStatCard value={lpCount} label="LP Positions" icon={Activity} />
+          <PortfolioStatCard value={parseFloat(totalValue.toFixed(2))} prefix="" label="Total Holdings" icon={TrendingUp} />
+          <PortfolioStatCard value={parseFloat(balance || '0')} suffix=" NEX" label="Native Balance" icon={Zap} />
         </StaggeredReveal>
         
         {/* Quick Features */}

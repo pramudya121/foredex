@@ -33,7 +33,7 @@ export function Analytics() {
     {
       label: 'Total Trades',
       value: analytics.totalTrades.toString(),
-      change: `+${Math.floor(Math.random() * 20 + 10)} today`,
+      change: `${analytics.totalTrades > 0 ? '+' : ''}${analytics.totalTrades} total`,
       icon: TrendingUp,
       positive: true,
     },
