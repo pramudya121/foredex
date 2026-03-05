@@ -28,6 +28,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  RotateCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -442,6 +443,9 @@ export default function FarmingAdminPage() {
         </CardContent>
       </Card>
 
+      {/* Update Pool */}
+      <UpdatePoolSection signer={signer} isOwner={isOwner} />
+
       {/* Pool Visibility Toggle */}
       <PoolVisibilitySection />
 
@@ -531,6 +535,87 @@ function PoolVisibilitySection() {
             })}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UpdatePoolSection({ signer, isOwner }: { signer: any; isOwner: boolean }) {
+  const [updatePid, setUpdatePid] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleUpdatePool = async () => {
+    if (!signer || !isOwner) {
+      toast.error('Not authorized');
+      return;
+    }
+
+    if (updatePid === '' || parseInt(updatePid) < 0) {
+      toast.error('Please enter a valid pool ID');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      toast.loading('Updating pool rewards...', { id: 'update-pool' });
+      
+      const contract = new ethers.Contract(CONTRACTS.FARMING, FARMING_ABI, signer);
+      const tx = await contract.updatePool(parseInt(updatePid));
+      
+      toast.loading('Waiting for confirmation...', { id: 'update-pool' });
+      await tx.wait();
+      
+      toast.success('Pool rewards updated!', { id: 'update-pool' });
+      setUpdatePid('');
+    } catch (error: any) {
+      const errorMsg = rpcProvider.parseError(error, true);
+      if (errorMsg) {
+        toast.error(errorMsg, { id: 'update-pool' });
+      } else {
+        toast.dismiss('update-pool');
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  return (
+    <Card className="border-border/40 bg-gradient-to-br from-card via-card to-cyan-500/5">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <RotateCw className="w-5 h-5 text-cyan-400" />
+          Update Pool
+        </CardTitle>
+        <CardDescription>
+          Force update reward variables for a specific pool to sync on-chain state
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-sm font-medium">Pool ID</Label>
+          <Input
+            type="number"
+            placeholder="0"
+            value={updatePid}
+            onChange={(e) => setUpdatePid(e.target.value)}
+            className="mt-1.5 bg-muted/30"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Recalculates accRewardPerShare and lastRewardBlock for the pool
+          </p>
+        </div>
+        <Button 
+          onClick={handleUpdatePool} 
+          disabled={actionLoading}
+          className="w-full"
+          variant="outline"
+        >
+          {actionLoading ? (
+            <><RefreshCw className="w-4 h-4 animate-spin mr-2" />Updating...</>
+          ) : (
+            <><RotateCw className="w-4 h-4 mr-2" />Update Pool</>
+          )}
+        </Button>
       </CardContent>
     </Card>
   );
