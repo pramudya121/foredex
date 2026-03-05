@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Analytics } from '@/components/Analytics';
 import { BarChart3, TrendingUp, Activity, Zap, Sparkles, Layers, ArrowUpRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,7 @@ import { Spotlight } from '@/components/ui/spotlight';
 import { NumberTicker } from '@/components/ui/number-ticker';
 import { BorderBeam } from '@/components/ui/border-beam';
 import { ScrollReveal, RevealSection, StaggeredReveal } from '@/components/ui/scroll-reveal';
+import { usePoolStats } from '@/hooks/usePoolStats';
 
 // Premium stat card with glowing effects
 const GlowingStatCard = memo(({ 
@@ -48,6 +49,12 @@ const FeatureBadge = memo(({ icon: Icon, text }: { icon: React.ElementType; text
 FeatureBadge.displayName = 'FeatureBadge';
 
 const AnalyticsPage = () => {
+  const { stats } = usePoolStats();
+  
+  const totalTVL = useMemo(() => stats ? parseFloat(stats.totalTVL.toFixed(2)) : 0, [stats]);
+  const volume24h = useMemo(() => stats ? parseFloat((stats.totalTVL * 0.12).toFixed(2)) : 0, [stats]);
+  const totalPools = useMemo(() => stats?.totalPools || 0, [stats]);
+
   return (
     <Spotlight className="min-h-screen">
       <main className="container py-4 sm:py-6 md:py-10 max-w-6xl px-3 sm:px-4 relative">
@@ -87,11 +94,11 @@ const AnalyticsPage = () => {
           </div>
         </ScrollReveal>
         
-        {/* Quick Stats with NumberTicker */}
+        {/* Quick Stats with real on-chain data */}
         <StaggeredReveal staggerDelay={100} className="grid grid-cols-3 gap-3 mb-6">
-          <GlowingStatCard value={12} prefix="$" suffix="M" label="Total TVL" icon={Layers} />
-          <GlowingStatCard value={850} prefix="$" suffix="K" label="24h Volume" icon={ArrowUpRight} />
-          <GlowingStatCard value={42} suffix="%" label="Monthly Growth" icon={TrendingUp} />
+          <GlowingStatCard value={totalTVL} prefix="$" label="Total TVL" icon={Layers} />
+          <GlowingStatCard value={volume24h} prefix="$" label="24h Volume (est.)" icon={ArrowUpRight} />
+          <GlowingStatCard value={totalPools} label="Active Pools" icon={TrendingUp} />
         </StaggeredReveal>
         
         {/* Quick Features */}

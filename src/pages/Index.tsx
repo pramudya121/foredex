@@ -1,9 +1,10 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { SwapCard } from '@/components/SwapCard';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
+import { usePoolStats } from '@/hooks/usePoolStats';
 
 import wolfLogo from '@/assets/wolf-logo.png';
 
@@ -59,6 +60,10 @@ const StatCard = memo(function StatCard({
 
 const Index = () => {
   const { isConnected, isWsConnected } = useRealtimePrices();
+  const { stats } = usePoolStats();
+  
+  const tvl = useMemo(() => stats ? stats.totalTVL : 0, [stats]);
+  const totalPools = useMemo(() => stats ? stats.totalPools : 0, [stats]);
 
   return (
     <Spotlight className="min-h-screen">
@@ -136,8 +141,8 @@ const Index = () => {
         {/* Stats Section */}
         <RevealSection className="mt-10">
           <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
-            <StatCard value={12} prefix="$" suffix="M+" label="TVL" delay={0} />
-            <StatCard value={50} suffix="K+" label="Trades" delay={100} />
+            <StatCard value={tvl > 0 ? parseFloat(tvl.toFixed(2)) : 0} prefix="$" label="TVL" delay={0} decimalPlaces={2} />
+            <StatCard value={totalPools} label="Pools" delay={100} />
             <StatCard value={0.3} suffix="%" label="Fees" decimalPlaces={1} delay={200} />
           </div>
         </RevealSection>
