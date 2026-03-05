@@ -24,7 +24,9 @@ import {
   Plus,
   Share2,
   Star,
-  Wrench
+  Wrench,
+  Activity,
+  Hash,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -43,6 +45,10 @@ interface PoolData {
   apr: number;
   price0: number;
   price1: number;
+  // TWAP Oracle Data
+  price0CumulativeLast: string;
+  price1CumulativeLast: string;
+  kLast: string;
 }
 
 // Generate historical data for charts (90 days for more interactive range)
@@ -119,11 +125,14 @@ export default function LiquidityPoolDetailPage() {
       try {
         const pair = new ethers.Contract(address, PAIR_ABI, provider);
         
-        const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+        const [token0Addr, token1Addr, reserves, totalSupply, p0Cumulative, p1Cumulative, kLastVal] = await Promise.all([
           rpcProvider.call(() => pair.token0(), 'poolDetail_token0'),
           rpcProvider.call(() => pair.token1(), 'poolDetail_token1'),
           rpcProvider.call(() => pair.getReserves(), 'poolDetail_reserves'),
           rpcProvider.call(() => pair.totalSupply(), 'poolDetail_supply'),
+          rpcProvider.call(() => pair.price0CumulativeLast(), 'poolDetail_p0cum'),
+          rpcProvider.call(() => pair.price1CumulativeLast(), 'poolDetail_p1cum'),
+          rpcProvider.call(() => pair.kLast(), 'poolDetail_kLast'),
         ]);
 
         if (!token0Addr || !token1Addr || !reserves || !totalSupply) {
@@ -162,6 +171,9 @@ export default function LiquidityPoolDetailPage() {
           apr,
           price0,
           price1,
+          price0CumulativeLast: p0Cumulative ? p0Cumulative.toString() : '0',
+          price1CumulativeLast: p1Cumulative ? p1Cumulative.toString() : '0',
+          kLast: kLastVal ? kLastVal.toString() : '0',
         });
       } catch (error) {
         console.warn('Failed to fetch pool data:', error);
@@ -430,6 +442,56 @@ export default function LiquidityPoolDetailPage() {
             <div className="flex justify-between py-2">
               <span className="text-muted-foreground">Network</span>
               <Badge variant="outline">{NEXUS_TESTNET.name}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* TWAP Oracle Data */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              TWAP Oracle Data
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-muted/20 rounded-lg space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Hash className="w-3.5 h-3.5" />
+                  price0CumulativeLast
+                </div>
+                <p className="text-xs font-mono break-all">
+                  {pool.price0CumulativeLast === '0' ? 'N/A' : pool.price0CumulativeLast}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Cumulative price of {pool.token0.symbol}
+                </p>
+              </div>
+              <div className="p-4 bg-muted/20 rounded-lg space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Hash className="w-3.5 h-3.5" />
+                  price1CumulativeLast
+                </div>
+                <p className="text-xs font-mono break-all">
+                  {pool.price1CumulativeLast === '0' ? 'N/A' : pool.price1CumulativeLast}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Cumulative price of {pool.token1.symbol}
+                </p>
+              </div>
+              <div className="p-4 bg-muted/20 rounded-lg space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Hash className="w-3.5 h-3.5" />
+                  kLast
+                </div>
+                <p className="text-xs font-mono break-all">
+                  {pool.kLast === '0' ? 'N/A' : pool.kLast}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  reserve0 × reserve1 (for protocol fee calc)
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
