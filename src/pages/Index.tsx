@@ -1,7 +1,9 @@
 import { memo, useMemo } from 'react';
 import { SwapCard } from '@/components/SwapCard';
+import { LimitOrderPanel } from '@/components/LimitOrderPanel';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
-import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Zap, Shield, TrendingUp, Sparkles, ArrowRightLeft, Target } from 'lucide-react';
 import { ConnectionStatus } from '@/components/LivePriceIndicator';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import { usePoolStats } from '@/hooks/usePoolStats';
@@ -132,7 +134,24 @@ const Index = () => {
                 borderRadius="1rem"
                 className="p-0"
               >
-                <SwapCard />
+                <Tabs defaultValue="swap" className="w-full">
+                  <TabsList className="w-full rounded-t-lg rounded-b-none">
+                    <TabsTrigger value="swap" className="flex-1 gap-1.5">
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      Swap
+                    </TabsTrigger>
+                    <TabsTrigger value="limit" className="flex-1 gap-1.5">
+                      <Target className="w-3.5 h-3.5" />
+                      Limit
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="swap" className="mt-0">
+                    <SwapCard />
+                  </TabsContent>
+                  <TabsContent value="limit" className="mt-0 p-4">
+                    <LimitOrderPanel />
+                  </TabsContent>
+                </Tabs>
               </MovingBorder>
             </div>
           </ScrollReveal>

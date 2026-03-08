@@ -26,7 +26,7 @@ const ORBIT_TOKENS = [
 ];
 
 // Glowing core sphere with NEX logo
-function CoreSphere() {
+const CoreSphere = forwardRef<THREE.Group>(function CoreSphere(_props, _ref) {
   const glowRef = useRef<THREE.Mesh>(null);
   const outerGlowRef = useRef<THREE.Mesh>(null);
 
@@ -113,7 +113,7 @@ function CoreSphere() {
       <pointLight color="#ff4444" intensity={3} distance={8} />
     </group>
   );
-}
+});
 
 // Orbital ring component
 function OrbitalRing({ 
@@ -387,7 +387,7 @@ const GlobeParticleField = forwardRef<THREE.Points>(function GlobeParticleField(
 });
 
 // Main globe scene
-function GlobeScene() {
+const GlobeScene = forwardRef<THREE.Group>(function GlobeScene(_props, _ref) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
@@ -464,7 +464,7 @@ function GlobeScene() {
       <GlobeParticleField />
     </group>
   );
-}
+});
 
 interface TokenGlobeProps {
   className?: string;
