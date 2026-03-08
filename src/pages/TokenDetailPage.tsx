@@ -4,6 +4,7 @@ import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
 import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
+import {
   ArrowLeft, 
   TrendingUp, 
   TrendingDown, 
