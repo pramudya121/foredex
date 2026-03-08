@@ -1,4 +1,4 @@
-import { memo, useRef, useMemo, useState, useEffect } from 'react';
+import { memo, useRef, useMemo, useState, useEffect, forwardRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls, Sphere, Ring, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -153,13 +153,10 @@ function OrbitalRing({
 }
 
 // Glow trail component
-function GlowTrail({ 
-  positions, 
-  color 
-}: { 
+const GlowTrail = forwardRef<THREE.Points, { 
   positions: THREE.Vector3[]; 
   color: string;
-}) {
+}>(function GlowTrail({ positions, color }, _ref) {
   const trailRef = useRef<THREE.Points>(null);
   
   const trailGeometry = useMemo(() => {
@@ -195,7 +192,7 @@ function GlowTrail({
       />
     </points>
   );
-}
+});
 
 // Orbiting token component with glow trail
 function OrbitingToken({ 
@@ -322,7 +319,7 @@ function OrbitingToken({
 }
 
 // Particle field around the globe - optimized for performance
-function ParticleField() {
+const GlobeParticleField = forwardRef<THREE.Points>(function GlobeParticleField(_props, _ref) {
   const particlesRef = useRef<THREE.Points>(null);
   const frameRef = useRef(0);
   
@@ -387,7 +384,7 @@ function ParticleField() {
       />
     </points>
   );
-}
+});
 
 // Main globe scene
 function GlobeScene() {
