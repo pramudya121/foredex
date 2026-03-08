@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, forwardRef } from 'react';
 import { TOKEN_LIST, TokenInfo } from '@/config/contracts';
 import { Button } from '@/components/ui/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
@@ -18,7 +18,7 @@ interface TokenSelectProps {
   className?: string;
 }
 
-export function TokenSelect({ selected, onSelect, excludeToken, className }: TokenSelectProps) {
+export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(function TokenSelect({ selected, onSelect, excludeToken, className }, ref) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
     const { address, isConnected } = useWeb3();
@@ -240,4 +240,4 @@ export function TokenSelect({ selected, onSelect, excludeToken, className }: Tok
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
   );
-}
+});
