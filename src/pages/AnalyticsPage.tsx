@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { Analytics } from '@/components/Analytics';
 import { BarChart3, TrendingUp, Activity, Zap, Sparkles, Layers, ArrowUpRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +58,7 @@ const AnalyticsPage = () => {
 
   return (
     <Spotlight className="min-h-screen">
+      <SEOHead title="Analytics" description="Real-time DEX analytics: TVL, volume, fees, and per-pool performance on Nexus Testnet." />
       <main className="container py-4 sm:py-6 md:py-10 max-w-6xl px-3 sm:px-4 relative">
         {/* Ambient background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
