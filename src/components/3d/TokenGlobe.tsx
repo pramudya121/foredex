@@ -464,7 +464,7 @@ const GlobeScene = forwardRef<THREE.Group>(function GlobeScene(_props, _ref) {
       <GlobeParticleField />
     </group>
   );
-}
+});
 
 interface TokenGlobeProps {
   className?: string;
