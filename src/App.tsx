@@ -6,11 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Web3Provider } from "@/contexts/Web3Context";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { WaveBackground } from "@/components/WaveBackground";
 import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
 import { SkipLink } from "@/components/ui/accessibility-skip-link";
 import { ParticleField } from "@/components/3d/ParticleField";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import RpcStatusBanner from "@/components/RpcStatusBanner";
 import { toast } from "sonner";
 
@@ -99,26 +101,29 @@ const AppContent = memo(function AppContent() {
       <main id="main-content" role="main" tabIndex={-1} className="flex-1 outline-none">
         <Suspense fallback={<PageLoader />}>
           <PageTransition>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/swap" element={<Index />} />
-              <Route path="/liquidity" element={<Liquidity />} />
-              <Route path="/pools" element={<Pools />} />
-              <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
-              <Route path="/farming" element={<FarmingPage />} />
-              <Route path="/farming/admin" element={<FarmingAdminPage />} />
-              <Route path="/farming/:pid" element={<FarmingPoolDetailPage />} />
-              <Route path="/tokens" element={<TokensPage />} />
-              <Route path="/tokens/:address" element={<TokenDetailPage />} />
-              <Route path="/analytics" element={<AnalyticsPage />} />
-              <Route path="/portfolio" element={<PortfolioPage />} />
-              <Route path="/docs" element={<DocsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <RouteErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/swap" element={<Index />} />
+                <Route path="/liquidity" element={<Liquidity />} />
+                <Route path="/pools" element={<Pools />} />
+                <Route path="/pools/:address" element={<LiquidityPoolDetailPage />} />
+                <Route path="/farming" element={<FarmingPage />} />
+                <Route path="/farming/admin" element={<FarmingAdminPage />} />
+                <Route path="/farming/:pid" element={<FarmingPoolDetailPage />} />
+                <Route path="/tokens" element={<TokensPage />} />
+                <Route path="/tokens/:address" element={<TokenDetailPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/portfolio" element={<PortfolioPage />} />
+                <Route path="/docs" element={<DocsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </RouteErrorBoundary>
           </PageTransition>
         </Suspense>
       </main>
+      <Footer />
       <RpcStatusBanner />
     </div>
   );
