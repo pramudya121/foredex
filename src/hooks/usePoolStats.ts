@@ -64,6 +64,8 @@ export function usePoolStats() {
   const isFetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const retryCountRef = useRef(0);
+  const consecutiveFailsRef = useRef(0);
+  const nextRetryTimeRef = useRef(0);
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
     if (isFetchingRef.current) return;
