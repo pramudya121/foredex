@@ -15,9 +15,6 @@ import { Badge } from './ui/badge';
 
 // Lazy load LP P&L tracker
 const LPProfitLossTracker = lazy(() => import('./LPProfitLossTracker'));
-import { Button } from './ui/button';
-import { Skeleton } from './ui/skeleton';
-import { Badge } from './ui/badge';
 
 interface TokenBalance {
   symbol: string;
