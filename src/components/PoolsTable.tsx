@@ -2,7 +2,7 @@ import { useState, useEffect, memo, useMemo, useRef, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { FACTORY_ABI, PAIR_ABI, MULTICALL_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { 
@@ -336,88 +336,155 @@ function PoolsTableInner({ externalPools, externalLoading, onRefresh, isRefreshi
       const totalPairs = Number(pairCount);
       const fetchedPools: Pool[] = [];
 
-      // Fetch pools sequentially to avoid RPC rate limiting
-      for (let i = 0; i < totalPairs; i++) {
-        try {
-          const pairAddress = await factory.allPairs(i);
-          if (!pairAddress || pairAddress === ethers.ZeroAddress) continue;
-
-          const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-
-          const token0Addr = await pair.token0().catch(() => null);
-          if (!token0Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
-          
-          await new Promise(r => setTimeout(r, 200));
-          const token1Addr = await pair.token1().catch(() => null);
-          if (!token1Addr) { await new Promise(r => setTimeout(r, 300)); continue; }
-
-          await new Promise(r => setTimeout(r, 200));
-          const reserves = await pair.getReserves().catch(() => null);
-          
-          await new Promise(r => setTimeout(r, 200));
-          const totalSupply = await pair.totalSupply().catch(() => null);
-
-          if (!reserves || !totalSupply) { await new Promise(r => setTimeout(r, 300)); continue; }
-
-          const getTokenInfo = (addr: string) => {
-            const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-            if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
-            return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown Token', logoURI: undefined };
-          };
-
-          const token0 = getTokenInfo(token0Addr);
-          const token1 = getTokenInfo(token1Addr);
-
-          const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
-          const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
-          const tvl = reserve0 + reserve1;
-          const volume24h = tvl * 0.12;
-          const fees24h = volume24h * 0.003;
-          const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
-
-          // Calculate user LP balance and share
-          const totalSupplyNum = parseFloat(ethers.formatEther(totalSupply));
-          let userLpBalance = '0';
-          let userShare = 0;
-
-          if (userAddress && isConnected) {
-            try {
-              await new Promise(r => setTimeout(r, 200));
-              const userLpBalanceRaw = await pair.balanceOf(userAddress);
-              if (userLpBalanceRaw) {
-                userLpBalance = ethers.formatEther(userLpBalanceRaw);
-                const userLpNum = parseFloat(userLpBalance);
-                userShare = totalSupplyNum > 0 ? (userLpNum / totalSupplyNum) * 100 : 0;
-              }
-            } catch {
-              // Silent fail for user balance
-            }
-          }
-
-          const addressSeed = parseInt(pairAddress.slice(2, 10), 16);
-          const chartData = generateMiniChartData(tvl, addressSeed);
-
-          fetchedPools.push({
-            address: pairAddress,
-            token0,
-            token1,
-            reserve0: ethers.formatEther(reserves[0]),
-            reserve1: ethers.formatEther(reserves[1]),
-            totalSupply: ethers.formatEther(totalSupply),
-            tvl,
-            volume24h,
-            fees24h,
-            apr,
-            chartData,
-            userLpBalance,
-            userShare,
-          });
-        } catch (e) {
-          console.warn(`[PoolsTable] Failed to fetch pool ${i}:`, e);
+      // Phase 1: Batch fetch all pair addresses via multicall
+      let pairAddresses: string[] = [];
+      try {
+        const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+        const factoryInterface = new ethers.Interface(FACTORY_ABI);
+        const addrCalls = Array.from({ length: totalPairs }, (_, i) => ({
+          target: CONTRACTS.FACTORY,
+          callData: factoryInterface.encodeFunctionData('allPairs', [i]),
+        }));
+        const [, returnData] = await multicall.aggregate.staticCall(addrCalls);
+        pairAddresses = (returnData as string[]).map(data => {
+          try { return factoryInterface.decodeFunctionResult('allPairs', data)[0] as string; }
+          catch { return ''; }
+        }).filter(Boolean);
+      } catch {
+        // Fallback: sequential
+        for (let i = 0; i < totalPairs; i++) {
+          try {
+            const addr = await rpcProvider.call(() => new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider).allPairs(i), `pt_pair_${i}`);
+            if (addr) pairAddresses.push(addr);
+          } catch { continue; }
         }
+      }
+
+      if (pairAddresses.length === 0) {
+        if (poolsTableCache?.pools.length) setPools(poolsTableCache.pools);
+        isFetchingRef.current = false;
+        setLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // Phase 2: Batch fetch all pair data via multicall (token0, token1, reserves, totalSupply)
+      try {
+        const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+        const pairInterface = new ethers.Interface(PAIR_ABI);
         
-        // Delay between pools to respect rate limits
-        if (i < totalPairs - 1) {
+        const detailCalls: { target: string; callData: string }[] = [];
+        pairAddresses.forEach(addr => {
+          detailCalls.push({ target: addr, callData: pairInterface.encodeFunctionData('token0') });
+          detailCalls.push({ target: addr, callData: pairInterface.encodeFunctionData('token1') });
+          detailCalls.push({ target: addr, callData: pairInterface.encodeFunctionData('getReserves') });
+          detailCalls.push({ target: addr, callData: pairInterface.encodeFunctionData('totalSupply') });
+        });
+
+        const [, detailReturnData] = await multicall.aggregate.staticCall(detailCalls);
+        const detailResults = detailReturnData as string[];
+
+        // Phase 3: Batch fetch user LP balances if connected
+        let userBalanceMap = new Map<string, bigint>();
+        if (userAddress && isConnected) {
+          try {
+            const balCalls = pairAddresses.map(addr => ({
+              target: addr,
+              callData: pairInterface.encodeFunctionData('balanceOf', [userAddress]),
+            }));
+            const [, balReturnData] = await multicall.aggregate.staticCall(balCalls);
+            (balReturnData as string[]).forEach((data, idx) => {
+              try {
+                const bal = pairInterface.decodeFunctionResult('balanceOf', data)[0];
+                userBalanceMap.set(pairAddresses[idx].toLowerCase(), BigInt(bal));
+              } catch { /* skip */ }
+            });
+          } catch { /* skip user balances on failure */ }
+        }
+
+        // Decode and build pool objects
+        for (let i = 0; i < pairAddresses.length; i++) {
+          const baseIdx = i * 4;
+          try {
+            const token0Addr = pairInterface.decodeFunctionResult('token0', detailResults[baseIdx])[0];
+            const token1Addr = pairInterface.decodeFunctionResult('token1', detailResults[baseIdx + 1])[0];
+            const resResult = pairInterface.decodeFunctionResult('getReserves', detailResults[baseIdx + 2]);
+            const totalSupply = pairInterface.decodeFunctionResult('totalSupply', detailResults[baseIdx + 3])[0];
+
+            const getTokenInfo = (addr: string) => {
+              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+              if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+              return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown Token', logoURI: undefined };
+            };
+
+            const token0 = getTokenInfo(token0Addr);
+            const token1 = getTokenInfo(token1Addr);
+            const reserve0 = parseFloat(ethers.formatEther(resResult[0]));
+            const reserve1 = parseFloat(ethers.formatEther(resResult[1]));
+            const tvl = reserve0 + reserve1;
+            const volume24h = tvl * 0.12;
+            const fees24h = volume24h * 0.003;
+            const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
+            const totalSupplyNum = parseFloat(ethers.formatEther(totalSupply));
+            
+            let userLpBalance = '0';
+            let userShare = 0;
+            const userBal = userBalanceMap.get(pairAddresses[i].toLowerCase());
+            if (userBal && userBal > 0n) {
+              userLpBalance = ethers.formatEther(userBal);
+              userShare = totalSupplyNum > 0 ? (parseFloat(userLpBalance) / totalSupplyNum) * 100 : 0;
+            }
+
+            const addressSeed = parseInt(pairAddresses[i].slice(2, 10), 16);
+            const chartData = generateMiniChartData(tvl, addressSeed);
+
+            fetchedPools.push({
+              address: pairAddresses[i],
+              token0, token1,
+              reserve0: ethers.formatEther(resResult[0]),
+              reserve1: ethers.formatEther(resResult[1]),
+              totalSupply: ethers.formatEther(totalSupply),
+              tvl, volume24h, fees24h, apr, chartData, userLpBalance, userShare,
+            });
+          } catch { /* skip failed pair */ }
+        }
+      } catch (e) {
+        console.warn('[PoolsTable] Multicall failed, falling back:', e);
+        // Fallback: sequential (keep existing behavior)
+        for (let i = 0; i < pairAddresses.length; i++) {
+          try {
+            const pair = new ethers.Contract(pairAddresses[i], PAIR_ABI, provider);
+            const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
+              pair.token0(), pair.token1(), pair.getReserves(), pair.totalSupply(),
+            ]);
+
+            const getTokenInfo = (addr: string) => {
+              const known = TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+              if (known) return { address: addr, symbol: known.symbol, name: known.name, logoURI: known.logoURI };
+              return { address: addr, symbol: addr.slice(0, 6) + '...', name: 'Unknown Token', logoURI: undefined };
+            };
+
+            const token0 = getTokenInfo(token0Addr);
+            const token1 = getTokenInfo(token1Addr);
+            const reserve0 = parseFloat(ethers.formatEther(reserves[0]));
+            const reserve1 = parseFloat(ethers.formatEther(reserves[1]));
+            const tvl = reserve0 + reserve1;
+            const volume24h = tvl * 0.12;
+            const fees24h = volume24h * 0.003;
+            const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
+            const addressSeed = parseInt(pairAddresses[i].slice(2, 10), 16);
+
+            fetchedPools.push({
+              address: pairAddresses[i],
+              token0, token1,
+              reserve0: ethers.formatEther(reserves[0]),
+              reserve1: ethers.formatEther(reserves[1]),
+              totalSupply: ethers.formatEther(totalSupply),
+              tvl, volume24h, fees24h, apr,
+              chartData: generateMiniChartData(tvl, addressSeed),
+              userLpBalance: '0', userShare: 0,
+            });
+          } catch { continue; }
           await new Promise(r => setTimeout(r, 400));
         }
       }

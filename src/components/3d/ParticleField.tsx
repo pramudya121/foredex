@@ -1,4 +1,4 @@
-import { memo, useRef, useMemo, useEffect, useState } from 'react';
+import { memo, useRef, useMemo, useEffect, useState, forwardRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -13,7 +13,7 @@ const isLowPowerDevice = () => {
 };
 
 // Floating particles with mouse interaction
-function Particles({ count = 150 }: { count?: number }) {
+const Particles = forwardRef<THREE.Points, { count?: number }>(function Particles({ count = 150 }, _ref) {
   const meshRef = useRef<THREE.Points>(null);
 
   const [positions, velocities] = useMemo(() => {
@@ -76,10 +76,10 @@ function Particles({ count = 150 }: { count?: number }) {
       />
     </points>
   );
-}
+});
 
 // Connection lines between nearby particles
-function ConnectionLines() {
+const ConnectionLines = forwardRef<THREE.LineSegments>(function ConnectionLines(_props, _ref) {
   const lineRef = useRef<THREE.LineSegments>(null);
   
   useFrame((state) => {
@@ -113,16 +113,16 @@ function ConnectionLines() {
       <lineBasicMaterial color="#dc2626" transparent opacity={0.08} />
     </lineSegments>
   );
-}
+});
 
-function Scene({ particleCount }: { particleCount: number }) {
+const Scene = forwardRef<THREE.Group, { particleCount: number }>(function Scene({ particleCount }, _ref) {
   return (
     <>
       <Particles count={particleCount} />
       <ConnectionLines />
     </>
   );
-}
+});
 
 export const ParticleField = memo(function ParticleField({ className = "" }: { className?: string }) {
   const [shouldRender, setShouldRender] = useState(false); // Start false, enable after idle

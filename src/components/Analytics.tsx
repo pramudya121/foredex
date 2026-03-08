@@ -111,6 +111,7 @@ export function Analytics() {
           <TabsTrigger value="volume">Volume</TabsTrigger>
           <TabsTrigger value="tvl">TVL</TabsTrigger>
           <TabsTrigger value="pools">Pool Metrics</TabsTrigger>
+          <TabsTrigger value="breakdown">Per-Pool</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -276,6 +277,130 @@ export function Analytics() {
 
         <TabsContent value="pools">
           <PoolPerformanceMetrics pools={pools} loading={loading} />
+        </TabsContent>
+
+        {/* New Per-Pool Breakdown Tab */}
+        <TabsContent value="breakdown" className="space-y-6">
+          {/* Pool TVL Distribution */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Pool TVL Distribution</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={pools.map(p => ({ 
+                    name: `${p.token0.symbol}/${p.token1.symbol}`, 
+                    tvl: p.tvl,
+                    volume: p.volume24h,
+                    fees: p.volume24h * 0.003,
+                  })).sort((a, b) => b.tvl - a.tvl).slice(0, 10)}
+                  layout="vertical"
+                >
+                  <XAxis 
+                    type="number"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'hsl(0, 0%, 60%)', fontSize: 11 }}
+                    tickFormatter={(v) => `$${v.toFixed(0)}`}
+                  />
+                  <YAxis 
+                    type="category"
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'hsl(0, 0%, 70%)', fontSize: 12 }}
+                    width={100}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(0, 0%, 10%)',
+                      border: '1px solid hsl(0, 0%, 20%)',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name === 'tvl' ? 'TVL' : name === 'volume' ? 'Volume 24h' : 'Fees 24h']}
+                  />
+                  <Bar dataKey="tvl" fill="hsl(0, 84%, 50%)" radius={[0, 4, 4, 0]} name="tvl" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Pool Fee Revenue */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Estimated 24h Fee Revenue by Pool</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={pools.map(p => ({
+                    name: `${p.token0.symbol}/${p.token1.symbol}`,
+                    fees: p.volume24h * 0.003,
+                    apr: p.apr,
+                  })).sort((a, b) => b.fees - a.fees).slice(0, 10)}
+                >
+                  <XAxis 
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'hsl(0, 0%, 60%)', fontSize: 11 }}
+                    angle={-30}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'hsl(0, 0%, 60%)', fontSize: 11 }}
+                    tickFormatter={(v) => `$${v.toFixed(2)}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(0, 0%, 10%)',
+                      border: '1px solid hsl(0, 0%, 20%)',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number, name: string) => [
+                      name === 'fees' ? `$${value.toFixed(4)}` : `${value.toFixed(2)}%`,
+                      name === 'fees' ? 'Fees 24h' : 'APR'
+                    ]}
+                  />
+                  <Bar dataKey="fees" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} name="fees" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Top Pools Table */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Top Pools Ranking</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    <th className="text-left pb-3 text-muted-foreground font-medium">#</th>
+                    <th className="text-left pb-3 text-muted-foreground font-medium">Pool</th>
+                    <th className="text-right pb-3 text-muted-foreground font-medium">TVL</th>
+                    <th className="text-right pb-3 text-muted-foreground font-medium">Volume 24h</th>
+                    <th className="text-right pb-3 text-muted-foreground font-medium">Fees 24h</th>
+                    <th className="text-right pb-3 text-muted-foreground font-medium">APR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...pools].sort((a, b) => b.tvl - a.tvl).slice(0, 10).map((pool, idx) => (
+                    <tr key={pool.pairAddress} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
+                      <td className="py-3 font-medium text-muted-foreground">{idx + 1}</td>
+                      <td className="py-3 font-semibold">{pool.token0.symbol}/{pool.token1.symbol}</td>
+                      <td className="py-3 text-right font-mono">${pool.tvl.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">${pool.volume24h.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono text-green-500">${(pool.volume24h * 0.003).toFixed(4)}</td>
+                      <td className="py-3 text-right font-mono text-primary">{pool.apr.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pools.length === 0 && !loading && (
+                <p className="text-center text-muted-foreground py-8 text-sm">No pool data available</p>
+              )}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
