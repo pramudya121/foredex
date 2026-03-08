@@ -391,7 +391,7 @@ export function Portfolio() {
     fetchPortfolio();
 
     // Refresh every 2 minutes
-    const interval = setInterval(() => fetchPortfolio(), 120000);
+    const interval = setInterval(() => fetchPortfolio(), 180000); // 3 minutes (was 2)
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
