@@ -909,6 +909,20 @@ export function LiquidityPanel() {
 
           {isConnected ? (
             <div className="space-y-2">
+              {/* Insufficient Balance Warnings */}
+              {amountA && parseFloat(amountA) > 0 && parseFloat(balanceA || '0') > 0 && parseFloat(amountA) > parseFloat(balanceA || '0') && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+                  <span className="text-destructive">Insufficient {tokenA?.symbol} balance</span>
+                </div>
+              )}
+              {amountB && parseFloat(amountB) > 0 && parseFloat(balanceB || '0') > 0 && parseFloat(amountB) > parseFloat(balanceB || '0') && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+                  <span className="text-destructive">Insufficient {tokenB?.symbol} balance</span>
+                </div>
+              )}
+
               {/* Approve Token A Button */}
               {!isNativeToken(tokenA) && !approvalA && amountA && parseFloat(amountA) > 0 && (
                 <Button
@@ -948,23 +962,31 @@ export function LiquidityPanel() {
               )}
 
               {/* Add Liquidity Button */}
-              <Button
-                onClick={handleAddLiquidity}
-                disabled={loading || !amountA || !amountB || (!isNativeToken(tokenA) && !approvalA) || (!isNativeToken(tokenB) && !approvalB)}
-                className={cn(
-                  'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold btn-glow touch-manipulation',
-                  'bg-gradient-wolf hover:opacity-90'
-                )}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  'Add Liquidity'
-                )}
-              </Button>
+              {(() => {
+                const insuffA = amountA && parseFloat(amountA) > parseFloat(balanceA || '0');
+                const insuffB = amountB && parseFloat(amountB) > parseFloat(balanceB || '0');
+                return (
+                  <Button
+                    onClick={handleAddLiquidity}
+                    disabled={loading || !amountA || !amountB || (!isNativeToken(tokenA) && !approvalA) || (!isNativeToken(tokenB) && !approvalB) || !!insuffA || !!insuffB}
+                    className={cn(
+                      'w-full h-12 sm:h-14 text-base sm:text-lg font-semibold btn-glow touch-manipulation',
+                      insuffA || insuffB ? 'bg-destructive hover:bg-destructive/90' : 'bg-gradient-wolf hover:opacity-90'
+                    )}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : insuffA || insuffB ? (
+                      'Insufficient Balance'
+                    ) : (
+                      'Add Liquidity'
+                    )}
+                  </Button>
+                );
+              })()}
             </div>
           ) : (
             <Button disabled className="w-full h-12 sm:h-14 touch-manipulation" variant="secondary">
