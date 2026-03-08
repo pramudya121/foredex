@@ -523,7 +523,9 @@ export function Portfolio() {
       </div>
 
       {/* Portfolio Value Charts */}
-      <PortfolioValueChart />
+      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+        <PortfolioValueChart />
+      </Suspense>
 
       {/* Native Balance */}
       <div className="glass-card p-4 sm:p-6">
