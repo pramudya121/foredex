@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
-import { 
+import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
+import {
   ArrowLeft, 
   TrendingUp, 
   TrendingDown, 
@@ -270,25 +271,42 @@ export default function TokenDetailPage() {
       
       setLoading(true);
       try {
-        const provider = new ethers.JsonRpcProvider(NEXUS_TESTNET.rpcUrl);
+        const provider = rpcProvider.getProvider();
+        if (!provider) {
+          // Use cached/fallback data when RPC is down
+          const fallbackPrice = address === CONTRACTS.WETH ? 2300 : 1;
+          setMetrics({
+            price: fallbackPrice, priceChange24h: 0, priceChange7d: 0, priceChange30d: 0,
+            volume24h: 0, tvl: 0, marketCap: 0, circulatingSupply: 0, totalSupply: 0,
+            allTimeHigh: fallbackPrice, allTimeLow: fallbackPrice, holders: 0,
+            transactions24h: 0, liquidityScore: 0, volumeToMcap: 0,
+          });
+          setLoading(false);
+          return;
+        }
+
         const factory = new ethers.Contract(CONTRACTS.FACTORY, FACTORY_ABI, provider);
         
         let tvl = 0;
         let volume = 0;
         let price = 1;
         
-        const pairCount = await factory.allPairsLength();
+        const pairCount = await rpcProvider.call(() => factory.allPairsLength(), 'tokenDetail_pairCount');
+        if (!pairCount) { setLoading(false); return; }
         
-        for (let i = 0; i < Math.min(Number(pairCount), 20); i++) {
+        for (let i = 0; i < Math.min(Number(pairCount), 15); i++) {
           try {
-            const pairAddress = await factory.allPairs(i);
+            const pairAddress = await rpcProvider.call(() => factory.allPairs(i), `tokenDetail_pair_${i}`);
+            if (!pairAddress) continue;
             const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
             
             const [token0Addr, token1Addr, reserves] = await Promise.all([
-              pair.token0(),
-              pair.token1(),
-              pair.getReserves(),
+              rpcProvider.call(() => pair.token0(), `tokenDetail_t0_${pairAddress}`),
+              rpcProvider.call(() => pair.token1(), `tokenDetail_t1_${pairAddress}`),
+              rpcProvider.call(() => pair.getReserves(), `tokenDetail_res_${pairAddress}`),
             ]);
+            
+            if (!token0Addr || !token1Addr || !reserves) continue;
             
             const isToken0 = token0Addr.toLowerCase() === address.toLowerCase();
             const isToken1 = token1Addr.toLowerCase() === address.toLowerCase();
@@ -310,36 +328,48 @@ export default function TokenDetailPage() {
             continue;
           }
         }
+
+        // Fetch real totalSupply from ERC20 contract
+        let totalSupply = 0;
+        if (address !== '0x0000000000000000000000000000000000000000') {
+          try {
+            const tokenContract = new ethers.Contract(address, ERC20_ABI, provider);
+            const supply = await rpcProvider.call(() => tokenContract.totalSupply(), `tokenDetail_supply_${address}`);
+            if (supply) {
+              totalSupply = parseFloat(ethers.formatEther(supply));
+            }
+          } catch {
+            totalSupply = 0;
+          }
+        }
         
-        const priceChange24h = (Math.random() - 0.5) * 20;
-        const priceChange7d = (Math.random() - 0.5) * 40;
-        const priceChange30d = (Math.random() - 0.5) * 60;
-        const marketCap = price * 1000000;
+        const marketCap = price * totalSupply;
         const volume24h = volume * 1000;
+        // Calculate liquidity score based on real TVL
+        const liquidityScore = Math.min(100, Math.floor((tvl / (tvl + 100)) * 100));
         
         setMetrics({
           price,
-          priceChange24h,
-          priceChange7d,
-          priceChange30d,
+          priceChange24h: (Math.random() - 0.5) * 20, // Still simulated until we have historical data
+          priceChange7d: (Math.random() - 0.5) * 40,
+          priceChange30d: (Math.random() - 0.5) * 60,
           volume24h,
           tvl: tvl * 1000,
           marketCap,
-          circulatingSupply: 1000000,
-          totalSupply: 10000000,
+          circulatingSupply: totalSupply, // On testnet, circulating ≈ total
+          totalSupply,
           allTimeHigh: price * (1.5 + Math.random()),
           allTimeLow: price * (0.3 + Math.random() * 0.2),
-          holders: Math.floor(100 + Math.random() * 500),
-          transactions24h: Math.floor(50 + Math.random() * 200),
-          liquidityScore: Math.floor(60 + Math.random() * 40),
-          volumeToMcap: (volume24h / marketCap) * 100,
+          holders: 0, // Can't query without indexer
+          transactions24h: 0, // Can't query without indexer
+          liquidityScore,
+          volumeToMcap: marketCap > 0 ? (volume24h / marketCap) * 100 : 0,
         });
         
         const rangeConfig = TIME_RANGES.find(r => r.value === timeRange)!;
         const historicalData = generateHistoricalData(price, rangeConfig.points, timeRange);
         setChartData(historicalData);
         
-        // Generate candlestick data from price history
         const priceHistory = historicalData.map(d => ({
           time: d.timestamp,
           price: d.price,

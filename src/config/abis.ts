@@ -378,6 +378,13 @@ export const ERC20_ABI = [
   {
     constant: true,
     inputs: [],
+    name: 'totalSupply',
+    outputs: [{ name: '', type: 'uint256' }],
+    type: 'function',
+  },
+  {
+    constant: true,
+    inputs: [],
     name: 'decimals',
     outputs: [{ name: '', type: 'uint8' }],
     type: 'function',

@@ -781,6 +781,17 @@ export function SwapCard() {
             </span>
           </div>
           
+          {/* Estimated Gas Fee */}
+          {bestRoute && (
+            <div className="flex justify-between text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                Est. Gas
+              </span>
+              <span>~{(bestRoute.gasEstimate * 0.000000001).toFixed(6)} NEX ({(bestRoute.gasEstimate / 1000).toFixed(0)}k gas)</span>
+            </div>
+          )}
+          
           {/* Route info */}
           {bestRoute && (
             <div className="pt-2 border-t border-border/50">
