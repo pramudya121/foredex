@@ -258,6 +258,8 @@ export function usePoolStats() {
       setPools(validPools);
       setStats(newStats);
       retryCountRef.current = 0;
+      consecutiveFailsRef.current = 0;
+      nextRetryTimeRef.current = 0;
       
     } catch (error) {
       console.error('[usePoolStats] Error fetching stats:', error);
@@ -272,7 +274,11 @@ export function usePoolStats() {
     mountedRef.current = true;
     fetchStats();
     
-    const interval = setInterval(() => fetchStats(), 60000);
+    const interval = setInterval(() => {
+      // Skip if we're in a backoff period
+      if (nextRetryTimeRef.current > Date.now()) return;
+      fetchStats();
+    }, 60000);
     
     return () => {
       mountedRef.current = false;
