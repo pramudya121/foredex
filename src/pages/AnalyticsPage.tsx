@@ -2,6 +2,8 @@ import { memo, useMemo } from 'react';
 import { SEOHead } from '@/components/SEOHead';
 import { Analytics } from '@/components/Analytics';
 import { BarChart3, TrendingUp, Activity, Zap, Sparkles, Layers, ArrowUpRight } from 'lucide-react';
+import { RpcOfflineBanner } from '@/components/RpcOfflineBanner';
+import { rpcProvider } from '@/lib/rpcProvider';
 import { Badge } from '@/components/ui/badge';
 import { Spotlight } from '@/components/ui/spotlight';
 import { NumberTicker } from '@/components/ui/number-ticker';
@@ -51,6 +53,7 @@ FeatureBadge.displayName = 'FeatureBadge';
 
 const AnalyticsPage = () => {
   const { stats } = usePoolStats();
+  const isRpcOffline = !rpcProvider.isAvailable();
   
   const totalTVL = useMemo(() => stats ? parseFloat(stats.totalTVL.toFixed(2)) : 0, [stats]);
   const volume24h = useMemo(() => stats ? parseFloat((stats.totalTVL * 0.12).toFixed(2)) : 0, [stats]);
@@ -60,6 +63,9 @@ const AnalyticsPage = () => {
     <Spotlight className="min-h-screen">
       <SEOHead title="Analytics" description="Real-time DEX analytics: TVL, volume, fees, and per-pool performance on Nexus Testnet." />
       <main className="container py-4 sm:py-6 md:py-10 max-w-6xl px-3 sm:px-4 relative">
+        {/* RPC Offline Banner */}
+        <RpcOfflineBanner isOffline={isRpcOffline} isCachedData={totalTVL > 0} />
+
         {/* Ambient background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 left-1/4 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse" />

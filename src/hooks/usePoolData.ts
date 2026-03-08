@@ -178,17 +178,52 @@ export function usePoolData(refreshInterval: number = 30000) {
       const provider = rpcProvider.getProvider();
       
       if (!provider || !rpcProvider.isAvailable()) {
-        // Use fallback data
-        const fallbackAnalytics = {
-          totalTVL: 2500000,
-          totalVolume24h: 375000,
-          totalPools: 6,
-          totalTrades: 150,
-          tvlChange: 8.5,
-          volumeChange: 12.3,
-        };
-        setAnalytics(fallbackAnalytics);
-        setHistoricalData(generateHistoricalData(fallbackAnalytics.totalTVL, 7));
+        // Use cached data first, then fallback
+        if (poolDataCache) {
+          setPools(poolDataCache.pools);
+          setAnalytics(poolDataCache.analytics);
+          setHistoricalData(poolDataCache.historical);
+        } else {
+          // Generate fallback pools from known token pairs
+          const fallbackPairs = [
+            { t0: 'WNEX', t1: 'MON', tvl: 4200 },
+            { t0: 'WNEX', t1: 'FRDX', tvl: 3100 },
+            { t0: 'WNEX', t1: 'USDC', tvl: 5800 },
+            { t0: 'WNEX', t1: 'WETH', tvl: 2700 },
+            { t0: 'WNEX', t1: 'XRP', tvl: 1900 },
+            { t0: 'MON', t1: 'FRDX', tvl: 1200 },
+          ];
+          const fallbackPools: PoolData[] = fallbackPairs.map((p, i) => {
+            const t0 = TOKEN_LIST.find(t => t.symbol === p.t0);
+            const t1 = TOKEN_LIST.find(t => t.symbol === p.t1);
+            return {
+              pairAddress: `0x${'0'.repeat(39)}${i}`,
+              token0: { symbol: p.t0, address: t0?.address || '0x0', logoURI: t0?.logoURI },
+              token1: { symbol: p.t1, address: t1?.address || '0x0', logoURI: t1?.logoURI },
+              reserve0: (p.tvl * 0.5).toFixed(4),
+              reserve1: (p.tvl * 0.5).toFixed(4),
+              totalSupply: '100',
+              tvl: p.tvl,
+              volume24h: p.tvl * 0.05,
+              priceToken0: 1,
+              priceToken1: 1,
+              apr: p.tvl > 0 ? ((p.tvl * 0.05) * 365 * 0.003 / p.tvl) * 100 : 0,
+            };
+          });
+          const totalTVL = fallbackPools.reduce((s, p) => s + p.tvl, 0);
+          const totalVolume = fallbackPools.reduce((s, p) => s + p.volume24h, 0);
+          const fallbackAnalytics: AnalyticsData = {
+            totalTVL,
+            totalVolume24h: totalVolume,
+            totalPools: fallbackPools.length,
+            totalTrades: 150,
+            tvlChange: 8.5,
+            volumeChange: 12.3,
+          };
+          setPools(fallbackPools);
+          setAnalytics(fallbackAnalytics);
+          setHistoricalData(generateHistoricalData(totalTVL, 7));
+        }
         setLoading(false);
         setIsRefreshing(false);
         isFetchingRef.current = false;
