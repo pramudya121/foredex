@@ -11,6 +11,7 @@ import { WolfSpinner } from "@/components/WolfSpinner";
 import { PageTransition } from "@/components/PageTransition";
 import { SkipLink } from "@/components/ui/accessibility-skip-link";
 import { ParticleField } from "@/components/3d/ParticleField";
+import RpcStatusBanner from "@/components/RpcStatusBanner";
 import { toast } from "sonner";
 
 // Lazy load pages for better performance
