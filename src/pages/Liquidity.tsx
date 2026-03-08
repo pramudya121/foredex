@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { LiquidityPanel } from '@/components/LiquidityPanel';
 import { Droplets, TrendingUp, Shield, Zap, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

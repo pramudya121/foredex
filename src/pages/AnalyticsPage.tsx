@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { Analytics } from '@/components/Analytics';
 import { BarChart3, TrendingUp, Activity, Zap, Sparkles, Layers, ArrowUpRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

@@ -1,4 +1,5 @@
 import { memo, useMemo, useCallback, useState } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { PoolsTable } from '@/components/PoolsTable';
 import { FactoryInfo } from '@/components/FactoryInfo';
 import { FactoryAdminPanel } from '@/components/FactoryAdminPanel';
@@ -94,6 +95,7 @@ const Pools = () => {
 
   return (
     <Spotlight className="min-h-screen">
+      <SEOHead title="Pools" description="Explore liquidity pools on FOREDEX. View TVL, volume, fees, and APR for all trading pairs." />
       <main className="container py-4 sm:py-6 md:py-10 max-w-7xl px-3 sm:px-4 relative">
         {/* Ambient background effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">

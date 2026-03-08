@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { ethers } from 'ethers';
 import { TOKEN_LIST, CONTRACTS } from '@/config/contracts';
