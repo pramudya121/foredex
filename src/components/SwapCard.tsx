@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, Loader2, AlertTriangle, Zap, AlertCircle, WifiOff, CheckCircle2, Shield } from 'lucide-react';
+import { ArrowDown, Loader2, AlertTriangle, Zap, AlertCircle, WifiOff, CheckCircle2, Shield, Wallet } from 'lucide-react';
 import { BalanceRetryButton } from './BalanceRetryButton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
