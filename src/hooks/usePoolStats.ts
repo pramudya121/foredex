@@ -64,9 +64,14 @@ export function usePoolStats() {
   const isFetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const retryCountRef = useRef(0);
+  const consecutiveFailsRef = useRef(0);
+  const nextRetryTimeRef = useRef(0);
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
     if (isFetchingRef.current) return;
+    
+    // Respect backoff period unless forced
+    if (!forceRefresh && nextRetryTimeRef.current > Date.now()) return;
     
     // Check cache first - use cache if valid
     if (!forceRefresh && poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL) {
@@ -96,7 +101,12 @@ export function usePoolStats() {
       }
       
       if (!provider || !rpcProvider.isAvailable()) {
-        console.warn('[usePoolStats] RPC not available after retries');
+        consecutiveFailsRef.current++;
+        const backoffMs = Math.min(60000 * Math.pow(2, consecutiveFailsRef.current - 1), 600000); // 1min → 10min max
+        nextRetryTimeRef.current = Date.now() + backoffMs;
+        if (consecutiveFailsRef.current <= 2) {
+          console.warn('[usePoolStats] RPC not available, backoff:', Math.round(backoffMs / 1000), 's');
+        }
         // Use cached data if available
         if (poolStatsCache?.pools.length) {
           setStats({ ...poolStatsCache.stats, loading: false });
@@ -251,6 +261,8 @@ export function usePoolStats() {
       setPools(validPools);
       setStats(newStats);
       retryCountRef.current = 0;
+      consecutiveFailsRef.current = 0;
+      nextRetryTimeRef.current = 0;
       
     } catch (error) {
       console.error('[usePoolStats] Error fetching stats:', error);
@@ -265,7 +277,11 @@ export function usePoolStats() {
     mountedRef.current = true;
     fetchStats();
     
-    const interval = setInterval(() => fetchStats(), 60000);
+    const interval = setInterval(() => {
+      // Skip if we're in a backoff period
+      if (nextRetryTimeRef.current > Date.now()) return;
+      fetchStats();
+    }, 60000);
     
     return () => {
       mountedRef.current = false;
