@@ -240,4 +240,4 @@ export const TokenSelect = forwardRef<HTMLButtonElement, TokenSelectProps>(funct
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
   );
-}
+});
