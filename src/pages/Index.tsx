@@ -70,6 +70,7 @@ const Index = () => {
 
   return (
     <Spotlight className="min-h-screen">
+      <SEOHead title="Swap" description="Swap tokens instantly on Nexus Testnet with best rates and low slippage." />
       <main className="container py-6 sm:py-8 md:py-12 px-3 sm:px-4 relative">
         {/* Ambient background effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
