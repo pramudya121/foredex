@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TOKEN_LIST, TokenInfo, CONTRACTS, TOKENS } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { ArrowDown, Loader2, AlertTriangle, Zap, AlertCircle } from 'lucide-react';
+import { ArrowDown, Loader2, AlertTriangle, Zap, AlertCircle, WifiOff, CheckCircle2, Shield } from 'lucide-react';
 import { BalanceRetryButton } from './BalanceRetryButton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -27,11 +27,23 @@ import { calculateAutoSlippage, getSlippageSeverityColor } from '@/lib/autoSlipp
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useTokenPairBalances } from '@/hooks/useStableBalances';
 import { playSwapSound, playSuccessSound, playErrorSound, playNotificationSound } from '@/lib/sounds';
+import { rpcProvider } from '@/lib/rpcProvider';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// Transaction step tracking
+type SwapStep = 'idle' | 'approving' | 'submitting' | 'confirming' | 'success' | 'error';
+const STEP_LABELS: Record<SwapStep, string> = {
+  idle: '',
+  approving: 'Approving token...',
+  submitting: 'Submitting swap...',
+  confirming: 'Waiting for confirmation...',
+  success: 'Swap successful!',
+  error: 'Transaction failed',
+};
 
 export function SwapCard() {
   const { provider, signer, address, isConnected } = useWeb3();
@@ -65,6 +77,16 @@ export function SwapCard() {
   
   // Confirmation modal state
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [swapStep, setSwapStep] = useState<SwapStep>('idle');
+  const [rpcAvailable, setRpcAvailable] = useState(true);
+
+  // Check RPC availability
+  useEffect(() => {
+    const check = () => setRpcAvailable(rpcProvider.isAvailable());
+    check();
+    const interval = setInterval(check, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const isNativeToken = (token: TokenInfo | null) => 
     token?.address === '0x0000000000000000000000000000000000000000';
@@ -350,7 +372,17 @@ export function SwapCard() {
       return;
     }
 
+    // Check insufficient balance
+    const balanceNum = parseFloat(balanceIn || '0');
+    const amountNum = parseFloat(amountIn);
+    if (amountNum > balanceNum) {
+      toast.error(`Insufficient ${tokenIn.symbol} balance`);
+      setShowConfirmation(false);
+      return;
+    }
+
     setLoading(true);
+    setSwapStep('idle');
     try {
       const router = new ethers.Contract(CONTRACTS.ROUTER, ROUTER_ABI, signer);
       
@@ -368,7 +400,6 @@ export function SwapCard() {
 
       if (isExactOutput) {
         // === EXACT OUTPUT SWAP ===
-        // User specifies exact amount they want to receive
         const amountOutWei = ethers.parseUnits(amountOut, tokenOut.decimals);
         const amountInMax = ethers.parseUnits(
           (parseFloat(amountIn) * (1 + slippage / 100)).toFixed(tokenIn.decimals),
@@ -376,7 +407,7 @@ export function SwapCard() {
         );
 
         if (isNativeToken(tokenIn)) {
-          // ETH -> Exact Token (swapETHForExactTokens)
+          setSwapStep('submitting');
           tx = await router.swapETHForExactTokens(
             amountOutWei,
             path,
@@ -385,7 +416,7 @@ export function SwapCard() {
             { value: amountInMax }
           );
         } else if (isNativeToken(tokenOut)) {
-          // Token -> Exact ETH (swapTokensForExactETH)
+          setSwapStep('approving');
           const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           if (allowance < amountInMax) {
@@ -394,6 +425,7 @@ export function SwapCard() {
             toast.success('Token approved!');
           }
           
+          setSwapStep('submitting');
           tx = await router.swapTokensForExactETH(
             amountOutWei,
             amountInMax,
@@ -402,7 +434,7 @@ export function SwapCard() {
             txDeadline
           );
         } else {
-          // Token -> Exact Token (swapTokensForExactTokens)
+          setSwapStep('approving');
           const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           if (allowance < amountInMax) {
@@ -411,6 +443,7 @@ export function SwapCard() {
             toast.success('Token approved!');
           }
 
+          setSwapStep('submitting');
           tx = await router.swapTokensForExactTokens(
             amountOutWei,
             amountInMax,
@@ -421,7 +454,6 @@ export function SwapCard() {
         }
       } else {
         // === EXACT INPUT SWAP ===
-        // User specifies exact amount they want to spend
         const amountInWei = ethers.parseUnits(amountIn, tokenIn.decimals);
         const amountOutMin = ethers.parseUnits(
           (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(tokenOut.decimals),
@@ -429,7 +461,7 @@ export function SwapCard() {
         );
 
         if (isNativeToken(tokenIn)) {
-          // Exact ETH -> Token (swapExactETHForTokens)
+          setSwapStep('submitting');
           tx = await router.swapExactETHForTokens(
             amountOutMin,
             path,
@@ -438,7 +470,7 @@ export function SwapCard() {
             { value: amountInWei }
           );
         } else if (isNativeToken(tokenOut)) {
-          // Exact Token -> ETH (swapExactTokensForETH)
+          setSwapStep('approving');
           const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           if (allowance < amountInWei) {
@@ -447,6 +479,7 @@ export function SwapCard() {
             toast.success('Token approved!');
           }
           
+          setSwapStep('submitting');
           tx = await router.swapExactTokensForETH(
             amountInWei,
             amountOutMin,
@@ -455,7 +488,7 @@ export function SwapCard() {
             txDeadline
           );
         } else {
-          // Exact Token -> Token (swapExactTokensForTokens)
+          setSwapStep('approving');
           const tokenContract = new ethers.Contract(tokenIn.address, ERC20_ABI, signer);
           const allowance = await tokenContract.allowance(address, CONTRACTS.ROUTER);
           if (allowance < amountInWei) {
@@ -464,6 +497,7 @@ export function SwapCard() {
             toast.success('Token approved!');
           }
 
+          setSwapStep('submitting');
           tx = await router.swapExactTokensForTokens(
             amountInWei,
             amountOutMin,
@@ -483,11 +517,13 @@ export function SwapCard() {
         status: 'pending',
       });
 
+      setSwapStep('confirming');
       playNotificationSound();
-      toast.info('Transaction submitted...');
+      toast.info('Transaction submitted, waiting for confirmation...');
       const receipt = await tx.wait();
       updateTransactionStatus(address, tx.hash, 'confirmed');
       
+      setSwapStep('success');
       playSuccessSound();
       playSwapSound();
       toast.success(`Swap successful! TX: ${receipt.hash.slice(0, 10)}...`);
@@ -497,18 +533,21 @@ export function SwapCard() {
       setAmountOut('');
       setIsExactOutput(false);
       
+      // Reset step after 3s
+      setTimeout(() => setSwapStep('idle'), 3000);
+      
       // Force refresh balances after transaction
       setTimeout(() => {
         refetchBalances();
       }, 2000);
     } catch (error: any) {
+      setSwapStep('error');
       playErrorSound();
-      // Use rpcProvider to parse user-friendly error messages
-      const { rpcProvider } = await import('@/lib/rpcProvider');
       const errorMsg = rpcProvider.parseError(error, true);
       if (errorMsg) {
         toast.error(errorMsg);
       }
+      setTimeout(() => setSwapStep('idle'), 3000);
     } finally {
       setLoading(false);
     }
@@ -528,6 +567,51 @@ export function SwapCard() {
 
   return (
     <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
+      {/* RPC Offline Banner */}
+      {!rpcAvailable && (
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2">
+          <WifiOff className="w-4 h-4 text-destructive shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-destructive">Network Unavailable</p>
+            <p className="text-xs text-muted-foreground">Quotes may be stale. Swaps will fail until RPC recovers.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Step Progress */}
+      {swapStep !== 'idle' && (
+        <div className={cn(
+          'mb-4 p-3 rounded-lg flex items-center gap-2 text-sm',
+          swapStep === 'success' && 'bg-green-500/10 border border-green-500/30',
+          swapStep === 'error' && 'bg-destructive/10 border border-destructive/30',
+          (swapStep === 'approving' || swapStep === 'submitting' || swapStep === 'confirming') && 'bg-primary/10 border border-primary/30',
+        )}>
+          {swapStep === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+          ) : swapStep === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+          ) : (
+            <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+          )}
+          <span className={cn(
+            'font-medium',
+            swapStep === 'success' && 'text-green-500',
+            swapStep === 'error' && 'text-destructive',
+            (swapStep === 'approving' || swapStep === 'submitting' || swapStep === 'confirming') && 'text-primary',
+          )}>
+            {STEP_LABELS[swapStep]}
+          </span>
+          {/* Step dots */}
+          {(swapStep === 'approving' || swapStep === 'submitting' || swapStep === 'confirming') && (
+            <div className="ml-auto flex items-center gap-1">
+              <div className={cn('w-2 h-2 rounded-full', swapStep === 'approving' ? 'bg-primary animate-pulse' : 'bg-green-500')} />
+              <div className={cn('w-2 h-2 rounded-full', swapStep === 'submitting' ? 'bg-primary animate-pulse' : swapStep === 'confirming' ? 'bg-green-500' : 'bg-muted')} />
+              <div className={cn('w-2 h-2 rounded-full', swapStep === 'confirming' ? 'bg-primary animate-pulse' : 'bg-muted')} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <h2 className="text-lg sm:text-xl font-bold">Swap</h2>
