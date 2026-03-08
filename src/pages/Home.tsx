@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { Spotlight } from '@/components/ui/spotlight';
 import { HeroSection } from '@/components/home/HeroSection';
 import { StatsSection } from '@/components/home/StatsSection';
@@ -11,6 +12,7 @@ import { RevealSection } from '@/components/ui/scroll-reveal';
 function HomePage() {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
+      <SEOHead title="FOREDEX" description="Trade, swap, and earn on Nexus Testnet. The wolf pack DEX with low fees and instant transactions." />
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div 
