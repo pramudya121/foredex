@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { SEOHead } from '@/components/SEOHead';
 import { SwapCard } from '@/components/SwapCard';
 import { LimitOrderPanel } from '@/components/LimitOrderPanel';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
