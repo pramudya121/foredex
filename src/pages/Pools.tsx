@@ -4,6 +4,8 @@ import { PoolsTable } from '@/components/PoolsTable';
 import { FactoryInfo } from '@/components/FactoryInfo';
 import { FactoryAdminPanel } from '@/components/FactoryAdminPanel';
 import { Droplets, TrendingUp, BarChart3, Coins, Flame, Settings2, Shield, RefreshCw, Sparkles } from 'lucide-react';
+import { RpcOfflineBanner } from '@/components/RpcOfflineBanner';
+import { rpcProvider } from '@/lib/rpcProvider';
 import { usePoolStats } from '@/hooks/usePoolStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -73,6 +75,7 @@ StatCard.displayName = 'StatCard';
 const Pools = () => {
   const { stats, pools: poolsData, refetch, isRefreshing } = usePoolStats();
   const [showFactoryInfo, setShowFactoryInfo] = useState(false);
+  const isRpcOffline = !rpcProvider.isAvailable();
 
   const formatNumber = useCallback((num: number) => {
     if (num >= 1000000) return { value: num / 1000000, suffix: 'M' };
@@ -148,6 +151,14 @@ const Pools = () => {
             </div>
           </div>
         </ScrollReveal>
+
+        {/* RPC Offline Banner */}
+        <RpcOfflineBanner 
+          isOffline={isRpcOffline} 
+          isCachedData={poolsData.length > 0}
+          onRetry={refetch}
+          isRetrying={isRefreshing}
+        />
 
         {/* Factory Info Collapsible */}
         <Collapsible open={showFactoryInfo} onOpenChange={setShowFactoryInfo}>
