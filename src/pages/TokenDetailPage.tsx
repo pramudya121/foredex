@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
-import { 
+import { FACTORY_ABI, PAIR_ABI, ERC20_ABI } from '@/config/abis';
+import { rpcProvider } from '@/lib/rpcProvider';
   ArrowLeft, 
   TrendingUp, 
   TrendingDown, 

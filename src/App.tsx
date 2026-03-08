@@ -119,6 +119,7 @@ const AppContent = memo(function AppContent() {
           </PageTransition>
         </Suspense>
       </main>
+      <RpcStatusBanner />
     </div>
   );
 });
