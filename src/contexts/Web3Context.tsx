@@ -469,10 +469,30 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const defaultWeb3: Web3ContextType = {
+  provider: null,
+  signer: null,
+  address: null,
+  chainId: null,
+  isConnected: false,
+  isConnecting: false,
+  balance: '0',
+  walletType: null,
+  connect: async () => {},
+  connectWalletConnect: async () => null,
+  disconnect: () => {},
+  switchToNexus: async () => {},
+  refreshBalance: async () => {},
+  wcQrUri: null,
+  isWcConnecting: false,
+  cancelWcConnection: () => {},
+};
+
 export function useWeb3() {
   const context = useContext(Web3Context);
   if (!context) {
-    throw new Error('useWeb3 must be used within Web3Provider');
+    console.warn('useWeb3 called outside Web3Provider, returning defaults');
+    return defaultWeb3;
   }
   return context;
 }
