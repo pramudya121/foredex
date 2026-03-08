@@ -7,7 +7,7 @@ import { FARMING_ABI } from '@/config/farmingAbi';
 import { Wallet, Droplets, Sprout, History, ExternalLink, RefreshCw, TrendingUp, AlertCircle } from 'lucide-react';
 import { TokenLogo } from './TokenLogo';
 import { TransactionHistory } from './TransactionHistory';
-import { PortfolioValueChart } from './PortfolioValueChart';
+const PortfolioValueChart = lazy(() => import('./PortfolioValueChart').then(m => ({ default: m.PortfolioValueChart })));
 import { rpcProvider } from '@/lib/rpcProvider';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
