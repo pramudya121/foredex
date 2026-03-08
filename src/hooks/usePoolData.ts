@@ -211,19 +211,31 @@ export function usePoolData(refreshInterval: number = 30000) {
 
       const maxPools = Math.min(Number(pairCount), 50);
       
-      // Fetch all pair addresses first
-      const pairAddresses: string[] = [];
-      for (let i = 0; i < maxPools; i++) {
-        try {
-          const pairAddress = await rpcProvider.call(
-            () => factory.allPairs(i),
-            `poolData_pair_${i}`
-          );
-          if (pairAddress) {
-            pairAddresses.push(pairAddress);
-          }
-        } catch {
-          continue;
+      // Batch fetch all pair addresses via multicall (1 RPC call instead of N)
+      let pairAddresses: string[] = [];
+      try {
+        const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+        const factoryInterface = new ethers.Interface(FACTORY_ABI);
+        const addrCalls = Array.from({ length: maxPools }, (_, i) => ({
+          target: CONTRACTS.FACTORY,
+          callData: factoryInterface.encodeFunctionData('allPairs', [i]),
+        }));
+        const [, returnData] = await multicall.aggregate.staticCall(addrCalls);
+        pairAddresses = (returnData as string[]).map(data => {
+          try {
+            return factoryInterface.decodeFunctionResult('allPairs', data)[0] as string;
+          } catch { return ''; }
+        }).filter(Boolean);
+      } catch {
+        // Fallback: sequential fetch
+        for (let i = 0; i < maxPools; i++) {
+          try {
+            const pairAddress = await rpcProvider.call(
+              () => factory.allPairs(i),
+              `poolData_pair_${i}`
+            );
+            if (pairAddress) pairAddresses.push(pairAddress);
+          } catch { continue; }
         }
       }
 

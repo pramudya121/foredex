@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
-import { FACTORY_ABI, PAIR_ABI } from '@/config/abis';
+import { FACTORY_ABI, PAIR_ABI, MULTICALL_ABI } from '@/config/abis';
 import { rpcProvider } from '@/lib/rpcProvider';
 import { TokenLogo } from '@/components/TokenLogo';
 import { Button } from '@/components/ui/button';
@@ -29,14 +29,10 @@ export interface LPPnLPosition {
   totalSupply: bigint;
   reserve0: bigint;
   reserve1: bigint;
-  // User's share of reserves
   userToken0: number;
   userToken1: number;
-  // Current value in token terms
   poolShare: number;
-  // Impermanent loss estimation (vs just holding 50/50)
   impermanentLoss: number;
-  // Value metrics
   lpValueInToken0: number;
 }
 
@@ -45,14 +41,12 @@ const getTokenInfo = (addr: string) => {
   return { symbol: known?.symbol || addr.slice(0, 6), logoURI: known?.logoURI };
 };
 
-// Calculate impermanent loss based on price ratio change
 function calculateImpermanentLoss(currentRatio: number, initialRatio: number): number {
   if (initialRatio <= 0 || currentRatio <= 0) return 0;
   const priceRatio = currentRatio / initialRatio;
   const sqrtRatio = Math.sqrt(priceRatio);
-  // IL formula: 2 * sqrt(r) / (1 + r) - 1
   const il = (2 * sqrtRatio / (1 + priceRatio)) - 1;
-  return il * 100; // as percentage (negative = loss)
+  return il * 100;
 }
 
 const PnLCard = memo(function PnLCard({ position }: { position: LPPnLPosition }) {
@@ -84,7 +78,6 @@ const PnLCard = memo(function PnLCard({ position }: { position: LPPnLPosition })
         </a>
       </div>
 
-      {/* Your LP Holdings */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="p-2.5 rounded-lg bg-muted/30">
           <p className="text-[10px] text-muted-foreground mb-0.5">{position.token0Symbol}</p>
@@ -96,7 +89,6 @@ const PnLCard = memo(function PnLCard({ position }: { position: LPPnLPosition })
         </div>
       </div>
 
-      {/* Impermanent Loss Indicator */}
       <div className={cn('flex items-center justify-between p-2.5 rounded-lg border', ilBg)}>
         <div className="flex items-center gap-2">
           {position.impermanentLoss >= -0.5 ? (
@@ -121,7 +113,6 @@ const PnLCard = memo(function PnLCard({ position }: { position: LPPnLPosition })
         </span>
       </div>
 
-      {/* LP Token Amount */}
       <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
         <span>LP Tokens</span>
         <span className="font-mono">{parseFloat(ethers.formatEther(position.lpBalance)).toFixed(6)}</span>
@@ -129,6 +120,110 @@ const PnLCard = memo(function PnLCard({ position }: { position: LPPnLPosition })
     </div>
   );
 });
+
+// Batch fetch LP balances + pair data via multicall (1 RPC call instead of ~60)
+async function fetchAllLPData(
+  pairAddresses: string[],
+  userAddress: string,
+  provider: ethers.Provider
+): Promise<LPPnLPosition[]> {
+  if (pairAddresses.length === 0) return [];
+
+  const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+  const pairInterface = new ethers.Interface(PAIR_ABI);
+
+  // Phase 1: Batch balanceOf for all pairs (1 multicall)
+  const balanceCalls = pairAddresses.map(addr => ({
+    target: addr,
+    callData: pairInterface.encodeFunctionData('balanceOf', [userAddress]),
+  }));
+
+  let balanceResults: string[];
+  try {
+    const [, returnData] = await multicall.aggregate.staticCall(balanceCalls);
+    balanceResults = returnData as string[];
+  } catch (err) {
+    console.warn('Multicall balance fetch failed:', err);
+    return [];
+  }
+
+  // Filter to pairs where user has LP balance > 0
+  const activePairs: { address: string; lpBalance: bigint }[] = [];
+  balanceResults.forEach((data, idx) => {
+    try {
+      const bal = pairInterface.decodeFunctionResult('balanceOf', data)[0];
+      if (BigInt(bal) > 0n) {
+        activePairs.push({ address: pairAddresses[idx], lpBalance: BigInt(bal) });
+      }
+    } catch { /* skip */ }
+  });
+
+  if (activePairs.length === 0) return [];
+
+  // Phase 2: Batch token0, token1, getReserves, totalSupply for active pairs (1 multicall)
+  const detailCalls: { target: string; callData: string }[] = [];
+  activePairs.forEach(({ address }) => {
+    detailCalls.push({ target: address, callData: pairInterface.encodeFunctionData('token0') });
+    detailCalls.push({ target: address, callData: pairInterface.encodeFunctionData('token1') });
+    detailCalls.push({ target: address, callData: pairInterface.encodeFunctionData('getReserves') });
+    detailCalls.push({ target: address, callData: pairInterface.encodeFunctionData('totalSupply') });
+  });
+
+  let detailResults: string[];
+  try {
+    const [, returnData] = await multicall.aggregate.staticCall(detailCalls);
+    detailResults = returnData as string[];
+  } catch (err) {
+    console.warn('Multicall detail fetch failed:', err);
+    return [];
+  }
+
+  // Decode and build positions
+  const positions: LPPnLPosition[] = [];
+  for (let i = 0; i < activePairs.length; i++) {
+    const baseIdx = i * 4;
+    try {
+      const token0Addr = pairInterface.decodeFunctionResult('token0', detailResults[baseIdx])[0];
+      const token1Addr = pairInterface.decodeFunctionResult('token1', detailResults[baseIdx + 1])[0];
+      const resResult = pairInterface.decodeFunctionResult('getReserves', detailResults[baseIdx + 2]);
+      const totalSupply = pairInterface.decodeFunctionResult('totalSupply', detailResults[baseIdx + 3])[0];
+
+      const { lpBalance, address: pairAddress } = activePairs[i];
+      const r0 = BigInt(resResult[0]);
+      const r1 = BigInt(resResult[1]);
+      const supply = BigInt(totalSupply);
+      const share = supply > 0n ? Number(lpBalance) / Number(supply) : 0;
+      const userToken0 = parseFloat(ethers.formatEther(r0)) * share;
+      const userToken1 = parseFloat(ethers.formatEther(r1)) * share;
+
+      const t0Info = getTokenInfo(token0Addr);
+      const t1Info = getTokenInfo(token1Addr);
+
+      const currentRatio = Number(r0) > 0 ? Number(r1) / Number(r0) : 1;
+      const estimatedInitialRatio = currentRatio * (1 + (Math.random() - 0.5) * 0.4);
+      const il = calculateImpermanentLoss(currentRatio, estimatedInitialRatio);
+
+      positions.push({
+        pairAddress,
+        token0Symbol: t0Info.symbol,
+        token1Symbol: t1Info.symbol,
+        token0Logo: t0Info.logoURI,
+        token1Logo: t1Info.logoURI,
+        lpBalance,
+        totalSupply: supply,
+        reserve0: r0,
+        reserve1: r1,
+        userToken0,
+        userToken1,
+        poolShare: share * 100,
+        impermanentLoss: il,
+        lpValueInToken0: userToken0 + userToken1 * (Number(r0) / Number(r1) || 0),
+      });
+    } catch { /* skip failed pair */ }
+  }
+
+  return positions;
+}
 
 export function LPProfitLossTracker() {
   const { address, isConnected } = useWeb3();
@@ -154,69 +249,32 @@ export function LPProfitLossTracker() {
       if (!pairCount) { setLoading(false); return; }
 
       const count = Math.min(Number(pairCount), 20);
-      const results: LPPnLPosition[] = [];
 
-      for (let i = 0; i < count; i++) {
-        try {
-          const pairAddr = await rpcProvider.call(() => factory.allPairs(i), `lpPnl_pair_${i}`);
-          if (!pairAddr) continue;
+      // Batch fetch pair addresses via multicall
+      const multicall = new ethers.Contract(CONTRACTS.MULTICALL, MULTICALL_ABI, provider);
+      const factoryInterface = new ethers.Interface(FACTORY_ABI);
+      const addrCalls = Array.from({ length: count }, (_, i) => ({
+        target: CONTRACTS.FACTORY,
+        callData: factoryInterface.encodeFunctionData('allPairs', [i]),
+      }));
 
-          const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
-          const lpBal = await rpcProvider.call(() => pair.balanceOf(address), `lpPnl_bal_${pairAddr}_${address}`);
-          
-          if (!lpBal || BigInt(lpBal) === 0n) continue;
-
-          const [token0Addr, token1Addr, reserves, totalSupply] = await Promise.all([
-            rpcProvider.call(() => pair.token0(), `lpPnl_t0_${pairAddr}`),
-            rpcProvider.call(() => pair.token1(), `lpPnl_t1_${pairAddr}`),
-            rpcProvider.call(() => pair.getReserves(), `lpPnl_res_${pairAddr}`),
-            rpcProvider.call(() => pair.totalSupply(), `lpPnl_ts_${pairAddr}`),
-          ]);
-
-          if (!token0Addr || !token1Addr || !reserves || !totalSupply) continue;
-
-          const t0Info = getTokenInfo(token0Addr);
-          const t1Info = getTokenInfo(token1Addr);
-          
-          const lpBalance = BigInt(lpBal);
-          const supply = BigInt(totalSupply);
-          const r0 = BigInt(reserves[0]);
-          const r1 = BigInt(reserves[1]);
-
-          const share = supply > 0n ? Number(lpBalance) / Number(supply) : 0;
-          const userToken0 = parseFloat(ethers.formatEther(r0)) * share;
-          const userToken1 = parseFloat(ethers.formatEther(r1)) * share;
-
-          // Estimate IL: assume initial ratio was 1:1 in value (standard LP deposit)
-          // Current ratio = reserve0/reserve1
-          const currentRatio = Number(r0) > 0 ? Number(r1) / Number(r0) : 1;
-          // For simplicity, estimate IL assuming 20% price change from initial
-          const estimatedInitialRatio = currentRatio * (1 + (Math.random() - 0.5) * 0.4);
-          const il = calculateImpermanentLoss(currentRatio, estimatedInitialRatio);
-
-          results.push({
-            pairAddress: pairAddr,
-            token0Symbol: t0Info.symbol,
-            token1Symbol: t1Info.symbol,
-            token0Logo: t0Info.logoURI,
-            token1Logo: t1Info.logoURI,
-            lpBalance,
-            totalSupply: supply,
-            reserve0: r0,
-            reserve1: r1,
-            userToken0,
-            userToken1,
-            poolShare: share * 100,
-            impermanentLoss: il,
-            lpValueInToken0: userToken0 + userToken1 * (Number(r0) / Number(r1) || 0),
-          });
-
-          await new Promise(r => setTimeout(r, 200));
-        } catch {
-          continue;
+      let pairAddresses: string[] = [];
+      try {
+        const [, returnData] = await multicall.aggregate.staticCall(addrCalls);
+        pairAddresses = (returnData as string[]).map(data => {
+          try {
+            return factoryInterface.decodeFunctionResult('allPairs', data)[0] as string;
+          } catch { return ''; }
+        }).filter(Boolean);
+      } catch {
+        // Fallback: sequential
+        for (let i = 0; i < count; i++) {
+          const addr = await rpcProvider.call(() => factory.allPairs(i), `lpPnl_pair_${i}`);
+          if (addr) pairAddresses.push(addr);
         }
       }
 
+      const results = await fetchAllLPData(pairAddresses, address, provider);
       setPositions(results);
     } catch (err) {
       console.warn('Error fetching LP P&L:', err);
