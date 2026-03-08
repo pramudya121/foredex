@@ -144,27 +144,23 @@ export function LimitOrderPanel() {
         amountInWei, minOut, path, address, deadline
       );
 
-      const txId = addTransaction({
+      addTransaction(address, {
         hash: tx.hash,
         type: 'swap',
-        tokenIn: order.tokenIn.symbol,
-        tokenOut: order.tokenOut.symbol,
-        amountIn: order.amountIn,
-        amountOut: (parseFloat(order.amountIn) * order.targetPrice).toFixed(6),
+        description: `Limit: ${order.amountIn} ${order.tokenIn.symbol} → ${order.tokenOut.symbol}`,
         timestamp: Date.now(),
         status: 'pending',
-        walletAddress: address,
       });
 
       const receipt = await tx.wait();
       if (receipt.status === 1) {
         fillOrder(order.id);
-        updateTransactionStatus(txId, 'confirmed');
+        updateTransactionStatus(address, tx.hash, 'confirmed');
         toast.success('Limit order filled!', {
           description: `Swapped ${order.amountIn} ${order.tokenIn.symbol} → ${order.tokenOut.symbol}`,
         });
       } else {
-        updateTransactionStatus(txId, 'failed');
+        updateTransactionStatus(address, tx.hash, 'failed');
         toast.error('Order execution failed');
       }
     } catch (err: any) {
@@ -221,8 +217,8 @@ export function LimitOrderPanel() {
           <label className="text-xs text-muted-foreground">You Pay</label>
           <div className="flex gap-2">
             <TokenSelect
-              value={tokenIn}
-              onChange={setTokenIn}
+              selected={tokenIn}
+              onSelect={setTokenIn}
               excludeToken={tokenOut}
             />
             <Input
@@ -254,8 +250,8 @@ export function LimitOrderPanel() {
           <label className="text-xs text-muted-foreground">You Receive</label>
           <div className="flex gap-2">
             <TokenSelect
-              value={tokenOut}
-              onChange={setTokenOut}
+              selected={tokenOut}
+              onSelect={setTokenOut}
               excludeToken={tokenIn}
             />
             <Input
