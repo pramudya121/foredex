@@ -567,27 +567,40 @@ export function SwapCard() {
 
   return (
     <div className="glass-card p-4 sm:p-6 w-full max-w-md mx-auto animate-fade-in animated-border">
-      {/* RPC Offline Banner */}
+      {/* RPC Offline Banner - improved with pulse animation and retry */}
       {!rpcAvailable && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2">
-          <WifiOff className="w-4 h-4 text-destructive shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-destructive">Network Unavailable</p>
-            <p className="text-xs text-muted-foreground">Quotes may be stale. Swaps will fail until RPC recovers.</p>
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3 animate-fade-in">
+          <div className="relative shrink-0">
+            <WifiOff className="w-4 h-4 text-destructive" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-destructive rounded-full animate-ping" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-destructive">Network Unavailable</p>
+            <p className="text-xs text-muted-foreground">RPC is unreachable. Quotes may be outdated.</p>
+          </div>
+          <button
+            onClick={() => {
+              rpcProvider.reset();
+              setRpcAvailable(rpcProvider.isAvailable());
+              toast.info('Retrying connection...');
+            }}
+            className="shrink-0 px-2.5 py-1 rounded-md bg-destructive/20 text-destructive text-xs font-medium hover:bg-destructive/30 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
 
-      {/* Transaction Step Progress */}
+      {/* Transaction Step Progress - improved with smoother transitions */}
       {swapStep !== 'idle' && (
         <div className={cn(
-          'mb-4 p-3 rounded-lg flex items-center gap-2 text-sm',
+          'mb-4 p-3 rounded-lg flex items-center gap-2 text-sm transition-all duration-300',
           swapStep === 'success' && 'bg-green-500/10 border border-green-500/30',
           swapStep === 'error' && 'bg-destructive/10 border border-destructive/30',
           (swapStep === 'approving' || swapStep === 'submitting' || swapStep === 'confirming') && 'bg-primary/10 border border-primary/30',
         )}>
           {swapStep === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 animate-scale-in" />
           ) : swapStep === 'error' ? (
             <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
           ) : (
@@ -601,12 +614,23 @@ export function SwapCard() {
           )}>
             {STEP_LABELS[swapStep]}
           </span>
-          {/* Step dots */}
+          {/* Step progress bar */}
           {(swapStep === 'approving' || swapStep === 'submitting' || swapStep === 'confirming') && (
-            <div className="ml-auto flex items-center gap-1">
-              <div className={cn('w-2 h-2 rounded-full', swapStep === 'approving' ? 'bg-primary animate-pulse' : 'bg-green-500')} />
-              <div className={cn('w-2 h-2 rounded-full', swapStep === 'submitting' ? 'bg-primary animate-pulse' : swapStep === 'confirming' ? 'bg-green-500' : 'bg-muted')} />
-              <div className={cn('w-2 h-2 rounded-full', swapStep === 'confirming' ? 'bg-primary animate-pulse' : 'bg-muted')} />
+            <div className="ml-auto flex items-center gap-1.5">
+              {['approving', 'submitting', 'confirming'].map((step, i) => {
+                const stepOrder = ['approving', 'submitting', 'confirming'];
+                const currentIdx = stepOrder.indexOf(swapStep);
+                const isCompleted = i < currentIdx;
+                const isCurrent = i === currentIdx;
+                return (
+                  <div key={step} className={cn(
+                    'w-2 h-2 rounded-full transition-all duration-300',
+                    isCompleted && 'bg-green-500 scale-100',
+                    isCurrent && 'bg-primary animate-pulse scale-110',
+                    !isCompleted && !isCurrent && 'bg-muted scale-90'
+                  )} />
+                );
+              })}
             </div>
           )}
         </div>
@@ -728,15 +752,24 @@ export function SwapCard() {
         </div>
       </div>
 
-      {/* Switch Button */}
+      {/* Switch Button - enhanced with rotation animation */}
       <div className="flex justify-center -my-4 relative z-10">
         <Button
           variant="outline"
           size="icon"
-          onClick={switchTokens}
-          className="rounded-full border-2 border-border bg-card hover:bg-primary/10 hover:border-primary/50 transition-all w-10 h-10 shadow-lg"
+          onClick={() => {
+            switchTokens();
+            // Trigger rotation via DOM for smooth visual
+            const btn = document.getElementById('swap-switch-btn');
+            if (btn) {
+              btn.classList.add('rotate-180');
+              setTimeout(() => btn.classList.remove('rotate-180'), 300);
+            }
+          }}
+          className="rounded-full border-2 border-border bg-card hover:bg-primary/10 hover:border-primary/50 transition-all duration-300 w-10 h-10 shadow-lg hover:shadow-primary/20 hover:scale-110 active:scale-95"
+          id="swap-switch-btn"
         >
-          <ArrowDown className="w-5 h-5" />
+          <ArrowDown className="w-5 h-5 transition-transform duration-300" />
         </Button>
       </div>
 
@@ -887,9 +920,10 @@ export function SwapCard() {
       ) : (
         <Button
           disabled
-          className="w-full h-14 text-lg font-semibold"
+          className="w-full h-14 text-lg font-semibold opacity-80"
           variant="secondary"
         >
+          <Wallet className="w-5 h-5 mr-2" />
           Connect Wallet to Swap
         </Button>
       )}
