@@ -42,6 +42,7 @@ FeatureBadge.displayName = 'FeatureBadge';
 const Liquidity = () => {
   return (
     <Spotlight className="min-h-screen">
+      <SEOHead title="Liquidity" description="Add or remove liquidity on FOREDEX. Earn trading fees by providing liquidity to pools." />
       <main className="container py-4 sm:py-6 md:py-10 px-3 sm:px-4 relative">
         {/* Ambient background effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">

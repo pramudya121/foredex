@@ -128,6 +128,7 @@ const PortfolioPage = () => {
 
   return (
     <Spotlight className="min-h-screen">
+      <SEOHead title="Portfolio" description="Track your token holdings, LP positions, and profit/loss on FOREDEX." />
       <main className="container py-4 sm:py-6 md:py-10 max-w-5xl px-3 sm:px-4 relative">
         {/* Ambient background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
