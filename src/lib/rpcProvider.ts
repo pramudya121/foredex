@@ -126,7 +126,8 @@ class RPCProviderService {
       }
     } catch {
       this.provider = null;
-      this.cooldownUntil = Date.now() + 3000;
+      // If all RPCs fail, wait longer before retrying
+      this.cooldownUntil = Date.now() + 15000;
     } finally {
       this.isInitializing = false;
     }
@@ -305,6 +306,9 @@ class RPCProviderService {
         errorMessage.includes('ERR_FAILED') ||
         errorMessage.includes('NetworkError')) {
       if (this.consecutiveErrors >= 3) {
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        const backoff = Math.min(5000 * Math.pow(2, Math.floor(this.consecutiveErrors / 3) - 1), 60000);
+        this.cooldownUntil = Date.now() + backoff;
         await this.switchRpc();
         this.consecutiveErrors = 0;
       }
@@ -312,7 +316,9 @@ class RPCProviderService {
     }
     
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('rate limit')) {
-      this.cooldownUntil = Date.now() + 2000;
+      // Exponential backoff: 5s, 10s, 20s, max 60s
+      const backoff = Math.min(5000 * Math.pow(2, Math.min(this.consecutiveErrors, 4)), 60000);
+      this.cooldownUntil = Date.now() + backoff;
       this.minRequestInterval = Math.min(500, this.minRequestInterval * 1.5);
     }
   }
@@ -637,7 +643,7 @@ class RPCProviderService {
                            errorMsg.includes('eth_maxPriorityFeePerGas');
         
         if (attempt < maxRetries && isTransient) {
-          const delay = 800 * (attempt + 1);
+          const delay = 2000 * Math.pow(2, attempt); // 2s, 4s exponential
           await new Promise(r => setTimeout(r, delay));
           return executeCall(attempt + 1);
         }
