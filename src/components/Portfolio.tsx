@@ -632,6 +632,13 @@ export function Portfolio() {
         </div>
       )}
 
+      {/* LP Profit & Loss Tracker */}
+      {lpPositions.length > 0 && (
+        <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+          <LPProfitLossTracker />
+        </Suspense>
+      )}
+
       {/* Farming Positions */}
       {loadingFarming ? (
         <LoadingSkeleton label="Farming Positions" />
