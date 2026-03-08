@@ -779,9 +779,48 @@ export function SwapCard() {
         </div>
       </div>
 
+      {/* Insufficient Balance Warning */}
+      {amountIn && parseFloat(amountIn) > 0 && parseFloat(balanceIn || '0') > 0 && parseFloat(amountIn) > parseFloat(balanceIn || '0') && (
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+          <span className="text-sm text-destructive font-medium">
+            Insufficient {tokenIn?.symbol} balance (need {parseFloat(amountIn).toFixed(4)}, have {parseFloat(balanceIn || '0').toFixed(4)})
+          </span>
+        </div>
+      )}
+
+      {/* No Route Found Warning */}
+      {amountIn && parseFloat(amountIn) > 0 && !quoting && !amountOut && !bestRoute && (
+        <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+          <div>
+            <p className="text-sm text-yellow-500 font-medium">No route found</p>
+            <p className="text-xs text-muted-foreground">There may be insufficient liquidity for this pair. Try a smaller amount or different token.</p>
+          </div>
+        </div>
+      )}
+
       {/* Price Impact Warning */}
       {priceImpact > 1 && (
         <PriceImpactWarning priceImpact={priceImpact} className="mb-4" />
+      )}
+
+      {/* Minimum Received Highlight */}
+      {amountIn && amountOut && parseFloat(amountOut) > 0 && tokenOut && (
+        <div className="mb-4 p-3 rounded-lg bg-muted/30 border border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground">
+              {isExactOutput ? 'Maximum Spent' : 'Minimum Received'}
+            </span>
+          </div>
+          <span className="text-sm font-semibold text-foreground">
+            {isExactOutput
+              ? `${(parseFloat(amountIn) * (1 + slippage / 100)).toFixed(6)} ${tokenIn?.symbol}`
+              : `${(parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)} ${tokenOut.symbol}`
+            }
+          </span>
+        </div>
       )}
 
       {/* Route Display */}
@@ -803,31 +842,48 @@ export function SwapCard() {
 
       {/* Swap Button */}
       {isConnected ? (
-        <Button
-          onClick={openSwapConfirmation}
-          disabled={loading || !amountIn || !amountOut || parseFloat(amountIn) === 0 || getPriceImpactSeverity(priceImpact) === 'critical'}
-          className={cn(
-            'w-full h-14 text-lg font-semibold btn-glow',
-            getPriceImpactSeverity(priceImpact) === 'critical' 
-              ? 'bg-destructive hover:bg-destructive/90' 
-              : 'bg-gradient-wolf hover:opacity-90',
-            'transition-all'
-          )}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Swapping...
-            </>
-          ) : getPriceImpactSeverity(priceImpact) === 'critical' ? (
-            <>
-              <AlertTriangle className="w-5 h-5 mr-2" />
-              Price Impact Too High
-            </>
-          ) : (
-            'Review Swap'
-          )}
-        </Button>
+        (() => {
+          const insufficientBalance = amountIn && parseFloat(amountIn) > 0 && parseFloat(amountIn) > parseFloat(balanceIn || '0');
+          const isCritical = getPriceImpactSeverity(priceImpact) === 'critical';
+          
+          return (
+            <Button
+              onClick={openSwapConfirmation}
+              disabled={loading || !amountIn || !amountOut || parseFloat(amountIn) === 0 || isCritical || !!insufficientBalance || !rpcAvailable}
+              className={cn(
+                'w-full h-14 text-lg font-semibold btn-glow',
+                isCritical || insufficientBalance
+                  ? 'bg-destructive hover:bg-destructive/90' 
+                  : 'bg-gradient-wolf hover:opacity-90',
+                'transition-all'
+              )}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  {STEP_LABELS[swapStep] || 'Swapping...'}
+                </>
+              ) : !rpcAvailable ? (
+                <>
+                  <WifiOff className="w-5 h-5 mr-2" />
+                  Network Unavailable
+                </>
+              ) : insufficientBalance ? (
+                <>
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  Insufficient {tokenIn?.symbol} Balance
+                </>
+              ) : isCritical ? (
+                <>
+                  <AlertTriangle className="w-5 h-5 mr-2" />
+                  Price Impact Too High
+                </>
+              ) : (
+                'Review Swap'
+              )}
+            </Button>
+          );
+        })()
       ) : (
         <Button
           disabled
