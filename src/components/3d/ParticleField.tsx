@@ -125,17 +125,27 @@ function Scene({ particleCount }: { particleCount: number }) {
 }
 
 export const ParticleField = memo(function ParticleField({ className = "" }: { className?: string }) {
-  const [shouldRender, setShouldRender] = useState(true);
-  const [particleCount, setParticleCount] = useState(150);
+  const [shouldRender, setShouldRender] = useState(false); // Start false, enable after idle
+  const [particleCount, setParticleCount] = useState(80); // Reduced default
   
   useEffect(() => {
-    const isLowPower = isLowPowerDevice();
-    // Disable on very low power or if user prefers reduced motion
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setShouldRender(false);
-    } else if (isLowPower) {
-      setParticleCount(80); // Reduced for mobile
-    }
+    // Defer 3D rendering until after main content loads
+    const timer = requestIdleCallback?.(() => {
+      const isLowPower = isLowPowerDevice();
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setShouldRender(false);
+      } else {
+        setShouldRender(true);
+        setParticleCount(isLowPower ? 50 : 80);
+      }
+    }) ?? setTimeout(() => {
+      setShouldRender(!isLowPowerDevice());
+      setParticleCount(isLowPowerDevice() ? 50 : 80);
+    }, 2000);
+    
+    return () => {
+      if (typeof timer === 'number') clearTimeout(timer);
+    };
   }, []);
   
   if (!shouldRender) {

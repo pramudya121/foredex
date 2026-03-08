@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
@@ -7,11 +7,14 @@ import { FARMING_ABI } from '@/config/farmingAbi';
 import { Wallet, Droplets, Sprout, History, ExternalLink, RefreshCw, TrendingUp, AlertCircle } from 'lucide-react';
 import { TokenLogo } from './TokenLogo';
 import { TransactionHistory } from './TransactionHistory';
-import { PortfolioValueChart } from './PortfolioValueChart';
+const PortfolioValueChart = lazy(() => import('./PortfolioValueChart').then(m => ({ default: m.PortfolioValueChart })));
 import { rpcProvider } from '@/lib/rpcProvider';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
+
+// Lazy load LP P&L tracker
+const LPProfitLossTracker = lazy(() => import('./LPProfitLossTracker'));
 
 interface TokenBalance {
   symbol: string;
@@ -388,7 +391,7 @@ export function Portfolio() {
     fetchPortfolio();
 
     // Refresh every 2 minutes
-    const interval = setInterval(() => fetchPortfolio(), 120000);
+    const interval = setInterval(() => fetchPortfolio(), 180000); // 3 minutes (was 2)
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
@@ -520,7 +523,9 @@ export function Portfolio() {
       </div>
 
       {/* Portfolio Value Charts */}
-      <PortfolioValueChart />
+      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+        <PortfolioValueChart />
+      </Suspense>
 
       {/* Native Balance */}
       <div className="glass-card p-4 sm:p-6">
@@ -627,6 +632,13 @@ export function Portfolio() {
             </div>
           )}
         </div>
+      )}
+
+      {/* LP Profit & Loss Tracker */}
+      {lpPositions.length > 0 && (
+        <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+          <LPProfitLossTracker />
+        </Suspense>
       )}
 
       {/* Farming Positions */}

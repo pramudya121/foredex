@@ -351,13 +351,13 @@ class RealtimePriceService {
     // Initial price fetch
     this.updatePrices();
     
-    // Fallback polling - updates every 15 seconds if WebSocket not connected
+    // Fallback polling - updates every 30 seconds (reduced from 15s for perf)
     // If WebSocket is connected, this serves as a backup
     this.updateInterval = setInterval(() => {
       if (!this.wsConnected) {
         this.updatePrices();
       }
-    }, 15000);
+    }, 30000);
   }
 
   private stop() {
