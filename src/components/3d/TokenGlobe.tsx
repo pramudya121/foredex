@@ -461,7 +461,7 @@ function GlobeScene() {
       ))}
       
       {/* Particle field */}
-      <ParticleField />
+      <GlobeParticleField />
     </group>
   );
 }
