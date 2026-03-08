@@ -70,6 +70,9 @@ export function usePoolStats() {
   const fetchStats = useCallback(async (forceRefresh = false) => {
     if (isFetchingRef.current) return;
     
+    // Respect backoff period unless forced
+    if (!forceRefresh && nextRetryTimeRef.current > Date.now()) return;
+    
     // Check cache first - use cache if valid
     if (!forceRefresh && poolStatsCache && Date.now() - poolStatsCache.timestamp < CACHE_TTL) {
       if (poolStatsCache.pools.length > 0) {
