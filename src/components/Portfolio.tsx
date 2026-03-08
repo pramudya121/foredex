@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { CONTRACTS, TOKEN_LIST, NEXUS_TESTNET } from '@/config/contracts';
@@ -9,6 +9,12 @@ import { TokenLogo } from './TokenLogo';
 import { TransactionHistory } from './TransactionHistory';
 import { PortfolioValueChart } from './PortfolioValueChart';
 import { rpcProvider } from '@/lib/rpcProvider';
+import { Button } from './ui/button';
+import { Skeleton } from './ui/skeleton';
+import { Badge } from './ui/badge';
+
+// Lazy load LP P&L tracker
+const LPProfitLossTracker = lazy(() => import('./LPProfitLossTracker'));
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
