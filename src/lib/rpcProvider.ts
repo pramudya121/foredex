@@ -126,8 +126,9 @@ class RPCProviderService {
       }
     } catch {
       this.provider = null;
-      // If all RPCs fail, wait longer before retrying
-      this.cooldownUntil = Date.now() + 15000;
+      // If all RPCs fail, use aggressive backoff (60s, 120s, 240s, max 5min)
+      const failBackoff = Math.min(60000 * Math.pow(2, Math.min(this.consecutiveErrors, 3)), 300000);
+      this.cooldownUntil = Date.now() + failBackoff;
     } finally {
       this.isInitializing = false;
     }
@@ -237,7 +238,7 @@ class RPCProviderService {
   }
 
   getProvider(): ethers.JsonRpcProvider | null {
-    if (!this.provider && !this.isInitializing) {
+    if (!this.provider && !this.isInitializing && Date.now() >= this.cooldownUntil) {
       this.initProvider();
     }
     return this.provider;
