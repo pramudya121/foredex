@@ -98,7 +98,12 @@ export function usePoolStats() {
       }
       
       if (!provider || !rpcProvider.isAvailable()) {
-        console.warn('[usePoolStats] RPC not available after retries');
+        consecutiveFailsRef.current++;
+        const backoffMs = Math.min(60000 * Math.pow(2, consecutiveFailsRef.current - 1), 600000); // 1min → 10min max
+        nextRetryTimeRef.current = Date.now() + backoffMs;
+        if (consecutiveFailsRef.current <= 2) {
+          console.warn('[usePoolStats] RPC not available, backoff:', Math.round(backoffMs / 1000), 's');
+        }
         // Use cached data if available
         if (poolStatsCache?.pools.length) {
           setStats({ ...poolStatsCache.stats, loading: false });
